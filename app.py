@@ -26,7 +26,11 @@ DEFAULT_CONDITION_STATES = {key: True for key in ATOMIC_TOGGLE_KEYS} | {"use_for
 
 
 st.set_page_config(page_title="Momentum Breakout 回测", layout="wide")
-GROUP_ROOT = Path("data/nasdaq_10y/groups")
+# Streamlit Cloud 的工作目录不保证等于仓库根目录；所有内置数据都相对本文件解析，
+# 以免分组选择器因相对路径失效而静默消失。
+APP_ROOT = Path(__file__).resolve().parent
+DATA_ROOT = APP_ROOT / "data"
+GROUP_ROOT = DATA_ROOT / "nasdaq_10y" / "groups"
 DEFAULT_MAX_DRAWDOWN_PCT = 15.0
 
 KPI_LABELS = {
@@ -165,7 +169,10 @@ def strategy_narrative(params: dict) -> str:
 
 def available_data_scopes() -> dict[str, str]:
     """返回 UI 可选数据范围及其目录；分组不存在时仍可使用基础数据。"""
-    scopes = {"示例数据（NVDA、TSLA）": "data", "全部 Nasdaq 当前股票池": "data/nasdaq_10y"}
+    scopes = {
+        "示例数据（NVDA、TSLA）": str(DATA_ROOT),
+        "全部 Nasdaq 当前股票池": str(DATA_ROOT / "nasdaq_10y"),
+    }
     if GROUP_ROOT.is_dir():
         for folder in sorted(path for path in GROUP_ROOT.iterdir() if path.is_dir()):
             manifest = folder / "group_manifest.csv"
