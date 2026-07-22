@@ -28,6 +28,22 @@ ENTRY_LAGS, SMAS = [1, 2, 3], [3, 5, 8, 10]
 ENTRY_TREND_FAST_SMA, ENTRY_TREND_SLOW_SMA = 5, 10
 ENTRY_VOLUME_FAST_WINDOW, ENTRY_VOLUME_SLOW_WINDOW = 5, 20
 BASELINE_LOOKBACK, BASELINE_MAX_RISE, BASELINE_RSI_PERIOD, BASELINE_RSI_MAX = 15, .20, 14, 90
+STRATEGY_VERSION = "v2_core_breakout_only"
+STRATEGY_LABEL = "v2 核心突破：T0-01、EN-01、EX-01～EX-03"
+ACTIVE_CONDITION_IDS = ("T0-01", "EN-01", "EX-01", "EX-02", "EX-03")
+ATOMIC_FLAGS = {
+    "use_signal_band": True,
+    "use_baseline_prior_low": False,
+    "use_baseline_max_rise": False,
+    "use_baseline_rsi": False,
+    "use_entry_close_vs_t0": True,
+    "use_entry_close_above_fast_sma": False,
+    "use_entry_fast_above_slow_sma": False,
+    "use_entry_volume_sma": False,
+    "use_early_stop": True,
+    "use_exit_below_entry": True,
+    "use_exit_below_sma": True,
+}
 
 
 def group_labels(folder: Path) -> tuple[str, str, str]:
@@ -98,6 +114,8 @@ def evaluate(datasets: list[tuple[str, pd.DataFrame]], params: dict) -> dict:
 
 def with_params(params: dict, metrics: dict) -> dict:
     return {
+        "strategy_version": STRATEGY_VERSION,
+        "active_condition_ids": ", ".join(ACTIVE_CONDITION_IDS),
         "signal_lo_pct": params["band_lo"] * 100, "signal_hi_pct": params["band_hi"] * 100,
         "entry_day": f"t{params['entry_lag']}",
         "entry_trend_filter": (f"tN-1/tN 任一天收盘>SMA{params['entry_trend_fast_sma']}"
@@ -129,13 +147,7 @@ def scan_group(folder_text: str) -> dict:
     for band, entry in product(bands, ENTRY_LAGS):
         params = {"band_lo": band[0] / 100, "band_hi": band[1] / 100, "entry_lag": entry,
                   "hard_stop_days": (entry + 1, entry + 2), "stop_pct": baseline_stop / 100,
-                  "sma_n": 5, "entry_trend_filter": True,
-                  "use_signal_band": True, "use_baseline_prior_low": True,
-                  "use_baseline_max_rise": True, "use_baseline_rsi": True,
-                  "use_entry_close_vs_t0": True, "use_entry_close_above_fast_sma": True,
-                  "use_entry_fast_above_slow_sma": True, "use_entry_volume_sma": True,
-                  "use_early_stop": True, "use_exit_below_entry": True,
-                  "use_exit_below_sma": True,
+                  "sma_n": 5, "entry_trend_filter": True, **ATOMIC_FLAGS,
                   "entry_trend_fast_sma": ENTRY_TREND_FAST_SMA,
                   "entry_trend_slow_sma": ENTRY_TREND_SLOW_SMA,
                   "entry_volume_fast_window": ENTRY_VOLUME_FAST_WINDOW,
@@ -152,13 +164,7 @@ def scan_group(folder_text: str) -> dict:
         for stop, sma in product(domain["stops"], SMAS):
             params = {"band_lo": candidate.signal_lo_pct / 100, "band_hi": candidate.signal_hi_pct / 100,
                       "entry_lag": entry, "hard_stop_days": (entry + 1, entry + 2),
-                      "stop_pct": stop / 100, "sma_n": sma, "entry_trend_filter": True,
-                      "use_signal_band": True, "use_baseline_prior_low": True,
-                      "use_baseline_max_rise": True, "use_baseline_rsi": True,
-                      "use_entry_close_vs_t0": True, "use_entry_close_above_fast_sma": True,
-                      "use_entry_fast_above_slow_sma": True, "use_entry_volume_sma": True,
-                      "use_early_stop": True, "use_exit_below_entry": True,
-                      "use_exit_below_sma": True,
+                      "stop_pct": stop / 100, "sma_n": sma, "entry_trend_filter": True, **ATOMIC_FLAGS,
                       "entry_trend_fast_sma": ENTRY_TREND_FAST_SMA,
                       "entry_trend_slow_sma": ENTRY_TREND_SLOW_SMA,
                       "entry_volume_fast_window": ENTRY_VOLUME_FAST_WINDOW,
@@ -174,13 +180,7 @@ def scan_group(folder_text: str) -> dict:
         "entry_lag": int(str(best["entry_day"]).replace("t", "")),
         "hard_stop_days": [int(day.replace("t", "")) for day in str(best["early_stop_days"]).split(",")],
         "stop_pct": best["stop_pct"] / 100, "sma_n": int(best["sma_n"]),
-        "entry_trend_filter": True,
-        "use_signal_band": True, "use_baseline_prior_low": True,
-        "use_baseline_max_rise": True, "use_baseline_rsi": True,
-        "use_entry_close_vs_t0": True, "use_entry_close_above_fast_sma": True,
-        "use_entry_fast_above_slow_sma": True, "use_entry_volume_sma": True,
-        "use_early_stop": True, "use_exit_below_entry": True,
-        "use_exit_below_sma": True,
+        "entry_trend_filter": True, **ATOMIC_FLAGS,
         "entry_trend_fast_sma": int(best["entry_trend_fast_sma"]),
         "entry_trend_slow_sma": int(best["entry_trend_slow_sma"]),
         "entry_volume_fast_window": int(best["entry_volume_fast_window"]),
@@ -189,15 +189,42 @@ def scan_group(folder_text: str) -> dict:
         "baseline_rsi_period": BASELINE_RSI_PERIOD, "baseline_rsi_max": BASELINE_RSI_MAX,
         "stop_intraday": True, "cost_bps": best["cost_bps"],
     }
-    stage1.to_csv(folder / "search_stage1_results.csv", index=False)
-    stage2.to_csv(folder / "search_stage2_results.csv", index=False)
-    metadata = {
-        "generated_at": datetime.now().isoformat(timespec="seconds"), "group": group,
-        "symbols": len(datasets), "mode": "固定仓位", "search_method": "两阶段受约束搜索",
+    stage1_file = f"search_{STRATEGY_VERSION}_stage1_results.csv"
+    stage2_file = f"search_{STRATEGY_VERSION}_stage2_results.csv"
+    stage1.to_csv(folder / stage1_file, index=False)
+    stage2.to_csv(folder / stage2_file, index=False)
+    metadata_path = folder / "search_metadata.json"
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.is_file() else {}
+    except (OSError, ValueError):
+        metadata = {}
+    versions = metadata.setdefault("strategy_versions", {})
+    # Migrate the previously flat record once, preserving its reproducible best combo.
+    if "best_by_profit_factor" in metadata and "v1_full_conditions" not in versions:
+        versions["v1_full_conditions"] = {
+            "label": "v1 全条件过滤（历史结果）",
+            "generated_at": metadata.get("generated_at"),
+            "active_condition_ids": ["T0-01", "T0-02", "T0-03", "T0-04", "EN-01", "EN-02", "EN-03", "EN-04", "EX-01", "EX-02", "EX-03"],
+            "best_by_profit_factor": metadata["best_by_profit_factor"],
+            "result_files": ["search_stage1_results.csv", "search_stage2_results.csv"],
+        }
+    version_record = {
+        "label": STRATEGY_LABEL,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "mode": "固定仓位", "search_method": "两阶段受约束搜索",
+        "active_condition_ids": list(ACTIVE_CONDITION_IDS),
+        "condition_flags": ATOMIC_FLAGS,
         "cost_bps": cost_bps, "stage1_combinations": len(stage1), "stage2_combinations": len(stage2),
         "best_by_profit_factor": {"parameters": best_params, "metrics": best},
+        "result_files": [stage1_file, stage2_file],
         "risk_note": "最高盈利因子不代表已满足 15% 组合最大回撤硬条件；该字段仅包含独立标的回撤代理。",
     }
+    versions[STRATEGY_VERSION] = version_record
+    metadata.update({"generated_at": version_record["generated_at"], "group": group, "symbols": len(datasets),
+                     "mode": "固定仓位", "search_method": "版本化两阶段受约束搜索",
+                     "best_by_profit_factor": version_record["best_by_profit_factor"],
+                     "active_strategy_version": STRATEGY_VERSION,
+                     "risk_note": version_record["risk_note"]})
     (folder / "search_metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"group_folder": folder.name, "group": group, "symbols": len(datasets), **best}
 
@@ -225,12 +252,12 @@ def main() -> None:
     overview = sort_results(pd.DataFrame(summaries))
     output = Path("reports")
     output.mkdir(exist_ok=True)
-    overview.to_csv(output / "group_domain_search_overview.csv", index=False)
-    (output / "group_domain_search_overview.md").write_text(
+    overview.to_csv(output / f"group_domain_search_overview_{STRATEGY_VERSION}.csv", index=False)
+    (output / f"group_domain_search_overview_{STRATEGY_VERSION}.md").write_text(
         "# 各特征组受约束搜索结果\n\n" + overview.to_markdown(index=False, floatfmt=".3f") + "\n",
         encoding="utf-8",
     )
-    print("总览：reports/group_domain_search_overview.csv")
+    print(f"总览：reports/group_domain_search_overview_{STRATEGY_VERSION}.csv")
 
 
 if __name__ == "__main__":

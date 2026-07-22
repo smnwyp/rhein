@@ -158,6 +158,16 @@ def load_group_preset(data_path: str) -> dict | None:
         return None
 
 
+def group_preset_versions(metadata: dict) -> dict[str, dict]:
+    """Return versioned presets, with a read-only fallback for old metadata."""
+    versions = metadata.get("strategy_versions")
+    if isinstance(versions, dict) and versions:
+        return versions
+    if "best_by_profit_factor" in metadata:
+        return {"v1_legacy": {"label": "v1 历史最佳组合", **metadata}}
+    return {}
+
+
 def load_all_group_combinations() -> pd.DataFrame:
     """汇总各成熟分组已经落盘的两阶段搜索结果，不重新执行回测。"""
     column_names = {
@@ -225,7 +235,7 @@ def apply_group_preset(preset: dict, token: str) -> None:
 
 def switch_to_custom_params() -> None:
     """用户手动修改任一策略参数后，避免界面值与实际运行参数脱节。"""
-    st.session_state["preset_choice"] = "自定义参数"
+    st.session_state["strategy_version_choice"] = "custom"
     st.session_state.pop("applied_preset_token", None)
 
 
@@ -358,18 +368,21 @@ with st.sidebar:
         data_path = scope_options[selected_scope]
         st.caption(f"当前目录：`{data_path}`")
     group_preset = load_group_preset(data_path)
-    preset_choice = "自定义参数"
-    if group_preset:
-        preset_choice = st.selectbox(
-            "参数预设", ["自定义参数", "使用本组盈利因子最高组合"],
-            help="该预设来自本组两阶段受约束搜索；仍须留意 metadata 中的回撤提示。",
-            key="preset_choice",
+    versioned_presets = group_preset_versions(group_preset) if group_preset else {}
+    selected_preset = None
+    if versioned_presets:
+        selected_version = st.selectbox(
+            "参数预设版本", ["custom", *versioned_presets],
+            format_func=lambda value: "自定义参数" if value == "custom" else versioned_presets[value].get("label", value),
+            help="每个版本固定记录启用条件、搜索域、生成时间与本组盈利因子最高组合。",
+            key="strategy_version_choice",
         )
-        preset_token = f"{data_path}:{group_preset.get('generated_at', '')}"
-        if preset_choice == "使用本组盈利因子最高组合":
+        if selected_version != "custom":
+            selected_preset = versioned_presets[selected_version]
+            preset_token = f"{data_path}:{selected_version}:{selected_preset.get('generated_at', '')}"
             # 仅在新选预设或切换分组时同步；后续 rerun 不覆盖用户尚未触发的交互。
             if st.session_state.get("applied_preset_token") != preset_token:
-                apply_group_preset(group_preset, preset_token)
+                apply_group_preset(selected_preset, preset_token)
         else:
             st.session_state.pop("applied_preset_token", None)
     initialize_parameter_controls()
@@ -447,8 +460,8 @@ with st.sidebar:
     compound = st.toggle("使用复利（默认关闭，固定仓位）", value=False)
 
 try:
-    if preset_choice == "使用本组盈利因子最高组合" and group_preset:
-        parameters = dict(group_preset["best_by_profit_factor"]["parameters"])
+    if selected_preset:
+        parameters = dict(selected_preset["best_by_profit_factor"]["parameters"])
         parameters["hard_stop_days"] = tuple(parameters["hard_stop_days"])
         parameters["entry_trend_filter"] = True
         parameters.setdefault("entry_trend_fast_sma", 5)
@@ -502,8 +515,8 @@ st.info("当前设置：" + params_to_text(parameters))
 with st.sidebar:
     st.subheader("当前策略（自然语言）")
     st.info(strategy_narrative(parameters))
-if preset_choice == "使用本组盈利因子最高组合" and group_preset:
-    best_metrics = group_preset["best_by_profit_factor"]["metrics"]
+if selected_preset:
+    best_metrics = selected_preset["best_by_profit_factor"]["metrics"]
     preset_passes_drawdown = best_metrics["q25_individual_max_drawdown_pct"] >= -max_drawdown_limit
     st.warning(
         f"已使用本组预设：盈利因子 {best_metrics['profit_factor']:.3f}；"
