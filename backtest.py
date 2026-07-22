@@ -35,6 +35,8 @@ DEFAULT_STRATEGY = {
     "use_early_stop": True,
     "use_exit_below_entry": True,
     "use_exit_below_sma": True,
+    "use_forced_exit": False,
+    "forced_exit_days_after_entry": 3,
     # Kept solely for old saved profiles; new callers should use the three atomic entry toggles.
     "entry_trend_filter": True,
     "stop_intraday": True,
@@ -78,7 +80,8 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                  use_entry_close_vs_t0=True, use_entry_close_above_fast_sma=True,
                  use_entry_fast_above_slow_sma=True, use_entry_volume_sma=True,
                  use_early_stop=True, use_exit_below_entry=True,
-                 use_exit_below_sma=True):
+                 use_exit_below_sma=True, use_forced_exit=False,
+                 forced_exit_days_after_entry=3):
     """执行动量突破策略。
 
     所有筛选与出场规则均可独立启停。入场确认窗口只使用 tN-1、tN，
@@ -94,6 +97,8 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
         raise ValueError("基准点回看窗口至少为 1")
     if use_baseline_rsi and baseline_rsi_period < 2:
         raise ValueError("基准点回看窗口至少为 1，RSI 周期至少为 2")
+    if use_forced_exit and forced_exit_days_after_entry < 1:
+        raise ValueError("强制平仓天数至少为 1")
     c, o, lo, v = (df[name].to_numpy() for name in ("Close", "Open", "Low", "Volume"))
     n = len(df)
     ret1 = np.full(n, np.nan)
@@ -188,7 +193,11 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                 if not stop_intraday and c[j] <= stop_level:
                     exit_px, exit_idx, reason = c[j], j, f"t{day_from_signal} 收盘止损"
                     break
-            elif day_from_signal >= (max(hard_stop_days) + 1 if use_early_stop else entry_lag + 1):
+            # 强制平仓为持有上限；若同日早期止损已触发，盘中止损优先。
+            if use_forced_exit and j - entry_idx == forced_exit_days_after_entry:
+                exit_px, exit_idx, reason = c[j], j, f"入场后{forced_exit_days_after_entry}日强制平仓"
+                break
+            if day_from_signal >= (max(hard_stop_days) + 1 if use_early_stop else entry_lag + 1):
                 if use_exit_below_entry and c[j] < entry_px:
                     exit_px, exit_idx, reason = c[j], j, "收盘价低于入场价"
                     break
