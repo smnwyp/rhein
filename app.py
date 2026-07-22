@@ -800,6 +800,13 @@ with tabs[0]:
                     {"Date": str(exit_date.date()), "Price": float(trade["exit_px"]), "标记": "出场"},
                 ]
                 candle_data = chart_data.assign(Date=chart_data["Date"].dt.strftime("%Y-%m-%d"))
+                price_span = float(chart_data["High"].max() - chart_data["Low"].min())
+                label_price = float(chart_data["Low"].min() - max(price_span * 0.06, chart_data["Low"].min() * 0.005))
+                holding_days = ohlc.iloc[signal_position:exit_position + 1]
+                day_labels = [
+                    {"Date": str(row.Date.date()), "LabelPrice": label_price, "持仓日": f"t{offset}"}
+                    for offset, row in enumerate(holding_days.itertuples(index=False))
+                ]
                 price_height = min(760, max(560, len(chart_data) * 18))
                 price_axis = {"field": "Low", "type": "quantitative", "title": "价格", "scale": {"zero": False, "nice": True}}
                 spec = {
@@ -813,6 +820,14 @@ with tabs[0]:
                                 {"mark": {"type": "bar", "size": 7}, "encoding": {
                                     "y": {"field": "Open", "type": "quantitative", "scale": {"zero": False, "nice": True}}, "y2": {"field": "Close"},
                                     "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
+                                    "tooltip": [
+                                        {"field": "Date", "type": "temporal", "title": "日期"},
+                                        {"field": "Open", "type": "quantitative", "title": "开盘", "format": ".2f"},
+                                        {"field": "High", "type": "quantitative", "title": "最高", "format": ".2f"},
+                                        {"field": "Low", "type": "quantitative", "title": "最低", "format": ".2f"},
+                                        {"field": "Close", "type": "quantitative", "title": "收盘", "format": ".2f"},
+                                        {"field": "Volume", "type": "quantitative", "title": "成交量", "format": ",.0f"},
+                                    ],
                                 }},
                                 {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
                                     "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
@@ -821,6 +836,10 @@ with tabs[0]:
                                 {"data": {"values": markers}, "mark": {"type": "text", "dy": -14}, "encoding": {
                                     "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
+                                }},
+                                {"data": {"values": day_labels}, "mark": {"type": "text", "fontSize": 10, "baseline": "top", "color": "#4b5563"}, "encoding": {
+                                    "x": {"field": "Date", "type": "temporal"}, "y": {"field": "LabelPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "text": {"field": "持仓日"},
                                 }},
                             ],
                         },
@@ -831,13 +850,17 @@ with tabs[0]:
                                 "x": {"field": "Date", "type": "temporal", "title": "日期"},
                                 "y": {"field": "Volume", "type": "quantitative", "title": "成交量", "scale": {"zero": True, "nice": True}},
                                 "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
+                                "tooltip": [
+                                    {"field": "Date", "type": "temporal", "title": "日期"},
+                                    {"field": "Volume", "type": "quantitative", "title": "成交量", "format": ",.0f"},
+                                ],
                             },
                         },
                     ],
                     "resolve": {"scale": {"x": "shared"}},
                 }
                 st.vega_lite_chart(candle_data, spec, width="stretch", key=f"trade_chart_{selected_symbol}_{trade_index}")
-                st.caption("K 线与成交量窗口：t0 前 10 个交易日至出场后 10 个交易日。蓝色 = t0 基准点；绿色 = 入场；红色 = 出场；成交量颜色与当日 K 线涨跌一致。")
+                st.caption("K 线与成交量窗口：t0 前 10 个交易日至出场后 10 个交易日。t0、t1…标示基准点起的交易日；蓝色 = t0 基准点；绿色 = 入场；红色 = 出场；成交量颜色与当日 K 线涨跌一致。")
         with st.expander("指标定义：选择列名查看计算方式"):
             selected_kpi = st.selectbox("指标列", list(KPI_DEFINITIONS), key="top100_kpi_definition")
             st.markdown(f"**{selected_kpi}**：{KPI_DEFINITIONS[selected_kpi]}")
