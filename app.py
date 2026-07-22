@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from itertools import product
 import importlib
+import json
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -168,6 +170,82 @@ def group_preset_versions(metadata: dict) -> dict[str, dict]:
     return {}
 
 
+def saved_combos_path(data_path: str) -> Path | None:
+    """Saved combos are intentionally scoped to a concrete feature-group folder."""
+    folder = Path(data_path)
+    return folder / "saved_combos.json" if (folder / "group_manifest.csv").is_file() else None
+
+
+def load_saved_combos(data_path: str) -> list[dict]:
+    path = saved_combos_path(data_path)
+    if path is None or not path.is_file():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        combos = payload.get("combos", [])
+        return combos if isinstance(combos, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def active_condition_ids(params: dict) -> list[str]:
+    mapping = {
+        "use_signal_band": "T0-01", "use_baseline_prior_low": "T0-02",
+        "use_baseline_max_rise": "T0-03", "use_baseline_rsi": "T0-04",
+        "use_entry_close_vs_t0": "EN-01", "use_entry_close_above_fast_sma": "EN-02",
+        "use_entry_fast_above_slow_sma": "EN-03", "use_entry_volume_sma": "EN-04",
+        "use_early_stop": "EX-01", "use_exit_below_entry": "EX-02",
+        "use_exit_below_sma": "EX-03",
+    }
+    return [condition_id for key, condition_id in mapping.items() if params.get(key, True)]
+
+
+def apply_parameters_to_controls(params: dict, token: str) -> None:
+    """Synchronize a saved/preset parameter dict into sidebar controls before rerun."""
+    st.session_state.update({
+        "band_range": (round(params["band_lo"] * 100, 1), round(params["band_hi"] * 100, 1)),
+        "entry_lag": int(params["entry_lag"]),
+        "stop_days_text": ",".join(map(str, params["hard_stop_days"])),
+        "stop_pct": round(params["stop_pct"] * 100, 1),
+        "close_stop": not bool(params["stop_intraday"]), "sma_n": int(params["sma_n"]),
+        "entry_trend_fast_sma": int(params.get("entry_trend_fast_sma", 5)),
+        "entry_trend_slow_sma": int(params.get("entry_trend_slow_sma", 10)),
+        "entry_volume_fast_window": int(params.get("entry_volume_fast_window", 5)),
+        "entry_volume_slow_window": int(params.get("entry_volume_slow_window", 20)),
+        "baseline_lookback": int(params.get("baseline_lookback", 15)),
+        "baseline_max_rise_pct": float(params.get("baseline_max_rise", .20) * 100),
+        "baseline_rsi_period": int(params.get("baseline_rsi_period", 14)),
+        "baseline_rsi_max": int(params.get("baseline_rsi_max", 90)),
+        "cost_bps": float(params["cost_bps"]),
+        **{key: bool(params.get(key, True)) for key in ATOMIC_TOGGLE_KEYS},
+        "applied_preset_token": token,
+    })
+
+
+def load_saved_combo_to_controls(combo: dict, data_path: str) -> None:
+    apply_parameters_to_controls(combo["parameters"], f"saved:{data_path}:{combo['id']}")
+    st.session_state["strategy_version_choice"] = "custom"
+
+
+def save_combo(data_path: str, name: str, params: dict) -> None:
+    path = saved_combos_path(data_path)
+    if path is None:
+        raise ValueError("只有特征组目录可以保存组合。")
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("请为组合填写名称。")
+    combos = load_saved_combos(data_path)
+    if any(item.get("name", "").casefold() == clean_name.casefold() for item in combos):
+        raise ValueError("该组内已有同名组合；请使用不同名称。")
+    serializable_params = {key: list(value) if isinstance(value, tuple) else value for key, value in params.items()}
+    now = datetime.now().isoformat(timespec="seconds")
+    combos.append({"id": f"manual_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}", "name": clean_name,
+                   "created_at": now, "active_condition_ids": active_condition_ids(params),
+                   "parameters": serializable_params})
+    path.write_text(json.dumps({"schema_version": 1, "group_folder": Path(data_path).name,
+                                "updated_at": now, "combos": combos}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def load_all_group_combinations() -> pd.DataFrame:
     """汇总各成熟分组已经落盘的两阶段搜索结果，不重新执行回测。"""
     column_names = {
@@ -211,26 +289,7 @@ def load_all_group_combinations() -> pd.DataFrame:
 
 def apply_group_preset(preset: dict, token: str) -> None:
     """在控件创建前，把分组最佳组合写入左侧面板的 session state。"""
-    params = preset["best_by_profit_factor"]["parameters"]
-    st.session_state.update({
-        "band_range": (round(params["band_lo"] * 100, 1), round(params["band_hi"] * 100, 1)),
-        "entry_lag": int(params["entry_lag"]),
-        "stop_days_text": ",".join(map(str, params["hard_stop_days"])),
-        "stop_pct": round(params["stop_pct"] * 100, 1),
-        "close_stop": not bool(params["stop_intraday"]),
-        "sma_n": int(params["sma_n"]),
-        "entry_trend_fast_sma": int(params.get("entry_trend_fast_sma", 5)),
-        "entry_trend_slow_sma": int(params.get("entry_trend_slow_sma", 10)),
-        "entry_volume_fast_window": int(params.get("entry_volume_fast_window", 5)),
-        "entry_volume_slow_window": int(params.get("entry_volume_slow_window", 20)),
-        "baseline_lookback": int(params.get("baseline_lookback", 15)),
-        "baseline_max_rise_pct": float(params.get("baseline_max_rise", .20) * 100),
-        "baseline_rsi_period": int(params.get("baseline_rsi_period", 14)),
-        "baseline_rsi_max": int(params.get("baseline_rsi_max", 90)),
-        "cost_bps": float(params["cost_bps"]),
-        **{key: bool(params.get(key, True)) for key in ATOMIC_TOGGLE_KEYS},
-        "applied_preset_token": token,
-    })
+    apply_parameters_to_controls(preset["best_by_profit_factor"]["parameters"], token)
 
 
 def switch_to_custom_params() -> None:
@@ -385,6 +444,25 @@ with st.sidebar:
                 apply_group_preset(selected_preset, preset_token)
         else:
             st.session_state.pop("applied_preset_token", None)
+    saved_group_combos = load_saved_combos(data_path)
+    if saved_combos_path(data_path) is not None:
+        st.subheader("本组已保存组合")
+        if message := st.session_state.pop("saved_combo_flash", None):
+            st.success(message)
+        combo_by_id = {item.get("id", ""): item for item in saved_group_combos if item.get("id")}
+        saved_combo_id = st.selectbox(
+            "选择已保存组合", ["", *combo_by_id],
+            format_func=lambda value: "请选择" if not value else (
+                f"{combo_by_id[value]['name']}（{combo_by_id[value].get('created_at', '')}）"),
+            key="saved_combo_choice",
+        )
+        if saved_combo_id:
+            selected_combo = combo_by_id[saved_combo_id]
+            st.caption("启用条件：" + "、".join(selected_combo.get("active_condition_ids", [])))
+            st.button("加载此组合到左侧参数", key="load_saved_combo",
+                      on_click=load_saved_combo_to_controls, args=(selected_combo, data_path))
+        elif not saved_group_combos:
+            st.caption("本组尚未保存手工组合。")
     initialize_parameter_controls()
     file_limit = st.number_input("最多读取多少个标的（0 = 全部）", min_value=0, value=0, step=1)
     st.subheader("风险显示与资金")
@@ -515,6 +593,16 @@ st.info("当前设置：" + params_to_text(parameters))
 with st.sidebar:
     st.subheader("当前策略（自然语言）")
     st.info(strategy_narrative(parameters))
+    if saved_combos_path(data_path) is not None:
+        st.subheader("保存当前组合到本组")
+        combo_name = st.text_input("组合名称", key="saved_combo_name", placeholder="例如：高波动稳健版 v1")
+        if st.button("保存当前组合", key="save_current_combo"):
+            try:
+                save_combo(data_path, combo_name, parameters)
+                st.session_state["saved_combo_flash"] = f"已保存“{combo_name.strip()}”。"
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
 if selected_preset:
     best_metrics = selected_preset["best_by_profit_factor"]["metrics"]
     preset_passes_drawdown = best_metrics["q25_individual_max_drawdown_pct"] >= -max_drawdown_limit
