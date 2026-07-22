@@ -156,7 +156,7 @@ def strategy_narrative(params: dict) -> str:
         forced_text = f"强制平仓：t{forced_exit_day} 当天必须平仓。"
         if on("use_forced_exit_intraday_protection"):
             forced_text = (
-                f"强制平仓：t{forced_exit_day} 当天，若盘中最低价跌至入场价下"
+                f"强制平仓：t{forced_exit_day} 当天，若盘中任意即时价格触及入场价下"
                 f"{params.get('forced_exit_intraday_stop_pct', .01):.1%}，立即按保护规则出场；否则以 t{forced_exit_day} 收盘价强制平仓。"
             )
         paragraphs.append(forced_text)
@@ -579,7 +579,7 @@ with st.sidebar:
         "强制平仓日日内保护幅度（相对入场价，%）", 0.1, 20.0, step=0.1,
         key="forced_exit_intraday_stop_pct", on_change=switch_to_custom_params,
         disabled=not (use_forced_exit and use_forced_exit_intraday_protection),
-        help="例如 1%：仅在强制平仓当天，盘中最低价≤入场价×99% 时立即出场；否则在该日收盘强制平仓。",
+        help="例如 1%：仅在强制平仓当天，盘中任意即时价格触及入场价×99% 时立即出场；日线回测以 Low≤该价判断是否曾触及。否则在该日收盘强制平仓。",
     )
     st.subheader("执行成本与资金模式")
     cost_bps = st.number_input("单边手续费 (bps)", min_value=0.0, step=0.5,

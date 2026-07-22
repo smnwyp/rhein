@@ -53,7 +53,7 @@ If both later exits are off, the position stays open until the data ends (unless
 
 **Exit — forced holding-period cap (EX-04, off by default):** force the position closed at the selected t0-relative day, default `t5`. Therefore a default t2 entry is closed at the t5 close. The selected day must be later than the entry day. If the early stop is triggered on that same day, the early stop takes precedence because it can occur intraday. This is intended as an explicit fixed-holding-period benchmark.
 
-**Forced-exit-day intraday protection (EX-05, enabled by default when EX-04 is used):** on the EX-04 day only, if `low ≤ entry_price × (1 − protection_pct)` (default `1%`), exit immediately at the protection level; if the day opens below it, exit at the open. If it does not trigger, EX-04 exits at that day's close. EX-05 is independently switchable.
+**Forced-exit-day intraday protection (EX-05, enabled by default when EX-04 is used):** on the EX-04 day only, if any intraday price touches `entry_price × (1 − protection_pct)` (default `1%`), exit immediately at the protection level; if the day opens below it, exit at the open. With daily OHLC data, `low ≤ protection level` is the observable proxy for that touch. If it does not trigger, EX-04 exits at that day's close. EX-05 is independently switchable.
 
 **Portfolio logic:** signals occurring while a position is open are ignored. After an exit, scanning resumes the next day. Default mode is **fixed stake** (EUR 10k per trade, non-compounding); compounding is an explicit alternative. Multi-instrument results remain independent-account comparisons, not a capital-allocated portfolio backtest.
 
