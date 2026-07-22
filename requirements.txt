@@ -1,0 +1,6 @@
+pandas==3.0.3
+numpy==2.5.1
+yfinance==1.5.1
+requests==2.34.2
+streamlit==1.59.2
+tabulate==0.10.0

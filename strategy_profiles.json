@@ -1,0 +1,22 @@
+{
+  "NVDA": {
+    "band_lo": 0.02,
+    "band_hi": 0.025,
+    "entry_lag": 2,
+    "hard_stop_days": [3, 4],
+    "stop_pct": 0.02,
+    "sma_n": 5,
+    "stop_intraday": true,
+    "cost_bps": 0.0
+  },
+  "TESLA": {
+    "band_lo": 0.02,
+    "band_hi": 0.03,
+    "entry_lag": 2,
+    "hard_stop_days": [3, 4],
+    "stop_pct": 0.03,
+    "sma_n": 5,
+    "stop_intraday": true,
+    "cost_bps": 0.0
+  }
+}
