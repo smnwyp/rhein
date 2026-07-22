@@ -154,7 +154,7 @@ def scan_group(folder_text: str) -> dict:
                   "entry_volume_slow_window": ENTRY_VOLUME_SLOW_WINDOW,
                   "baseline_lookback": BASELINE_LOOKBACK, "baseline_max_rise": BASELINE_MAX_RISE,
                   "baseline_rsi_period": BASELINE_RSI_PERIOD, "baseline_rsi_max": BASELINE_RSI_MAX,
-                  "stop_intraday": False, "cost_bps": cost_bps}
+                  "stop_intraday": True, "cost_bps": cost_bps}
         stage1_rows.append(with_params(params, evaluate(datasets, params)))
     stage1 = sort_results(pd.DataFrame(stage1_rows))
     candidates = stage1.head(3)
@@ -171,7 +171,7 @@ def scan_group(folder_text: str) -> dict:
                       "entry_volume_slow_window": ENTRY_VOLUME_SLOW_WINDOW,
                       "baseline_lookback": BASELINE_LOOKBACK, "baseline_max_rise": BASELINE_MAX_RISE,
                       "baseline_rsi_period": BASELINE_RSI_PERIOD, "baseline_rsi_max": BASELINE_RSI_MAX,
-                      "stop_intraday": False, "cost_bps": cost_bps}
+                      "stop_intraday": True, "cost_bps": cost_bps}
             stage2_rows.append(with_params(params, evaluate(datasets, params)))
     stage2 = sort_results(pd.DataFrame(stage2_rows))
     best = stage2.iloc[0].to_dict()
@@ -187,7 +187,7 @@ def scan_group(folder_text: str) -> dict:
         "entry_volume_slow_window": int(best["entry_volume_slow_window"]),
         "baseline_lookback": BASELINE_LOOKBACK, "baseline_max_rise": BASELINE_MAX_RISE,
         "baseline_rsi_period": BASELINE_RSI_PERIOD, "baseline_rsi_max": BASELINE_RSI_MAX,
-        "stop_intraday": False, "cost_bps": best["cost_bps"],
+        "stop_intraday": True, "cost_bps": best["cost_bps"],
     }
     stage1_file = f"search_{STRATEGY_VERSION}_stage1_results.csv"
     stage2_file = f"search_{STRATEGY_VERSION}_stage2_results.csv"

@@ -201,6 +201,36 @@ def group_preset_versions(metadata: dict) -> dict[str, dict]:
     return {}
 
 
+def load_group_best_overview() -> pd.DataFrame:
+    """One best-combo row per group, using each group's active versioned metadata record."""
+    rows = []
+    for folder in sorted(path for path in GROUP_ROOT.glob("[0-9][0-9]_*")
+                         if path.is_dir() and not path.name.startswith("10_")):
+        metadata = load_group_preset(str(folder)) or {}
+        versions = group_preset_versions(metadata)
+        version_id = metadata.get("active_strategy_version") or next(iter(versions), None)
+        record = versions.get(version_id, {})
+        best = record.get("best_by_profit_factor", metadata.get("best_by_profit_factor", {}))
+        params, metrics = best.get("parameters", {}), best.get("metrics", {})
+        if not params or not metrics:
+            continue
+        rows.append({
+            "策略分组": metadata.get("group", folder.name.replace("_", "－")),
+            "策略版本": record.get("label", version_id or "历史版本"),
+            "启用条件": "、".join(record.get("active_condition_ids", active_condition_ids(params))),
+            "信号区间 (%)": f"{params['band_lo'] * 100:.2f}–{params['band_hi'] * 100:.2f}",
+            "入场确认日": f"t{params['entry_lag']}",
+            "早期止损幅度 (%)": params["stop_pct"] * 100,
+            "趋势 SMA 周期": params["sma_n"],
+            "交易数": metrics.get("trades"), "合并胜率 (%)": metrics.get("win_rate_pct"),
+            "盈利因子": metrics.get("profit_factor"),
+            "中位标的累计收益 (%)": metrics.get("median_symbol_cumulative_return_pct"),
+            "中位独立最大回撤 (%)": metrics.get("median_individual_max_drawdown_pct"),
+            "回撤25分位数 (%)": metrics.get("q25_individual_max_drawdown_pct"),
+        })
+    return pd.DataFrame(rows)
+
+
 def saved_combos_path(data_path: str) -> Path | None:
     """Saved combos are intentionally scoped to a concrete feature-group folder."""
     folder = Path(data_path)
@@ -239,7 +269,7 @@ def apply_parameters_to_controls(params: dict, token: str) -> None:
         "entry_lag": int(params["entry_lag"]),
         "stop_days_text": ",".join(map(str, params["hard_stop_days"])),
         "stop_pct": round(params["stop_pct"] * 100, 1),
-        "close_stop": True, "sma_n": int(params["sma_n"]),
+        "close_stop": not bool(params["stop_intraday"]), "sma_n": int(params["sma_n"]),
         "entry_trend_fast_sma": int(params.get("entry_trend_fast_sma", 5)),
         "entry_trend_slow_sma": int(params.get("entry_trend_slow_sma", 10)),
         "entry_volume_fast_window": int(params.get("entry_volume_fast_window", 5)),
@@ -336,7 +366,7 @@ def initialize_parameter_controls() -> None:
     """只在首次打开时提供控件默认值，避免与 session state 的预设值冲突。"""
     defaults = {
         "band_range": (2.0, 2.5), "entry_lag": 2, "stop_days_text": "3,4",
-        "stop_pct": 2.0, "close_stop": True, "sma_n": 5, "cost_bps": 0.0,
+        "stop_pct": 2.0, "close_stop": False, "sma_n": 5, "cost_bps": 0.0,
         "entry_trend_fast_sma": 5, "entry_trend_slow_sma": 10,
         "entry_volume_fast_window": 5, "entry_volume_slow_window": 20,
         "baseline_lookback": 15, "baseline_max_rise_pct": 20.0,
@@ -558,7 +588,8 @@ with st.sidebar:
     )
     stop_pct = st.slider("早期止损幅度 (%)", 0.1, 20.0, step=0.1,
                          key="stop_pct", on_change=switch_to_custom_params, disabled=not use_early_stop)
-    st.caption("早期止损固定以收盘价触发并按收盘价出场。")
+    close_stop = st.checkbox("早期止损使用收盘价触发（否则盘中低价）",
+                             key="close_stop", on_change=switch_to_custom_params, disabled=not use_early_stop)
     st.subheader("出场点：后期趋势")
     use_exit_below_entry = st.toggle("【EX-02】启用：收盘价跌破入场价出场", key="use_exit_below_entry", on_change=switch_to_custom_params)
     use_exit_below_sma = st.toggle("【EX-03】启用：收盘价跌破趋势 SMA 出场", key="use_exit_below_sma", on_change=switch_to_custom_params)
@@ -591,7 +622,6 @@ try:
     if selected_preset:
         parameters = dict(selected_preset["best_by_profit_factor"]["parameters"])
         parameters["hard_stop_days"] = tuple(parameters["hard_stop_days"])
-        parameters["stop_intraday"] = False
         parameters["entry_trend_filter"] = True
         parameters.setdefault("entry_trend_fast_sma", 5)
         parameters.setdefault("entry_trend_slow_sma", 10)
@@ -640,7 +670,7 @@ try:
             "forced_exit_day": int(forced_exit_day),
             "use_forced_exit_intraday_protection": use_forced_exit_intraday_protection,
             "forced_exit_intraday_stop_pct": forced_exit_intraday_stop_pct / 100,
-            "entry_trend_filter": True, "stop_intraday": False, "cost_bps": cost_bps,
+            "entry_trend_filter": True, "stop_intraday": not close_stop, "cost_bps": cost_bps,
         }
 except (KeyError, ValueError) as exc:
     st.error(f"参数错误：{exc}")
@@ -790,6 +820,22 @@ with tabs[1]:
                            file_name="parameter_scan.csv", mime="text/csv")
 
 with tabs[2]:
+    st.subheader("各组当前最佳组合总览")
+    best_overview = load_group_best_overview()
+    if best_overview.empty:
+        st.info("尚未找到各组版本化 metadata。")
+    else:
+        st.caption("每组仅展示 metadata 当前激活策略版本中、按盈利因子选出的最佳组合。中位独立最大回撤为有交易标的最大回撤的中位数。")
+        st.dataframe(
+            style_by_drawdown(best_overview, "回撤25分位数 (%)", -max_drawdown_limit,
+                               integer_columns=("趋势 SMA 周期", "交易数")),
+            hide_index=True, width="stretch",
+        )
+        st.download_button(
+            "下载各组当前最佳组合总览 CSV", best_overview.to_csv(index=False).encode("utf-8-sig"),
+            file_name="group_best_combo_overview.csv", mime="text/csv",
+        )
+
     st.subheader("全部分组参数组合")
     st.caption("汇总九个成熟分组的第一阶段 18 组与第二阶段 36 组搜索结果，共 486 行；不包含历史不足一年的标的组。")
     all_group_results = load_all_group_combinations()

@@ -5,7 +5,7 @@ description: Backtest Chloe's daily-candle momentum breakout strategy ("sharp ri
 
 # Momentum Breakout Backtest
 
-Owner: Chloe. Version: v1.8 (2026-07-22: early hard stop is now always close-triggered and filled at the close; all legacy defaults remain unchanged). Instrument scope: single instrument, one position at a time, long only, daily OHLCV candles. Capital: EUR 10,000. Baseline single-side cost: 0 bps.
+Owner: Chloe. Version: v1.9 (2026-07-22: early hard stop supports an explicit intraday-low / close-trigger UI choice; default is intraday-low). Instrument scope: single instrument, one position at a time, long only, daily OHLCV candles. Capital: EUR 10,000. Baseline single-side cost: 0 bps.
 
 ## Strategy specification (canonical — do not silently reinterpret)
 
@@ -43,7 +43,7 @@ Defaults are price `SMA_fast = 5`, `SMA_slow = 10`, and volume `SMA_short = 5`, 
 
 Buy at `close[tN]` if the base confirmation and this filter pass; otherwise skip. This uses no future-day information.
 
-**Exit — early hard stop:** independently switchable, enabled by default. On configured `hard_stop_days` relative to t0 (default for t2 is t3/t4), if `close <= (1 − stop_pct)·P`, exit at that day's close. Intraday lows and opening gaps do not trigger this rule.
+**Exit — early hard stop:** independently switchable, enabled by default. On configured `hard_stop_days` relative to t0 (default for t2 is t3/t4), the default is intraday-low triggering: if `low <= (1 − stop_pct)·P`, exit at the stop level; if the day opens below it, exit at the open. The UI checkbox can instead select close triggering, in which case `close <= (1 − stop_pct)·P` exits at that day's close.
 
 **Exit — after the early-stop window,** at the close, first condition hit wins:
 1. `close < P` (close below entry), independently switchable; or
@@ -77,7 +77,7 @@ from backtest import load_ohlc, run_backtest
 df = load_ohlc("data.csv")
 trades, stats = run_backtest(df, band_lo=0.02, band_hi=0.025, stop_pct=0.02,
                              sma_n=5, capital=10_000, compound=True,
-                             stop_intraday=False, entry_trend_fast_sma=5,
+                             stop_intraday=True, entry_trend_fast_sma=5,
                              entry_trend_slow_sma=10)
 ```
 
