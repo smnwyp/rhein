@@ -389,6 +389,7 @@ with st.sidebar:
     )
     use_baseline_prior_low = st.toggle("启用：回看期最低点不能是 t0", key="use_baseline_prior_low", on_change=switch_to_custom_params)
     use_baseline_max_rise = st.toggle("启用：t0 相对最低点最大涨幅", key="use_baseline_max_rise", on_change=switch_to_custom_params)
+    st.caption("以下回看期由上面两条低点条件共用。")
     baseline_lookback = st.number_input("t0 低点回看交易日数", min_value=1, max_value=100,
                                         key="baseline_lookback", on_change=switch_to_custom_params,
                                         disabled=not (use_baseline_prior_low or use_baseline_max_rise))
@@ -410,13 +411,14 @@ with st.sidebar:
     use_entry_close_vs_t0 = st.toggle("启用：tN 收盘价不低于 t0 收盘价", key="use_entry_close_vs_t0", on_change=switch_to_custom_params)
     use_entry_close_above_fast_sma = st.toggle("启用：确认窗口收盘价高于快线 SMA", key="use_entry_close_above_fast_sma", on_change=switch_to_custom_params)
     use_entry_fast_above_slow_sma = st.toggle("启用：确认窗口快线 SMA 高于慢线 SMA", key="use_entry_fast_above_slow_sma", on_change=switch_to_custom_params)
-    use_entry_volume_sma = st.toggle("启用：确认窗口成交量短均线高于长均线", key="use_entry_volume_sma", on_change=switch_to_custom_params)
+    st.caption("以下快线周期由上面两条价格均线条件共用。")
     entry_trend_fast_sma = st.number_input("入场趋势快线 SMA 周期", min_value=2, max_value=100,
                                             key="entry_trend_fast_sma", on_change=switch_to_custom_params,
                                             disabled=not (use_entry_close_above_fast_sma or use_entry_fast_above_slow_sma))
     entry_trend_slow_sma = st.number_input("入场趋势慢线 SMA 周期", min_value=3, max_value=200,
                                             key="entry_trend_slow_sma", on_change=switch_to_custom_params,
                                             disabled=not use_entry_fast_above_slow_sma)
+    use_entry_volume_sma = st.toggle("启用：确认窗口成交量短均线高于长均线", key="use_entry_volume_sma", on_change=switch_to_custom_params)
     entry_volume_fast_window = st.number_input("入场成交量短期均线周期", min_value=1, max_value=100,
                                                 key="entry_volume_fast_window", on_change=switch_to_custom_params,
                                                 disabled=not use_entry_volume_sma)
