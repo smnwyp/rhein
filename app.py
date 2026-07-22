@@ -800,30 +800,44 @@ with tabs[0]:
                     {"Date": str(exit_date.date()), "Price": float(trade["exit_px"]), "标记": "出场"},
                 ]
                 candle_data = chart_data.assign(Date=chart_data["Date"].dt.strftime("%Y-%m-%d"))
-                chart_height = min(760, max(560, len(chart_data) * 18))
+                price_height = min(760, max(560, len(chart_data) * 18))
                 price_axis = {"field": "Low", "type": "quantitative", "title": "价格", "scale": {"zero": False, "nice": True}}
                 spec = {
-                    "height": chart_height,
                     "title": f"{selected_symbol}｜{trade.signal} → {trade.exit}｜{trade.reason}",
-                    "encoding": {"x": {"field": "Date", "type": "temporal", "title": "日期"}},
-                    "layer": [
-                        {"mark": {"type": "rule"}, "encoding": {"y": price_axis, "y2": {"field": "High"}}},
-                        {"mark": {"type": "bar", "size": 7}, "encoding": {
-                            "y": {"field": "Open", "type": "quantitative", "scale": {"zero": False, "nice": True}}, "y2": {"field": "Close"},
-                            "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
-                        }},
-                        {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
-                            "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
-                            "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
-                        }},
-                        {"data": {"values": markers}, "mark": {"type": "text", "dy": -14}, "encoding": {
-                            "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
-                            "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
-                        }},
+                    "vconcat": [
+                        {
+                            "height": price_height,
+                            "encoding": {"x": {"field": "Date", "type": "temporal", "axis": {"title": None, "labels": False, "ticks": False}}},
+                            "layer": [
+                                {"mark": {"type": "rule"}, "encoding": {"y": price_axis, "y2": {"field": "High"}}},
+                                {"mark": {"type": "bar", "size": 7}, "encoding": {
+                                    "y": {"field": "Open", "type": "quantitative", "scale": {"zero": False, "nice": True}}, "y2": {"field": "Close"},
+                                    "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
+                                }},
+                                {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
+                                    "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
+                                }},
+                                {"data": {"values": markers}, "mark": {"type": "text", "dy": -14}, "encoding": {
+                                    "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
+                                }},
+                            ],
+                        },
+                        {
+                            "height": 150,
+                            "mark": {"type": "bar", "size": 7},
+                            "encoding": {
+                                "x": {"field": "Date", "type": "temporal", "title": "日期"},
+                                "y": {"field": "Volume", "type": "quantitative", "title": "成交量", "scale": {"zero": True, "nice": True}},
+                                "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
+                            },
+                        },
                     ],
+                    "resolve": {"scale": {"x": "shared"}},
                 }
                 st.vega_lite_chart(candle_data, spec, width="stretch", key=f"trade_chart_{selected_symbol}_{trade_index}")
-                st.caption("K 线窗口：t0 前 10 个交易日至出场后 10 个交易日。蓝色 = t0 基准点；绿色 = 入场；红色 = 出场。")
+                st.caption("K 线与成交量窗口：t0 前 10 个交易日至出场后 10 个交易日。蓝色 = t0 基准点；绿色 = 入场；红色 = 出场；成交量颜色与当日 K 线涨跌一致。")
         with st.expander("指标定义：选择列名查看计算方式"):
             selected_kpi = st.selectbox("指标列", list(KPI_DEFINITIONS), key="top100_kpi_definition")
             st.markdown(f"**{selected_kpi}**：{KPI_DEFINITIONS[selected_kpi]}")
