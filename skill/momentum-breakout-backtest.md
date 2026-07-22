@@ -5,7 +5,7 @@ description: Backtest Chloe's daily-candle momentum breakout strategy ("sharp ri
 
 # Momentum Breakout Backtest
 
-Owner: Chloe. Version: v1.6 (2026-07-22: EX-04 is expressed as an absolute t0-relative exit day, default t5; all legacy defaults remain unchanged). Instrument scope: single instrument, one position at a time, long only, daily OHLCV candles. Capital: EUR 10,000. Baseline single-side cost: 0 bps.
+Owner: Chloe. Version: v1.7 (2026-07-22: added optional EX-05 intraday protection on the EX-04 forced-exit day; all legacy defaults remain unchanged). Instrument scope: single instrument, one position at a time, long only, daily OHLCV candles. Capital: EUR 10,000. Baseline single-side cost: 0 bps.
 
 ## Strategy specification (canonical — do not silently reinterpret)
 
@@ -25,6 +25,7 @@ Owner: Chloe. Version: v1.6 (2026-07-22: EX-04 is expressed as an absolute t0-re
 | EX-02 | Later close below entry-price exit |
 | EX-03 | Later close below exit-SMA exit |
 | EX-04 | Force close at a specified t0-relative day (default t5) |
+| EX-05 | On the EX-04 day, intraday protection below entry by a configured amount (default 1%) |
 
 These identifiers are stable labels for the UI, notes and experiments; the corresponding engine flags remain `use_*` parameters.
 
@@ -51,6 +52,8 @@ Buy at `close[tN]` if the base confirmation and this filter pass; otherwise skip
 If both later exits are off, the position stays open until the data ends (unless the early stop is enabled and triggered).
 
 **Exit — forced holding-period cap (EX-04, off by default):** force the position closed at the selected t0-relative day, default `t5`. Therefore a default t2 entry is closed at the t5 close. The selected day must be later than the entry day. If the early stop is triggered on that same day, the early stop takes precedence because it can occur intraday. This is intended as an explicit fixed-holding-period benchmark.
+
+**Forced-exit-day intraday protection (EX-05, enabled by default when EX-04 is used):** on the EX-04 day only, if `low ≤ entry_price × (1 − protection_pct)` (default `1%`), exit immediately at the protection level; if the day opens below it, exit at the open. If it does not trigger, EX-04 exits at that day's close. EX-05 is independently switchable.
 
 **Portfolio logic:** signals occurring while a position is open are ignored. After an exit, scanning resumes the next day. Default mode is **fixed stake** (EUR 10k per trade, non-compounding); compounding is an explicit alternative. Multi-instrument results remain independent-account comparisons, not a capital-allocated portfolio backtest.
 

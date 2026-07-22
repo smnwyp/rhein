@@ -37,6 +37,8 @@ DEFAULT_STRATEGY = {
     "use_exit_below_sma": True,
     "use_forced_exit": False,
     "forced_exit_day": 5,
+    "use_forced_exit_intraday_protection": True,
+    "forced_exit_intraday_stop_pct": 0.01,
     # Kept solely for old saved profiles; new callers should use the three atomic entry toggles.
     "entry_trend_filter": True,
     "stop_intraday": True,
@@ -81,7 +83,9 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                  use_entry_fast_above_slow_sma=True, use_entry_volume_sma=True,
                  use_early_stop=True, use_exit_below_entry=True,
                  use_exit_below_sma=True, use_forced_exit=False,
-                 forced_exit_day=5, forced_exit_days_after_entry=None):
+                 forced_exit_day=5, forced_exit_days_after_entry=None,
+                 use_forced_exit_intraday_protection=True,
+                 forced_exit_intraday_stop_pct=0.01):
     """执行动量突破策略。
 
     所有筛选与出场规则均可独立启停。入场确认窗口只使用 tN-1、tN，
@@ -102,6 +106,8 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
         forced_exit_day = entry_lag + forced_exit_days_after_entry
     if use_forced_exit and forced_exit_day <= entry_lag:
         raise ValueError("强制平仓日必须晚于入场确认日")
+    if use_forced_exit and use_forced_exit_intraday_protection and forced_exit_intraday_stop_pct <= 0:
+        raise ValueError("强制平仓日内保护幅度必须大于 0")
     c, o, lo, v = (df[name].to_numpy() for name in ("Close", "Open", "Low", "Volume"))
     n = len(df)
     ret1 = np.full(n, np.nan)
@@ -198,6 +204,11 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                     break
             # 强制平仓为持有上限；若同日早期止损已触发，盘中止损优先。
             if use_forced_exit and day_from_signal == forced_exit_day:
+                forced_protection_level = entry_px * (1 - forced_exit_intraday_stop_pct)
+                if use_forced_exit_intraday_protection and lo[j] <= forced_protection_level:
+                    exit_px = min(o[j], forced_protection_level) if o[j] < forced_protection_level else forced_protection_level
+                    exit_idx, reason = j, f"t{forced_exit_day} 强制日日内保护"
+                    break
                 exit_px, exit_idx, reason = c[j], j, f"t{forced_exit_day} 强制平仓"
                 break
             if day_from_signal >= (max(hard_stop_days) + 1 if use_early_stop else entry_lag + 1):

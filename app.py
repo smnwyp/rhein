@@ -20,7 +20,7 @@ ATOMIC_TOGGLE_KEYS = (
     "use_signal_band", "use_baseline_prior_low", "use_baseline_max_rise", "use_baseline_rsi",
     "use_entry_close_vs_t0", "use_entry_close_above_fast_sma", "use_entry_fast_above_slow_sma",
     "use_entry_volume_sma", "use_early_stop", "use_exit_below_entry", "use_exit_below_sma",
-    "use_forced_exit",
+    "use_forced_exit", "use_forced_exit_intraday_protection",
 )
 DEFAULT_CONDITION_STATES = {key: True for key in ATOMIC_TOGGLE_KEYS} | {"use_forced_exit": False}
 
@@ -104,7 +104,10 @@ def params_to_text(params: dict) -> str:
     if on("use_exit_below_sma"):
         exits.append(f"跌破SMA{params['sma_n']}")
     if on("use_forced_exit"):
-        exits.append(f"t{params.get('forced_exit_day', 5)}强制平仓")
+        forced = f"t{params.get('forced_exit_day', 5)}强制平仓"
+        if on("use_forced_exit_intraday_protection"):
+            forced += f"（日内跌{params.get('forced_exit_intraday_stop_pct', .01):.1%}先卖）"
+        exits.append(forced)
     if exits:
         rules.append("后期出场：" + "或".join(exits))
     return "；".join(rules) + f"；单边费用 {params['cost_bps']:.1f} bps"
@@ -125,16 +128,25 @@ def strategy_narrative(params: dict) -> str:
     if on("use_entry_close_above_fast_sma"): entry.append(f"收盘>SMA{params['entry_trend_fast_sma']}")
     if on("use_entry_fast_above_slow_sma"): entry.append(f"SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}")
     if on("use_entry_volume_sma"): entry.append(f"量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}")
-    text = f"t0 需满足“{'、'.join(t0) if t0 else '无基准筛选'}”。在 t{params['entry_lag']}，"
-    text += f"需满足“{'、'.join(entry) if entry else '无入场确认筛选'}”后按收盘价入场。"
+    paragraphs = [
+        f"基准点：t0 需满足“{'、'.join(t0) if t0 else '无基准筛选'}”。",
+        f"入场点：在 t{params['entry_lag']}，需满足“{'、'.join(entry) if entry else '无入场确认筛选'}”后按收盘价入场。",
+    ]
     if on("use_early_stop"):
-        text += f"在 {stop_days} 以{'收盘价' if not params['stop_intraday'] else '盘中低价'}执行 {params['stop_pct']:.1%} 早期止损；"
+        paragraphs.append(f"早期出场：在 {stop_days} 以{'收盘价' if not params['stop_intraday'] else '盘中低价'}执行 {params['stop_pct']:.1%} 止损。")
     exits = []
     if on("use_exit_below_entry"): exits.append("跌破入场价")
     if on("use_exit_below_sma"): exits.append(f"跌破SMA{params['sma_n']}")
-    if on("use_forced_exit"): exits.append(f"t{params.get('forced_exit_day', 5)}强制平仓")
-    text += f"从 t{after_day} 起，收盘{'或'.join(exits)}时出场。" if exits else f"从 t{after_day} 起不设后期技术出场，仅在数据结束平仓。"
-    return text
+    if on("use_forced_exit"):
+        forced = f"t{params.get('forced_exit_day', 5)}强制平仓"
+        if on("use_forced_exit_intraday_protection"):
+            forced += f"日内跌{params.get('forced_exit_intraday_stop_pct', .01):.1%}先卖"
+        exits.append(forced)
+    paragraphs.append(
+        f"后期出场：从 t{after_day} 起，收盘{'或'.join(exits)}时出场。"
+        if exits else f"后期出场：从 t{after_day} 起不设后期技术出场，仅在数据结束平仓。"
+    )
+    return "\n\n".join(paragraphs)
 
 
 def available_data_scopes() -> dict[str, str]:
@@ -201,6 +213,7 @@ def active_condition_ids(params: dict) -> list[str]:
         "use_entry_fast_above_slow_sma": "EN-03", "use_entry_volume_sma": "EN-04",
         "use_early_stop": "EX-01", "use_exit_below_entry": "EX-02",
         "use_exit_below_sma": "EX-03", "use_forced_exit": "EX-04",
+        "use_forced_exit_intraday_protection": "EX-05",
     }
     return [condition_id for key, condition_id in mapping.items() if params.get(key, True)]
 
@@ -223,6 +236,7 @@ def apply_parameters_to_controls(params: dict, token: str) -> None:
         "baseline_rsi_max": int(params.get("baseline_rsi_max", 90)),
         "cost_bps": float(params["cost_bps"]),
         "forced_exit_day": int(params.get("forced_exit_day", params.get("entry_lag", 2) + params.get("forced_exit_days_after_entry", 3))),
+        "forced_exit_intraday_stop_pct": float(params.get("forced_exit_intraday_stop_pct", .01) * 100),
         **{key: bool(params.get(key, DEFAULT_CONDITION_STATES[key])) for key in ATOMIC_TOGGLE_KEYS},
         "applied_preset_token": token,
     })
@@ -313,7 +327,7 @@ def initialize_parameter_controls() -> None:
         "entry_volume_fast_window": 5, "entry_volume_slow_window": 20,
         "baseline_lookback": 15, "baseline_max_rise_pct": 20.0,
         "baseline_rsi_period": 14, "baseline_rsi_max": 90,
-        "forced_exit_day": 5, **DEFAULT_CONDITION_STATES,
+        "forced_exit_day": 5, "forced_exit_intraday_stop_pct": 1.0, **DEFAULT_CONDITION_STATES,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -544,6 +558,16 @@ with st.sidebar:
         disabled=not use_forced_exit,
         help="默认 t5：例如 t2 入场时，默认会在 t5 收盘强制平仓。该日必须晚于入场确认日；若同日早期止损触发，早期止损优先。",
     )
+    use_forced_exit_intraday_protection = st.toggle(
+        "【EX-05】启用：强制平仓日日内保护", key="use_forced_exit_intraday_protection",
+        on_change=switch_to_custom_params, disabled=not use_forced_exit,
+    )
+    forced_exit_intraday_stop_pct = st.slider(
+        "强制平仓日日内保护幅度（相对入场价，%）", 0.1, 20.0, step=0.1,
+        key="forced_exit_intraday_stop_pct", on_change=switch_to_custom_params,
+        disabled=not (use_forced_exit and use_forced_exit_intraday_protection),
+        help="例如 1%：仅在强制平仓当天，盘中最低价≤入场价×99% 时立即出场；否则在该日收盘强制平仓。",
+    )
     st.subheader("执行成本与资金模式")
     cost_bps = st.number_input("单边手续费 (bps)", min_value=0.0, step=0.5,
                                key="cost_bps", on_change=switch_to_custom_params)
@@ -564,6 +588,7 @@ try:
         parameters.setdefault("entry_volume_fast_window", 5)
         parameters.setdefault("entry_volume_slow_window", 20)
         parameters.setdefault("forced_exit_day", parameters.get("entry_lag", 2) + parameters.get("forced_exit_days_after_entry", 3))
+        parameters.setdefault("forced_exit_intraday_stop_pct", .01)
         for toggle_key in ATOMIC_TOGGLE_KEYS:
             parameters.setdefault(toggle_key, DEFAULT_CONDITION_STATES[toggle_key])
     else:
@@ -599,6 +624,8 @@ try:
             "use_exit_below_sma": use_exit_below_sma,
             "use_forced_exit": use_forced_exit,
             "forced_exit_day": int(forced_exit_day),
+            "use_forced_exit_intraday_protection": use_forced_exit_intraday_protection,
+            "forced_exit_intraday_stop_pct": forced_exit_intraday_stop_pct / 100,
             "entry_trend_filter": True, "stop_intraday": not close_stop, "cost_bps": cost_bps,
         }
 except (KeyError, ValueError) as exc:
