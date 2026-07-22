@@ -793,22 +793,24 @@ with tabs[0]:
                     {"Date": str(exit_date.date()), "Price": float(trade["exit_px"]), "标记": "出场"},
                 ]
                 candle_data = chart_data.assign(Date=chart_data["Date"].dt.strftime("%Y-%m-%d"))
+                chart_height = min(760, max(560, len(chart_data) * 18))
+                price_axis = {"field": "Low", "type": "quantitative", "title": "价格", "scale": {"zero": False, "nice": True}}
                 spec = {
-                    "height": 520,
+                    "height": chart_height,
                     "title": f"{selected_symbol}｜{trade.signal} → {trade.exit}｜{trade.reason}",
                     "encoding": {"x": {"field": "Date", "type": "temporal", "title": "日期"}},
                     "layer": [
-                        {"mark": {"type": "rule"}, "encoding": {"y": {"field": "Low", "type": "quantitative", "title": "价格"}, "y2": {"field": "High"}}},
+                        {"mark": {"type": "rule"}, "encoding": {"y": price_axis, "y2": {"field": "High"}}},
                         {"mark": {"type": "bar", "size": 7}, "encoding": {
-                            "y": {"field": "Open", "type": "quantitative"}, "y2": {"field": "Close"},
+                            "y": {"field": "Open", "type": "quantitative", "scale": {"zero": False, "nice": True}}, "y2": {"field": "Close"},
                             "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
                         }},
                         {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
-                            "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative"},
+                            "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                             "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
                         }},
                         {"data": {"values": markers}, "mark": {"type": "text", "dy": -14}, "encoding": {
-                            "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative"},
+                            "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                             "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
                         }},
                     ],
