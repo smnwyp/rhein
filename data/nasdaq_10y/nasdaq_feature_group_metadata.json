@@ -1,0 +1,9 @@
+{
+  "generated_at": "2026-07-19",
+  "feature_window": "最近 252 个交易日",
+  "volatility_formula": "日收益率标准差 × sqrt(252) × 100%",
+  "liquidity_formula": "Close × Volume 的 252 日中位数",
+  "lookahead_warning": "当前横截面分组；历史回测必须按历史时点重建分组",
+  "symbols": 2951,
+  "failures": 0
+}

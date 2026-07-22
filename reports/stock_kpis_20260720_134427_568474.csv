@@ -1,0 +1,2 @@
+symbol,source,band_lo,band_hi,stop_pct,sma_n,entry_lag,hard_stop_days,stop_intraday,cost_bps,mode,n_trades,initial_capital,final_equity,total_pnl
+NVDA,data/nvda.csv,1.0,2.0,0.02,5,2,"3,4",True,0.0,固定仓位,0,10000,10000,0.0

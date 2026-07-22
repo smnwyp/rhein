@@ -1,0 +1,14 @@
+{
+  "downloaded_at": "2026-07-19",
+  "source": "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=5000&exchange=nasdaq",
+  "years_requested": 10,
+  "start": "2016-07-18",
+  "end_exclusive": "2026-07-20",
+  "universe_count": 2952,
+  "skipped_existing": 2952,
+  "downloaded_this_run": 0,
+  "failed_this_run": 0,
+  "valid_data_files": 2952,
+  "invalid_or_missing_files": 0,
+  "scope": "当前 Nasdaq 上市、名称包含 Common Stock 或 Ordinary Shares 的证券；排除 ETF、基金、权证等"
+}

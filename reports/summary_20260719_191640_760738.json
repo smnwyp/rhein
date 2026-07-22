@@ -1,0 +1,154 @@
+{
+  "generated_at": "20260719_191640_760738",
+  "parameters": {
+    "每标的初始资金": 10000,
+    "参数档案": "strategy_profiles.json",
+    "命令行覆盖": "无"
+  },
+  "results": [
+    {
+      "symbol": "NVDA",
+      "source": "data/nvda.csv",
+      "strategy": {
+        "band_lo": 0.02,
+        "band_hi": 0.025,
+        "stop_pct": 0.02,
+        "sma_n": 5,
+        "entry_lag": 2,
+        "hard_stop_days": [
+          3,
+          4
+        ],
+        "stop_intraday": true,
+        "cost_bps": 0.0
+      },
+      "stats": {
+        "mode": "复利",
+        "n_trades": 91,
+        "initial_capital": 10000,
+        "final_equity": 30448.02,
+        "total_pnl": 20448.02,
+        "win_rate_pct": 36.26,
+        "avg_return_pct": 1.383,
+        "avg_win_pct": 7.038,
+        "avg_loss_pct": -1.835,
+        "payoff_ratio": 3.836,
+        "profit_factor": 2.21,
+        "max_drawdown_pct": -26.11,
+        "avg_days_held": 4.23,
+        "max_win_pct": 26.261,
+        "max_loss_pct": -4.847,
+        "gross_profit": 37341.57,
+        "gross_loss": 16894.11
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "source": "data/nvda.csv",
+      "strategy": {
+        "band_lo": 0.02,
+        "band_hi": 0.025,
+        "stop_pct": 0.02,
+        "sma_n": 5,
+        "entry_lag": 2,
+        "hard_stop_days": [
+          3,
+          4
+        ],
+        "stop_intraday": true,
+        "cost_bps": 0.0
+      },
+      "stats": {
+        "mode": "固定仓位",
+        "n_trades": 91,
+        "initial_capital": 10000,
+        "final_equity": 22583.68,
+        "total_pnl": 12583.68,
+        "win_rate_pct": 36.26,
+        "avg_return_pct": 1.383,
+        "avg_win_pct": 7.038,
+        "avg_loss_pct": -1.835,
+        "payoff_ratio": 3.836,
+        "profit_factor": 2.183,
+        "max_drawdown_pct": -31.18,
+        "avg_days_held": 4.23,
+        "max_win_pct": 26.261,
+        "max_loss_pct": -4.847,
+        "gross_profit": 23224.38,
+        "gross_loss": 10640.7
+      }
+    },
+    {
+      "symbol": "TESLA",
+      "source": "data/tesla.csv",
+      "strategy": {
+        "band_lo": 0.02,
+        "band_hi": 0.03,
+        "stop_pct": 0.03,
+        "sma_n": 5,
+        "entry_lag": 2,
+        "hard_stop_days": [
+          3,
+          4
+        ],
+        "stop_intraday": true,
+        "cost_bps": 0.0
+      },
+      "stats": {
+        "mode": "复利",
+        "n_trades": 129,
+        "initial_capital": 10000,
+        "final_equity": 57488.09,
+        "total_pnl": 47488.09,
+        "win_rate_pct": 38.76,
+        "avg_return_pct": 1.729,
+        "avg_win_pct": 9.091,
+        "avg_loss_pct": -2.93,
+        "payoff_ratio": 3.103,
+        "profit_factor": 1.623,
+        "max_drawdown_pct": -28.42,
+        "avg_days_held": 4.51,
+        "max_win_pct": 65.663,
+        "max_loss_pct": -9.463,
+        "gross_profit": 123773.75,
+        "gross_loss": 76285.69
+      }
+    },
+    {
+      "symbol": "TESLA",
+      "source": "data/tesla.csv",
+      "strategy": {
+        "band_lo": 0.02,
+        "band_hi": 0.03,
+        "stop_pct": 0.03,
+        "sma_n": 5,
+        "entry_lag": 2,
+        "hard_stop_days": [
+          3,
+          4
+        ],
+        "stop_intraday": true,
+        "cost_bps": 0.0
+      },
+      "stats": {
+        "mode": "固定仓位",
+        "n_trades": 129,
+        "initial_capital": 10000,
+        "final_equity": 32307.55,
+        "total_pnl": 22307.55,
+        "win_rate_pct": 38.76,
+        "avg_return_pct": 1.729,
+        "avg_win_pct": 9.091,
+        "avg_loss_pct": -2.93,
+        "payoff_ratio": 3.103,
+        "profit_factor": 1.964,
+        "max_drawdown_pct": -18.36,
+        "avg_days_held": 4.51,
+        "max_win_pct": 65.663,
+        "max_loss_pct": -9.463,
+        "gross_profit": 45456.68,
+        "gross_loss": 23149.13
+      }
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "generated_at": "20260719_190433",
+  "parameters": {
+    "信号涨幅下限": 0.02,
+    "信号涨幅上限": 0.025,
+    "止损比例": 0.02,
+    "SMA 周期": 5,
+    "每标的初始资金": 10000,
+    "单边手续费（bps）": 5.0,
+    "t3/t4 止损方式": "盘中低价"
+  },
+  "results": [
+    {
+      "symbol": "NVDA",
+      "source": "data/nvda.csv",
+      "stats": {
+        "mode": "复利",
+        "n_trades": 91,
+        "initial_capital": 10000,
+        "final_equity": 27825.61,
+        "total_pnl": 17825.61,
+        "win_rate_pct": 35.16,
+        "avg_return_pct": 1.283,
+        "avg_win_pct": 7.157,
+        "avg_loss_pct": -1.903,
+        "payoff_ratio": 3.761,
+        "profit_factor": 2.058,
+        "max_drawdown_pct": -27.38,
+        "avg_days_held": 4.23,
+        "max_win_pct": 26.161,
+        "max_loss_pct": -4.947,
+        "gross_profit": 34667.45,
+        "gross_loss": 16842.39
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "source": "data/nvda.csv",
+      "stats": {
+        "mode": "固定仓位",
+        "n_trades": 91,
+        "initial_capital": 10000,
+        "final_equity": 21673.68,
+        "total_pnl": 11673.68,
+        "win_rate_pct": 35.16,
+        "avg_return_pct": 1.283,
+        "avg_win_pct": 7.157,
+        "avg_loss_pct": -1.903,
+        "payoff_ratio": 3.761,
+        "profit_factor": 2.04,
+        "max_drawdown_pct": -32.98,
+        "avg_days_held": 4.23,
+        "max_win_pct": 26.161,
+        "max_loss_pct": -4.947,
+        "gross_profit": 22901.57,
+        "gross_loss": 11227.89
+      }
+    },
+    {
+      "symbol": "TESLA",
+      "source": "data/tesla.csv",
+      "stats": {
+        "mode": "复利",
+        "n_trades": 75,
+        "initial_capital": 10000,
+        "final_equity": 18914.79,
+        "total_pnl": 8914.79,
+        "win_rate_pct": 28.0,
+        "avg_return_pct": 1.2,
+        "avg_win_pct": 10.248,
+        "avg_loss_pct": -2.318,
+        "payoff_ratio": 4.42,
+        "profit_factor": 1.401,
+        "max_drawdown_pct": -28.15,
+        "avg_days_held": 3.53,
+        "max_win_pct": 65.563,
+        "max_loss_pct": -9.563,
+        "gross_profit": 31123.83,
+        "gross_loss": 22208.72
+      }
+    },
+    {
+      "symbol": "TESLA",
+      "source": "data/tesla.csv",
+      "stats": {
+        "mode": "固定仓位",
+        "n_trades": 75,
+        "initial_capital": 10000,
+        "final_equity": 19001.15,
+        "total_pnl": 9001.15,
+        "win_rate_pct": 28.0,
+        "avg_return_pct": 1.2,
+        "avg_win_pct": 10.248,
+        "avg_loss_pct": -2.318,
+        "payoff_ratio": 4.42,
+        "profit_factor": 1.719,
+        "max_drawdown_pct": -14.39,
+        "avg_days_held": 3.53,
+        "max_win_pct": 65.563,
+        "max_loss_pct": -9.563,
+        "gross_profit": 21520.3,
+        "gross_loss": 12519.15
+      }
+    }
+  ]
+}

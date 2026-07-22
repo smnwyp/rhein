@@ -1,0 +1,82 @@
+{
+  "generated_at": "20260719_191641_172506",
+  "parameters": {
+    "每标的初始资金": 10000,
+    "参数档案": "strategy_profiles.json",
+    "命令行覆盖": "已使用"
+  },
+  "results": [
+    {
+      "symbol": "NVDA",
+      "source": "data/nvda.csv",
+      "strategy": {
+        "band_lo": 0.02,
+        "band_hi": 0.025,
+        "stop_pct": 0.02,
+        "sma_n": 5,
+        "entry_lag": 3,
+        "hard_stop_days": [
+          4,
+          5
+        ],
+        "stop_intraday": true,
+        "cost_bps": 0.0
+      },
+      "stats": {
+        "mode": "固定仓位",
+        "n_trades": 89,
+        "initial_capital": 10000,
+        "final_equity": 19030.6,
+        "total_pnl": 9030.6,
+        "win_rate_pct": 40.45,
+        "avg_return_pct": 1.015,
+        "avg_win_pct": 5.638,
+        "avg_loss_pct": -2.125,
+        "payoff_ratio": 2.653,
+        "profit_factor": 1.802,
+        "max_drawdown_pct": -15.35,
+        "avg_days_held": 3.87,
+        "max_win_pct": 18.355,
+        "max_loss_pct": -12.495,
+        "gross_profit": 20295.14,
+        "gross_loss": 11264.54
+      }
+    },
+    {
+      "symbol": "TESLA",
+      "source": "data/tesla.csv",
+      "strategy": {
+        "band_lo": 0.02,
+        "band_hi": 0.03,
+        "stop_pct": 0.03,
+        "sma_n": 5,
+        "entry_lag": 3,
+        "hard_stop_days": [
+          4,
+          5
+        ],
+        "stop_intraday": true,
+        "cost_bps": 0.0
+      },
+      "stats": {
+        "mode": "固定仓位",
+        "n_trades": 127,
+        "initial_capital": 10000,
+        "final_equity": 14654.13,
+        "total_pnl": 4654.13,
+        "win_rate_pct": 34.65,
+        "avg_return_pct": 0.366,
+        "avg_win_pct": 6.044,
+        "avg_loss_pct": -2.643,
+        "payoff_ratio": 2.287,
+        "profit_factor": 1.212,
+        "max_drawdown_pct": -33.55,
+        "avg_days_held": 3.87,
+        "max_win_pct": 38.973,
+        "max_loss_pct": -10.217,
+        "gross_profit": 26592.57,
+        "gross_loss": 21938.44
+      }
+    }
+  ]
+}

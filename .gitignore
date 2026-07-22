@@ -9,8 +9,11 @@ __pycache__/
 !.env.example
 
 # Downloaded market data and generated backtest outputs
-data/
-reports/
+# 完整的运行数据、分组 metadata 与报告需要随 Streamlit 云端部署。
+!data/
+!data/**
+!reports/
+!reports/**
 output/
 *.log
 

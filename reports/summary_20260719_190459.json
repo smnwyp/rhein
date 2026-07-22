@@ -1,0 +1,25 @@
+{
+  "generated_at": "20260719_190459",
+  "parameters": {
+    "信号涨幅下限": 1.0,
+    "信号涨幅上限": 2.0,
+    "止损比例": 0.02,
+    "SMA 周期": 5,
+    "每标的初始资金": 10000,
+    "单边手续费（bps）": 0.0,
+    "t3/t4 止损方式": "盘中低价"
+  },
+  "results": [
+    {
+      "symbol": "NVDA",
+      "source": "data/nvda.csv",
+      "stats": {
+        "mode": "固定仓位",
+        "n_trades": 0,
+        "initial_capital": 10000,
+        "final_equity": 10000,
+        "total_pnl": 0.0
+      }
+    }
+  ]
+}
