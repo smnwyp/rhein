@@ -137,15 +137,29 @@ def strategy_narrative(params: dict) -> str:
     exits = []
     if on("use_exit_below_entry"): exits.append("跌破入场价")
     if on("use_exit_below_sma"): exits.append(f"跌破SMA{params['sma_n']}")
+    forced_exit_day = params.get("forced_exit_day", 5)
+    if exits:
+        if on("use_forced_exit") and forced_exit_day <= after_day:
+            paragraphs.append(
+                f"后期技术出场：原规则从 t{after_day} 起，收盘{'或'.join(exits)}时出场；"
+                f"但 EX-04 会在 t{forced_exit_day} 强制平仓并优先执行，因此本组合下该规则不会实际触发。"
+            )
+        elif on("use_forced_exit"):
+            paragraphs.append(
+                f"后期技术出场：从 t{after_day} 至 t{forced_exit_day - 1}，收盘{'或'.join(exits)}时出场。"
+            )
+        else:
+            paragraphs.append(f"后期技术出场：从 t{after_day} 起，收盘{'或'.join(exits)}时出场。")
+    else:
+        paragraphs.append(f"后期技术出场：从 t{after_day} 起不设后期技术出场。")
     if on("use_forced_exit"):
-        forced = f"t{params.get('forced_exit_day', 5)}强制平仓"
+        forced_text = f"强制平仓：t{forced_exit_day} 当天必须平仓。"
         if on("use_forced_exit_intraday_protection"):
-            forced += f"日内跌{params.get('forced_exit_intraday_stop_pct', .01):.1%}先卖"
-        exits.append(forced)
-    paragraphs.append(
-        f"后期出场：从 t{after_day} 起，收盘{'或'.join(exits)}时出场。"
-        if exits else f"后期出场：从 t{after_day} 起不设后期技术出场，仅在数据结束平仓。"
-    )
+            forced_text = (
+                f"强制平仓：t{forced_exit_day} 当天，若盘中最低价跌至入场价下"
+                f"{params.get('forced_exit_intraday_stop_pct', .01):.1%}，立即按保护规则出场；否则以 t{forced_exit_day} 收盘价强制平仓。"
+            )
+        paragraphs.append(forced_text)
     return "\n\n".join(paragraphs)
 
 
