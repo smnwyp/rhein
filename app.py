@@ -716,19 +716,23 @@ with tabs[0]:
             st.exception(exc)
 
     kpis = st.session_state.get("single_kpis")
-    required_kpi_columns = {"n_trades", "gross_profit", "gross_loss", "cumulative_return_pct"}
+    required_kpi_columns = {"n_trades", "gross_profit", "gross_loss", "cumulative_return_pct", "max_drawdown_pct"}
     if kpis is not None and not kpis.empty and required_kpi_columns <= set(kpis.columns):
         active = kpis[kpis["n_trades"] > 0]
         total_trades = int(kpis["n_trades"].sum())
         gross_profit, gross_loss = kpis["gross_profit"].fillna(0).sum(), kpis["gross_loss"].fillna(0).sum()
-        columns = st.columns(6)
+        columns = st.columns(7)
         columns[0].metric("标的数", len(kpis))
         columns[1].metric("总交易数", f"{total_trades:,}")
         columns[2].metric("有交易标的", len(active))
         columns[3].metric("平均标的胜率", f"{active['win_rate_pct'].mean():.2f}%" if len(active) else "不适用")
         columns[4].metric("合并盈利因子", f"{gross_profit / gross_loss:.3f}" if gross_loss else "不适用")
         columns[5].metric("中位标的累计收益", f"{active['cumulative_return_pct'].median():.2f}%" if len(active) else "不适用")
-        st.caption(f"资金模式：{st.session_state['single_mode']}；所有收益率均按每个标的独立账户计算，不汇总为虚假的组合金额。")
+        columns[6].metric("中位独立最大回撤", f"{active['max_drawdown_pct'].median():.2f}%" if len(active) else "不适用")
+        st.caption(
+            f"资金模式：{st.session_state['single_mode']}；所有收益率均按每个标的独立账户计算，不汇总为虚假的组合金额。"
+            "“中位独立最大回撤”是本次有交易标的各自最大回撤的中位数。"
+        )
 
         st.subheader("Top 100 标的")
         metric_options = {
