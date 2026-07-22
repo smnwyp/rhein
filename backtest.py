@@ -41,7 +41,7 @@ DEFAULT_STRATEGY = {
     "forced_exit_intraday_stop_pct": 0.01,
     # Kept solely for old saved profiles; new callers should use the three atomic entry toggles.
     "entry_trend_filter": True,
-    "stop_intraday": True,
+    "stop_intraday": False,
     "cost_bps": 0.0,
 }
 PROFILE_KEYS = set(DEFAULT_STRATEGY)
@@ -71,7 +71,7 @@ def load_ohlc(path: Path) -> pd.DataFrame:
 
 def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                  stop_pct=0.02, sma_n=5, entry_lag=2, hard_stop_days=(3, 4),
-                 capital=10_000.0, compound=True, stop_intraday=True,
+                 capital=10_000.0, compound=True, stop_intraday=False,
                  cost_bps=0.0, vol_scaled=False, vol_window=20,
                  entry_trend_filter=True, entry_trend_fast_sma=5,
                  entry_trend_slow_sma=10, baseline_lookback=15,
@@ -194,15 +194,12 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
         exit_px = exit_idx = reason = None
         for j in range(entry_idx + 1, n):
             day_from_signal = j - t0
-            if use_early_stop and day_from_signal in hard_stop_days:
-                if stop_intraday and lo[j] <= stop_level:
-                    exit_px = min(o[j], stop_level) if o[j] < stop_level else stop_level
-                    exit_idx, reason = j, f"t{day_from_signal} 日内止损"
-                    break
-                if not stop_intraday and c[j] <= stop_level:
-                    exit_px, exit_idx, reason = c[j], j, f"t{day_from_signal} 收盘止损"
-                    break
-            # 强制平仓为持有上限；若同日早期止损已触发，盘中止损优先。
+            if use_early_stop and day_from_signal in hard_stop_days and c[j] <= stop_level:
+                # EX-01 is deliberately close-only. ``stop_intraday`` remains an ignored
+                # compatibility argument for old saved profiles and CLI invocations.
+                exit_px, exit_idx, reason = c[j], j, f"t{day_from_signal} 收盘止损"
+                break
+            # 强制平仓为持有上限；若同日早期止损已触发，早期止损优先。
             if use_forced_exit and day_from_signal == forced_exit_day:
                 forced_protection_level = entry_px * (1 - forced_exit_intraday_stop_pct)
                 if use_forced_exit_intraday_protection and lo[j] <= forced_protection_level:
@@ -329,7 +326,7 @@ def markdown_report(results: list[dict], params: dict, generated_at: str) -> str
                       "早期止损日 " + ", ".join(f"t{d}" for d in result['strategy']['hard_stop_days']),
                       f"止损 {result['strategy']['stop_pct']:.2%}",
                       f"SMA{result['strategy']['sma_n']}",
-                      "盘中止损" if result['strategy']['stop_intraday'] else "收盘止损",
+                      "收盘止损",
                       f"单边手续费 {result['strategy']['cost_bps']} bps",
                   ]), "",
                   "| 指标 | 数值 |", "|---|---:|"]
@@ -564,7 +561,7 @@ def main():
     ap.add_argument("--compound", action="store_true", help="使用复利模式（默认使用固定仓位）")
     ap.add_argument("--both-modes", action="store_true", help="同时运行复利与固定仓位模式")
     ap.add_argument("--no-compound", action="store_true", help="兼容旧命令；固定仓位本来就是默认值")
-    ap.add_argument("--close-stop", action="store_true", help="t3/t4 以收盘价而不是盘中低价触发止损")
+    ap.add_argument("--close-stop", action="store_true", help="兼容旧命令；早期止损默认已经使用收盘价触发")
     ap.add_argument("--output-dir", default="reports", help="报告输出目录")
     ap.add_argument("--sweep", action="store_true", help="执行参数组合扫描并生成完整比较报告")
     ap.add_argument("--grid-config", default="parameter_grid.json", help="参数扫描范围 JSON 文件")

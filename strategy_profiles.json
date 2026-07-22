@@ -6,7 +6,7 @@
     "hard_stop_days": [3, 4],
     "stop_pct": 0.02,
     "sma_n": 5,
-    "stop_intraday": true,
+    "stop_intraday": false,
     "cost_bps": 0.0
   },
   "TESLA": {
@@ -16,7 +16,7 @@
     "hard_stop_days": [3, 4],
     "stop_pct": 0.03,
     "sma_n": 5,
-    "stop_intraday": true,
+    "stop_intraday": false,
     "cost_bps": 0.0
   }
 }

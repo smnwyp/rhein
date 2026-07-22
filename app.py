@@ -133,7 +133,7 @@ def strategy_narrative(params: dict) -> str:
         f"入场点：在 t{params['entry_lag']}，需满足“{'、'.join(entry) if entry else '无入场确认筛选'}”后按收盘价入场。",
     ]
     if on("use_early_stop"):
-        paragraphs.append(f"早期出场：在 {stop_days} 以{'收盘价' if not params['stop_intraday'] else '盘中低价'}执行 {params['stop_pct']:.1%} 止损。")
+        paragraphs.append(f"早期出场：在 {stop_days}，收盘价触及 {params['stop_pct']:.1%} 止损幅度即按收盘价出场。")
     exits = []
     if on("use_exit_below_entry"): exits.append("跌破入场价")
     if on("use_exit_below_sma"): exits.append(f"跌破SMA{params['sma_n']}")
@@ -225,7 +225,7 @@ def apply_parameters_to_controls(params: dict, token: str) -> None:
         "entry_lag": int(params["entry_lag"]),
         "stop_days_text": ",".join(map(str, params["hard_stop_days"])),
         "stop_pct": round(params["stop_pct"] * 100, 1),
-        "close_stop": not bool(params["stop_intraday"]), "sma_n": int(params["sma_n"]),
+        "close_stop": True, "sma_n": int(params["sma_n"]),
         "entry_trend_fast_sma": int(params.get("entry_trend_fast_sma", 5)),
         "entry_trend_slow_sma": int(params.get("entry_trend_slow_sma", 10)),
         "entry_volume_fast_window": int(params.get("entry_volume_fast_window", 5)),
@@ -322,7 +322,7 @@ def initialize_parameter_controls() -> None:
     """只在首次打开时提供控件默认值，避免与 session state 的预设值冲突。"""
     defaults = {
         "band_range": (2.0, 2.5), "entry_lag": 2, "stop_days_text": "3,4",
-        "stop_pct": 2.0, "close_stop": False, "sma_n": 5, "cost_bps": 0.0,
+        "stop_pct": 2.0, "close_stop": True, "sma_n": 5, "cost_bps": 0.0,
         "entry_trend_fast_sma": 5, "entry_trend_slow_sma": 10,
         "entry_volume_fast_window": 5, "entry_volume_slow_window": 20,
         "baseline_lookback": 15, "baseline_max_rise_pct": 20.0,
@@ -544,8 +544,7 @@ with st.sidebar:
     )
     stop_pct = st.slider("早期止损幅度 (%)", 0.1, 20.0, step=0.1,
                          key="stop_pct", on_change=switch_to_custom_params, disabled=not use_early_stop)
-    close_stop = st.checkbox("早期止损使用收盘价触发（否则盘中低价）",
-                             key="close_stop", on_change=switch_to_custom_params, disabled=not use_early_stop)
+    st.caption("早期止损固定以收盘价触发并按收盘价出场。")
     st.subheader("出场点：后期趋势")
     use_exit_below_entry = st.toggle("【EX-02】启用：收盘价跌破入场价出场", key="use_exit_below_entry", on_change=switch_to_custom_params)
     use_exit_below_sma = st.toggle("【EX-03】启用：收盘价跌破趋势 SMA 出场", key="use_exit_below_sma", on_change=switch_to_custom_params)
@@ -578,6 +577,7 @@ try:
     if selected_preset:
         parameters = dict(selected_preset["best_by_profit_factor"]["parameters"])
         parameters["hard_stop_days"] = tuple(parameters["hard_stop_days"])
+        parameters["stop_intraday"] = False
         parameters["entry_trend_filter"] = True
         parameters.setdefault("entry_trend_fast_sma", 5)
         parameters.setdefault("entry_trend_slow_sma", 10)
@@ -626,7 +626,7 @@ try:
             "forced_exit_day": int(forced_exit_day),
             "use_forced_exit_intraday_protection": use_forced_exit_intraday_protection,
             "forced_exit_intraday_stop_pct": forced_exit_intraday_stop_pct / 100,
-            "entry_trend_filter": True, "stop_intraday": not close_stop, "cost_bps": cost_bps,
+            "entry_trend_filter": True, "stop_intraday": False, "cost_bps": cost_bps,
         }
 except (KeyError, ValueError) as exc:
     st.error(f"参数错误：{exc}")
