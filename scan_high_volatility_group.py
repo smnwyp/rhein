@@ -58,7 +58,6 @@ def main() -> None:
             if stats["n_trades"]:
                 drawdowns.append(stats["max_drawdown_pct"])
                 profitable_symbols += stats["total_pnl"] > 0
-        median_dd = pd.Series(drawdowns).median()
         dd_q25 = pd.Series(drawdowns).quantile(.25)
         avg_win = totals["win_return_sum"] / totals["wins"] if totals["wins"] else None
         avg_loss = totals["loss_return_sum"] / totals["losses"] if totals["losses"] else None
@@ -78,7 +77,6 @@ def main() -> None:
             "avg_days_held": totals["days_held"] / totals["trades"] if totals["trades"] else None,
             "max_trade_win_pct": max(all_returns) if all_returns else None,
             "max_trade_loss_pct": min(all_returns) if all_returns else None,
-            "median_individual_max_drawdown_pct": median_dd,
             "q25_individual_max_drawdown_pct": dd_q25,
             "passes_15pct_drawdown_proxy": dd_q25 >= -15,
         })

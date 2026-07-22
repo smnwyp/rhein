@@ -106,7 +106,6 @@ def evaluate(datasets: list[tuple[str, pd.DataFrame]], params: dict) -> dict:
         "mean_symbol_cumulative_return_pct": pd.Series(returns_by_symbol).mean(),
         "profitable_symbols": profitable_symbols,
         "avg_days_held": totals["days"] / totals["trades"] if totals["trades"] else None,
-        "median_individual_max_drawdown_pct": dd.median(),
         "q25_individual_max_drawdown_pct": dd.quantile(.25),
         "passes_15pct_drawdown_proxy": bool(dd.quantile(.25) >= -15) if len(dd) else False,
     }
