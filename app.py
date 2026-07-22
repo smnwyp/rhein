@@ -751,19 +751,70 @@ with tabs[0]:
         ranked = ranked.sort_values(metric, ascending=ascending).head(100)
         display_columns = ["标的", "n_trades", "win_rate_pct", "cumulative_return_pct", "payoff_ratio", "profit_factor",
                            "max_drawdown_pct", "avg_return_pct", "avg_days_held"]
-        top_display = ranked[display_columns].rename(columns=KPI_LABELS)
+        top_display = ranked[display_columns].rename(columns=KPI_LABELS).reset_index(drop=True)
         st.caption(
             f"绿色行：该标的最大回撤不低于 -{max_drawdown_limit:.1f}%，符合阈值；"
-            "红色行：回撤超过阈值。"
+            "红色行：回撤超过阈值。点击任一行可查看该标的的交易 K 线。"
         )
-        st.dataframe(
+        selection = st.dataframe(
             style_by_drawdown(top_display, "最大回撤 (%)", -max_drawdown_limit,
                                integer_columns=("交易次数",)), hide_index=True, width="stretch",
             column_config={
                 column: st.column_config.Column(column, help=KPI_DEFINITIONS.get(column))
                 for column in top_display.columns if column in KPI_DEFINITIONS
             },
+            on_select="rerun", selection_mode="single-row", key="top_symbol_table",
         )
+        selected_rows = selection.selection.rows if selection else []
+        if selected_rows:
+            selected_symbol = top_display.iloc[selected_rows[0]]["标的"]
+            symbol_trades = st.session_state.get("single_trades", pd.DataFrame())
+            symbol_trades = symbol_trades[symbol_trades["symbol"] == selected_symbol].reset_index(drop=True)
+            if symbol_trades.empty:
+                st.info(f"{selected_symbol} 没有可展示的已平仓交易。")
+            else:
+                st.subheader(f"{selected_symbol}：交易 K 线")
+                trade_labels = [
+                    f"第 {index + 1} 笔：t0 {row.signal}｜入场 {row.entry}｜出场 {row.exit}｜{row.ret_pct:+.2f}%"
+                    for index, row in symbol_trades.iterrows()
+                ]
+                trade_index = st.selectbox("选择交易段", range(len(symbol_trades)),
+                                           format_func=lambda value: trade_labels[value], key="chart_trade_index")
+                trade = symbol_trades.iloc[trade_index]
+                source_path = kpis.loc[kpis["标的"] == selected_symbol, "源文件"].iloc[0]
+                ohlc = load_ohlc(Path(source_path))
+                signal_date, entry_date, exit_date = (pd.Timestamp(trade[column]) for column in ("signal", "entry", "exit"))
+                signal_position = ohlc.index[ohlc["Date"] == signal_date][0]
+                exit_position = ohlc.index[ohlc["Date"] == exit_date][0]
+                chart_data = ohlc.iloc[max(0, signal_position - 10):min(len(ohlc), exit_position + 11)]
+                markers = [
+                    {"Date": str(signal_date.date()), "Price": float(ohlc.loc[ohlc["Date"] == signal_date, "Close"].iloc[0]), "标记": "t0 基准点"},
+                    {"Date": str(entry_date.date()), "Price": float(trade["entry_px"]), "标记": "入场"},
+                    {"Date": str(exit_date.date()), "Price": float(trade["exit_px"]), "标记": "出场"},
+                ]
+                candle_data = chart_data.assign(Date=chart_data["Date"].dt.strftime("%Y-%m-%d"))
+                spec = {
+                    "height": 520,
+                    "title": f"{selected_symbol}｜{trade.signal} → {trade.exit}｜{trade.reason}",
+                    "encoding": {"x": {"field": "Date", "type": "temporal", "title": "日期"}},
+                    "layer": [
+                        {"mark": {"type": "rule"}, "encoding": {"y": {"field": "Low", "type": "quantitative", "title": "价格"}, "y2": {"field": "High"}}},
+                        {"mark": {"type": "bar", "size": 7}, "encoding": {
+                            "y": {"field": "Open", "type": "quantitative"}, "y2": {"field": "Close"},
+                            "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
+                        }},
+                        {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
+                            "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative"},
+                            "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
+                        }},
+                        {"data": {"values": markers}, "mark": {"type": "text", "dy": -14}, "encoding": {
+                            "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative"},
+                            "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
+                        }},
+                    ],
+                }
+                st.vega_lite_chart(candle_data, spec, width="stretch", key=f"trade_chart_{selected_symbol}_{trade_index}")
+                st.caption("K 线窗口：t0 前 10 个交易日至出场后 10 个交易日。蓝色 = t0 基准点；绿色 = 入场；红色 = 出场。")
         with st.expander("指标定义：选择列名查看计算方式"):
             selected_kpi = st.selectbox("指标列", list(KPI_DEFINITIONS), key="top100_kpi_definition")
             st.markdown(f"**{selected_kpi}**：{KPI_DEFINITIONS[selected_kpi]}")
