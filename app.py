@@ -107,7 +107,7 @@ def params_to_text(params: dict) -> str:
 def strategy_narrative(params: dict) -> str:
     """将当前参数整理为可直接阅读的策略规则。"""
     stop_days = "、".join(f"t{day}" for day in params["hard_stop_days"])
-    after_day = max(params["hard_stop_days"]) + 1
+    after_day = max(params["hard_stop_days"]) + 1 if params.get("use_early_stop", True) else params["entry_lag"] + 1
     on = lambda key: params.get(key, True)
     t0 = []
     if on("use_signal_band"): t0.append(f"单日涨幅在 {params['band_lo']:.1%}–{params['band_hi']:.1%}")
@@ -385,19 +385,23 @@ with st.sidebar:
     use_signal_band = st.toggle("启用：t0 单日涨幅区间", key="use_signal_band", on_change=switch_to_custom_params)
     band_lo_pct, band_hi_pct = st.slider(
         "t0 单日涨幅区间 (%)", 0.1, 15.0, step=0.1,
-        key="band_range", on_change=switch_to_custom_params,
+        key="band_range", on_change=switch_to_custom_params, disabled=not use_signal_band,
     )
     use_baseline_prior_low = st.toggle("启用：回看期最低点不能是 t0", key="use_baseline_prior_low", on_change=switch_to_custom_params)
-    baseline_lookback = st.number_input("t0 低点回看交易日数", min_value=1, max_value=100,
-                                        key="baseline_lookback", on_change=switch_to_custom_params)
     use_baseline_max_rise = st.toggle("启用：t0 相对最低点最大涨幅", key="use_baseline_max_rise", on_change=switch_to_custom_params)
+    baseline_lookback = st.number_input("t0 低点回看交易日数", min_value=1, max_value=100,
+                                        key="baseline_lookback", on_change=switch_to_custom_params,
+                                        disabled=not (use_baseline_prior_low or use_baseline_max_rise))
     baseline_max_rise_pct = st.number_input("t0 相对低点最大涨幅 (%)", min_value=0.1, max_value=100.0,
-                                             key="baseline_max_rise_pct", on_change=switch_to_custom_params)
+                                             key="baseline_max_rise_pct", on_change=switch_to_custom_params,
+                                             disabled=not use_baseline_max_rise)
     use_baseline_rsi = st.toggle("启用：t0 RSI 上限", key="use_baseline_rsi", on_change=switch_to_custom_params)
     baseline_rsi_period = st.number_input("t0 RSI 周期", min_value=2, max_value=100,
-                                          key="baseline_rsi_period", on_change=switch_to_custom_params)
+                                          key="baseline_rsi_period", on_change=switch_to_custom_params,
+                                          disabled=not use_baseline_rsi)
     baseline_rsi_max = st.number_input("t0 RSI 上限", min_value=1, max_value=100,
-                                       key="baseline_rsi_max", on_change=switch_to_custom_params)
+                                       key="baseline_rsi_max", on_change=switch_to_custom_params,
+                                       disabled=not use_baseline_rsi)
     st.subheader("入场点（tN）")
     entry_lag = st.selectbox("入场确认日", [1, 2, 3, 4, 5],
                              format_func=lambda value: f"t{value}", key="entry_lag",
@@ -405,31 +409,35 @@ with st.sidebar:
     st.caption("均线与量能条件只考察 tN-1、tN 的任一天，绝不使用 tN+1；启用的条件必须在同一天同时成立。")
     use_entry_close_vs_t0 = st.toggle("启用：tN 收盘价不低于 t0 收盘价", key="use_entry_close_vs_t0", on_change=switch_to_custom_params)
     use_entry_close_above_fast_sma = st.toggle("启用：确认窗口收盘价高于快线 SMA", key="use_entry_close_above_fast_sma", on_change=switch_to_custom_params)
-    entry_trend_fast_sma = st.number_input("入场趋势快线 SMA 周期", min_value=2, max_value=100,
-                                            key="entry_trend_fast_sma", on_change=switch_to_custom_params)
-    entry_trend_slow_sma = st.number_input("入场趋势慢线 SMA 周期", min_value=3, max_value=200,
-                                            key="entry_trend_slow_sma", on_change=switch_to_custom_params)
     use_entry_fast_above_slow_sma = st.toggle("启用：确认窗口快线 SMA 高于慢线 SMA", key="use_entry_fast_above_slow_sma", on_change=switch_to_custom_params)
     use_entry_volume_sma = st.toggle("启用：确认窗口成交量短均线高于长均线", key="use_entry_volume_sma", on_change=switch_to_custom_params)
+    entry_trend_fast_sma = st.number_input("入场趋势快线 SMA 周期", min_value=2, max_value=100,
+                                            key="entry_trend_fast_sma", on_change=switch_to_custom_params,
+                                            disabled=not (use_entry_close_above_fast_sma or use_entry_fast_above_slow_sma))
+    entry_trend_slow_sma = st.number_input("入场趋势慢线 SMA 周期", min_value=3, max_value=200,
+                                            key="entry_trend_slow_sma", on_change=switch_to_custom_params,
+                                            disabled=not use_entry_fast_above_slow_sma)
     entry_volume_fast_window = st.number_input("入场成交量短期均线周期", min_value=1, max_value=100,
-                                                key="entry_volume_fast_window", on_change=switch_to_custom_params)
+                                                key="entry_volume_fast_window", on_change=switch_to_custom_params,
+                                                disabled=not use_entry_volume_sma)
     entry_volume_slow_window = st.number_input("入场成交量长期均线周期", min_value=2, max_value=250,
-                                                key="entry_volume_slow_window", on_change=switch_to_custom_params)
+                                                key="entry_volume_slow_window", on_change=switch_to_custom_params,
+                                                disabled=not use_entry_volume_sma)
     st.subheader("出场点：早期止损")
     use_early_stop = st.toggle("启用：早期止损", key="use_early_stop", on_change=switch_to_custom_params)
     stop_days_text = st.text_input(
         "早期止损观察日（相对 t0）",
-        key="stop_days_text", on_change=switch_to_custom_params,
+        key="stop_days_text", on_change=switch_to_custom_params, disabled=not use_early_stop,
     )
     stop_pct = st.slider("早期止损幅度 (%)", 0.1, 20.0, step=0.1,
-                         key="stop_pct", on_change=switch_to_custom_params)
+                         key="stop_pct", on_change=switch_to_custom_params, disabled=not use_early_stop)
     close_stop = st.checkbox("早期止损使用收盘价触发（否则盘中低价）",
-                             key="close_stop", on_change=switch_to_custom_params)
+                             key="close_stop", on_change=switch_to_custom_params, disabled=not use_early_stop)
     st.subheader("出场点：后期趋势")
     use_exit_below_entry = st.toggle("启用：收盘价跌破入场价出场", key="use_exit_below_entry", on_change=switch_to_custom_params)
     use_exit_below_sma = st.toggle("启用：收盘价跌破趋势 SMA 出场", key="use_exit_below_sma", on_change=switch_to_custom_params)
     sma_n = st.number_input("趋势出场 SMA 周期（早期观察窗口结束后启用）", min_value=2, max_value=100,
-                            key="sma_n", on_change=switch_to_custom_params)
+                            key="sma_n", on_change=switch_to_custom_params, disabled=not use_exit_below_sma)
     st.subheader("执行成本与资金模式")
     cost_bps = st.number_input("单边手续费 (bps)", min_value=0.0, step=0.5,
                                key="cost_bps", on_change=switch_to_custom_params)
@@ -452,14 +460,14 @@ try:
         for toggle_key in ATOMIC_TOGGLE_KEYS:
             parameters.setdefault(toggle_key, True)
     else:
-        hard_stop_days = parse_ints(stop_days_text)
-        if any(day <= entry_lag for day in hard_stop_days):
+        hard_stop_days = parse_ints(stop_days_text) if use_early_stop else (entry_lag + 1,)
+        if use_early_stop and any(day <= entry_lag for day in hard_stop_days):
             raise ValueError("早期止损日必须晚于入场确认日")
-        if band_lo_pct >= band_hi_pct:
+        if use_signal_band and band_lo_pct >= band_hi_pct:
             raise ValueError("信号区间下限必须小于上限")
-        if entry_trend_fast_sma >= entry_trend_slow_sma:
+        if use_entry_fast_above_slow_sma and entry_trend_fast_sma >= entry_trend_slow_sma:
             raise ValueError("入场趋势快线 SMA 周期必须小于慢线 SMA 周期")
-        if entry_volume_fast_window >= entry_volume_slow_window:
+        if use_entry_volume_sma and entry_volume_fast_window >= entry_volume_slow_window:
             raise ValueError("入场成交量短期均线周期必须小于长期均线周期")
         parameters = {
             "band_lo": band_lo_pct / 100, "band_hi": band_hi_pct / 100,

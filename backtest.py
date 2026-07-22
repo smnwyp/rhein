@@ -84,11 +84,15 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
     所有筛选与出场规则均可独立启停。入场确认窗口只使用 tN-1、tN，
     不使用 tN+1，避免未来函数。
     """
-    if entry_trend_fast_sma < 2 or entry_trend_slow_sma <= entry_trend_fast_sma:
+    if (use_entry_close_above_fast_sma or use_entry_fast_above_slow_sma) and entry_trend_fast_sma < 2:
+        raise ValueError("入场趋势快线 SMA 周期至少为 2")
+    if use_entry_fast_above_slow_sma and entry_trend_slow_sma <= entry_trend_fast_sma:
         raise ValueError("入场趋势 SMA 必须满足 2 ≤ 快线周期 < 慢线周期")
-    if entry_volume_fast_window < 1 or entry_volume_slow_window <= entry_volume_fast_window:
+    if use_entry_volume_sma and (entry_volume_fast_window < 1 or entry_volume_slow_window <= entry_volume_fast_window):
         raise ValueError("入场成交量均线必须满足 1 ≤ 短期周期 < 长期周期")
-    if baseline_lookback < 1 or baseline_rsi_period < 2:
+    if (use_baseline_prior_low or use_baseline_max_rise) and baseline_lookback < 1:
+        raise ValueError("基准点回看窗口至少为 1")
+    if use_baseline_rsi and baseline_rsi_period < 2:
         raise ValueError("基准点回看窗口至少为 1，RSI 周期至少为 2")
     c, o, lo, v = (df[name].to_numpy() for name in ("Close", "Open", "Low", "Volume"))
     n = len(df)
@@ -184,7 +188,7 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                 if not stop_intraday and c[j] <= stop_level:
                     exit_px, exit_idx, reason = c[j], j, f"t{day_from_signal} 收盘止损"
                     break
-            elif day_from_signal >= max(hard_stop_days) + 1:
+            elif day_from_signal >= (max(hard_stop_days) + 1 if use_early_stop else entry_lag + 1):
                 if use_exit_below_entry and c[j] < entry_px:
                     exit_px, exit_idx, reason = c[j], j, "收盘价低于入场价"
                     break
