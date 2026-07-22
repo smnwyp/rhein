@@ -9,6 +9,24 @@ Owner: Chloe. Version: v1.4 (2026-07-22: every signal, baseline, entry and exit 
 
 ## Strategy specification (canonical — do not silently reinterpret)
 
+## Condition IDs
+
+| ID | Condition |
+|---|---|
+| T0-01 | Signal daily-return band |
+| T0-02 | The lowest close in the baseline window is not t0 |
+| T0-03 | t0's extension above that low is capped |
+| T0-04 | t0 RSI ceiling |
+| EN-01 | tN close is at least t0 close |
+| EN-02 | Confirmation-window close is above fast SMA |
+| EN-03 | Confirmation-window fast SMA is above slow SMA |
+| EN-04 | Confirmation-window volume short SMA is above volume long SMA |
+| EX-01 | Early hard stop |
+| EX-02 | Later close below entry-price exit |
+| EX-03 | Later close below exit-SMA exit |
+
+These identifiers are stable labels for the UI, notes and experiments; the corresponding engine flags remain `use_*` parameters.
+
 **Signal and baseline (t0):** the following are four independent conditions, all enabled by default: (1) `close[t0] / close[t0-1] − 1` is within [2.0%, 2.5%] (band, not open-ended); (2) in the inclusive window `t0-15 … t0`, the lowest close (`t-min`) must not be t0; (3) `close[t0] ≤ 1.20 × close[t-min]`; (4) Wilder RSI(14) at t0 is ≤90. Any disabled condition is not evaluated for eligibility. Lookback, extension, RSI period and RSI ceiling remain configurable.
 
 **Entry confirmation (default t2):** `entry_lag` trading days after t0. The base condition `close[tN] >= close[t0]` is independently switchable and enabled by default.
