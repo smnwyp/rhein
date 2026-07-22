@@ -104,7 +104,7 @@ def params_to_text(params: dict) -> str:
     if on("use_exit_below_sma"):
         exits.append(f"跌破SMA{params['sma_n']}")
     if on("use_forced_exit"):
-        exits.append(f"入场后{params.get('forced_exit_days_after_entry', 3)}日强制平仓")
+        exits.append(f"t{params.get('forced_exit_day', 5)}强制平仓")
     if exits:
         rules.append("后期出场：" + "或".join(exits))
     return "；".join(rules) + f"；单边费用 {params['cost_bps']:.1f} bps"
@@ -132,7 +132,7 @@ def strategy_narrative(params: dict) -> str:
     exits = []
     if on("use_exit_below_entry"): exits.append("跌破入场价")
     if on("use_exit_below_sma"): exits.append(f"跌破SMA{params['sma_n']}")
-    if on("use_forced_exit"): exits.append(f"入场后{params.get('forced_exit_days_after_entry', 3)}日强制平仓")
+    if on("use_forced_exit"): exits.append(f"t{params.get('forced_exit_day', 5)}强制平仓")
     text += f"从 t{after_day} 起，收盘{'或'.join(exits)}时出场。" if exits else f"从 t{after_day} 起不设后期技术出场，仅在数据结束平仓。"
     return text
 
@@ -222,7 +222,7 @@ def apply_parameters_to_controls(params: dict, token: str) -> None:
         "baseline_rsi_period": int(params.get("baseline_rsi_period", 14)),
         "baseline_rsi_max": int(params.get("baseline_rsi_max", 90)),
         "cost_bps": float(params["cost_bps"]),
-        "forced_exit_days_after_entry": int(params.get("forced_exit_days_after_entry", 3)),
+        "forced_exit_day": int(params.get("forced_exit_day", params.get("entry_lag", 2) + params.get("forced_exit_days_after_entry", 3))),
         **{key: bool(params.get(key, DEFAULT_CONDITION_STATES[key])) for key in ATOMIC_TOGGLE_KEYS},
         "applied_preset_token": token,
     })
@@ -313,7 +313,7 @@ def initialize_parameter_controls() -> None:
         "entry_volume_fast_window": 5, "entry_volume_slow_window": 20,
         "baseline_lookback": 15, "baseline_max_rise_pct": 20.0,
         "baseline_rsi_period": 14, "baseline_rsi_max": 90,
-        "forced_exit_days_after_entry": 3, **DEFAULT_CONDITION_STATES,
+        "forced_exit_day": 5, **DEFAULT_CONDITION_STATES,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -538,11 +538,11 @@ with st.sidebar:
     sma_n = st.number_input("趋势出场 SMA 周期（早期观察窗口结束后启用）", min_value=2, max_value=100,
                             key="sma_n", on_change=switch_to_custom_params, disabled=not use_exit_below_sma)
     use_forced_exit = st.toggle("【EX-04】启用：入场后强制平仓（基准案例）", key="use_forced_exit", on_change=switch_to_custom_params)
-    forced_exit_days_after_entry = st.number_input(
-        "强制平仓日（入场后第 N 个交易日）", min_value=1, max_value=100,
-        key="forced_exit_days_after_entry", on_change=switch_to_custom_params,
+    forced_exit_day = st.selectbox(
+        "强制平仓日（相对 t0）", list(range(1, 31)),
+        format_func=lambda value: f"t{value}", key="forced_exit_day", on_change=switch_to_custom_params,
         disabled=not use_forced_exit,
-        help="默认 N=3：例如 t2 入场，则在 t5 收盘强制平仓。若同日早期止损触发，早期止损优先。",
+        help="默认 t5：例如 t2 入场时，默认会在 t5 收盘强制平仓。该日必须晚于入场确认日；若同日早期止损触发，早期止损优先。",
     )
     st.subheader("执行成本与资金模式")
     cost_bps = st.number_input("单边手续费 (bps)", min_value=0.0, step=0.5,
@@ -563,7 +563,7 @@ try:
         parameters.setdefault("baseline_rsi_max", 90)
         parameters.setdefault("entry_volume_fast_window", 5)
         parameters.setdefault("entry_volume_slow_window", 20)
-        parameters.setdefault("forced_exit_days_after_entry", 3)
+        parameters.setdefault("forced_exit_day", parameters.get("entry_lag", 2) + parameters.get("forced_exit_days_after_entry", 3))
         for toggle_key in ATOMIC_TOGGLE_KEYS:
             parameters.setdefault(toggle_key, DEFAULT_CONDITION_STATES[toggle_key])
     else:
@@ -598,7 +598,7 @@ try:
             "use_exit_below_entry": use_exit_below_entry,
             "use_exit_below_sma": use_exit_below_sma,
             "use_forced_exit": use_forced_exit,
-            "forced_exit_days_after_entry": int(forced_exit_days_after_entry),
+            "forced_exit_day": int(forced_exit_day),
             "entry_trend_filter": True, "stop_intraday": not close_stop, "cost_bps": cost_bps,
         }
 except (KeyError, ValueError) as exc:
