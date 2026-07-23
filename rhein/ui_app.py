@@ -14,7 +14,14 @@ import streamlit as st
 # Streamlit 会缓存已导入模块；显式刷新以避免 UI 更新后仍调用旧版回测函数签名。
 import rhein.backtest as _backtest
 from rhein.paths import DATA_ROOT, GROUP_ROOT
-from rhein.strategy import ATOMIC_TOGGLE_KEYS, DEFAULT_CONDITION_STATES
+from rhein.strategy import (
+    ATOMIC_TOGGLE_KEYS,
+    DEFAULT_CONDITION_STATES,
+    active_condition_ids,
+    parse_ints,
+    parse_percent_list,
+    parse_percent_ranges,
+)
 _backtest = importlib.reload(_backtest)
 input_files, load_ohlc, run_backtest = _backtest.input_files, _backtest.load_ohlc, _backtest.run_backtest
 
@@ -40,33 +47,6 @@ KPI_DEFINITIONS = {
     "平均单笔收益 (%)": "所有单笔净收益率的算术平均值；单笔净收益率 = 出场价 ÷ 入场价 − 1 − 双边手续费。",
     "平均持仓天数": "所有交易从入场日至出场日的交易日间隔的平均值。",
 }
-
-
-def parse_ints(value: str) -> tuple[int, ...]:
-    days = tuple(int(part.strip()) for part in value.split(",") if part.strip())
-    if not days or any(day < 1 for day in days):
-        raise ValueError("请输入正整数，例如 3,4")
-    return days
-
-
-def parse_percent_ranges(value: str) -> list[tuple[float, float]]:
-    """把 '2-2.5, 2-3' 解析为小数比例。"""
-    ranges = []
-    for part in value.split(","):
-        low, high = (float(number.strip()) / 100 for number in part.strip().split("-"))
-        if not 0 < low < high:
-            raise ValueError("每个幅度区间必须满足下限 < 上限，例如 2-2.5")
-        ranges.append((low, high))
-    if not ranges:
-        raise ValueError("请至少输入一个幅度区间")
-    return ranges
-
-
-def parse_percent_list(value: str) -> list[float]:
-    values = [float(part.strip()) / 100 for part in value.split(",") if part.strip()]
-    if not values or any(item <= 0 for item in values):
-        raise ValueError("请输入正百分比，例如 2,3")
-    return values
 
 
 def params_to_text(params: dict) -> str:
@@ -246,19 +226,6 @@ def load_saved_combos(data_path: str) -> list[dict]:
         return []
 
 
-def active_condition_ids(params: dict) -> list[str]:
-    mapping = {
-        "use_signal_band": "T0-01", "use_baseline_prior_low": "T0-02",
-        "use_baseline_max_rise": "T0-03", "use_baseline_rsi": "T0-04",
-        "use_entry_close_vs_t0": "EN-01", "use_entry_close_above_fast_sma": "EN-02",
-        "use_entry_fast_above_slow_sma": "EN-03", "use_entry_volume_sma": "EN-04",
-        "use_early_stop": "EX-01", "use_exit_below_entry": "EX-02",
-        "use_exit_below_sma": "EX-03", "use_forced_exit": "EX-04",
-        "use_forced_exit_intraday_protection": "EX-05",
-    }
-    return [condition_id for key, condition_id in mapping.items() if params.get(key, True)]
-
-
 def apply_parameters_to_controls(params: dict, token: str) -> None:
     """Synchronize a saved/preset parameter dict into sidebar controls before rerun."""
     st.session_state.update({
@@ -266,7 +233,9 @@ def apply_parameters_to_controls(params: dict, token: str) -> None:
         "entry_lag": int(params["entry_lag"]),
         "stop_days_text": ",".join(map(str, params["hard_stop_days"])),
         "stop_pct": round(params["stop_pct"] * 100, 1),
-        "close_stop": not bool(params["stop_intraday"]), "sma_n": int(params["sma_n"]),
+        # 历史 metadata 在 EX-01/EX-04 加入前不含这些字段；读取预设时必须补齐，
+        # 否则切换分组会在侧边栏初始化阶段因 KeyError 而停止渲染。
+        "close_stop": not bool(params.get("stop_intraday", True)), "sma_n": int(params["sma_n"]),
         "entry_trend_fast_sma": int(params.get("entry_trend_fast_sma", 5)),
         "entry_trend_slow_sma": int(params.get("entry_trend_slow_sma", 10)),
         "entry_volume_fast_window": int(params.get("entry_volume_fast_window", 5)),
@@ -494,7 +463,6 @@ with st.sidebar:
             "参数预设版本", ["custom", *versioned_presets],
             format_func=lambda value: "自定义参数" if value == "custom" else versioned_presets[value].get("label", value),
             help="每个版本固定记录启用条件、搜索域、生成时间与本组盈利因子最高组合。",
-            key="strategy_version_choice",
         )
         if selected_version != "custom":
             selected_preset = versioned_presets[selected_version]
@@ -514,7 +482,6 @@ with st.sidebar:
             "选择已保存组合", ["", *combo_by_id],
             format_func=lambda value: "请选择" if not value else (
                 f"{combo_by_id[value]['name']}（{combo_by_id[value].get('created_at', '')}）"),
-            key="saved_combo_choice",
         )
         if saved_combo_id:
             selected_combo = combo_by_id[saved_combo_id]
