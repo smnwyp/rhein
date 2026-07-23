@@ -315,7 +315,7 @@ def apply_parameters_to_controls(params: dict, token: str) -> None:
 
 def load_saved_combo_to_controls(combo: dict, data_path: str) -> None:
     apply_parameters_to_controls(combo["parameters"], f"saved:{data_path}:{combo['id']}")
-    st.session_state["strategy_version_choice"] = "custom"
+    st.session_state[f"strategy_version_choice::{Path(data_path).name}"] = "custom"
 
 
 def save_combo(data_path: str, name: str, params: dict) -> None:
@@ -384,7 +384,9 @@ def apply_group_preset(preset: dict, token: str) -> None:
 
 def switch_to_custom_params() -> None:
     """用户手动修改任一策略参数后，避免界面值与实际运行参数脱节。"""
-    st.session_state["strategy_version_choice"] = "custom"
+    data_path = st.session_state.get("active_data_path")
+    if data_path:
+        st.session_state[f"strategy_version_choice::{Path(data_path).name}"] = "custom"
     st.session_state.pop("applied_preset_token", None)
 
 
