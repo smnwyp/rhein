@@ -859,7 +859,7 @@ with tabs[0]:
                     "vconcat": [
                         {
                             "height": price_height,
-                            "encoding": {"x": {"field": "Date", "type": "temporal", "axis": {"title": None, "labels": False, "ticks": False}}},
+                            "encoding": {"x": {"field": "Date", "type": "ordinal", "axis": {"title": None, "labels": False, "ticks": False}}},
                             "layer": [
                                 {"mark": {"type": "rule"}, "encoding": {"y": price_axis, "y2": {"field": "High"}}},
                                 {"mark": {"type": "bar", "size": candle_width}, "encoding": {
@@ -876,7 +876,7 @@ with tabs[0]:
                                 }},
                                 {"transform": [{"fold": ["SMA5", "SMA10", "SMA20"], "as": ["均线", "均线值"]}],
                                  "mark": {"type": "line", "strokeWidth": 2}, "encoding": {
-                                     "x": {"field": "Date", "type": "temporal"},
+                                     "x": {"field": "Date", "type": "ordinal"},
                                      "y": {"field": "均线值", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                      "color": {"field": "均线", "type": "nominal", "title": "均线",
                                                "scale": {"domain": ["SMA5", "SMA10", "SMA20"],
@@ -888,15 +888,15 @@ with tabs[0]:
                                      ],
                                  }},
                                 {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
-                                    "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "x": {"field": "Date", "type": "ordinal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
                                 }},
                                 {"data": {"values": markers}, "mark": {"type": "text", "dy": -14}, "encoding": {
-                                    "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "x": {"field": "Date", "type": "ordinal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
                                 }},
                                 {"data": {"values": day_labels}, "mark": {"type": "text", "fontSize": 10, "baseline": "top", "color": "#4b5563"}, "encoding": {
-                                    "x": {"field": "Date", "type": "temporal"}, "y": {"field": "LabelPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "x": {"field": "Date", "type": "ordinal"}, "y": {"field": "LabelPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "text": {"field": "持仓日"},
                                 }},
                             ],
@@ -905,7 +905,7 @@ with tabs[0]:
                             "height": volume_height,
                             "mark": {"type": "bar", "size": candle_width},
                             "encoding": {
-                                "x": {"field": "Date", "type": "temporal", "title": "日期"},
+                                "x": {"field": "Date", "type": "ordinal", "title": "日期"},
                                 "y": {"field": "Volume", "type": "quantitative", "title": "成交量", "scale": {"zero": True, "nice": True}},
                                 "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
                                 "tooltip": [
