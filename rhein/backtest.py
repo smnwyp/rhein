@@ -380,6 +380,19 @@ def markdown_report(results: list[dict], params: dict, generated_at: str) -> str
 
 def input_files(input_path: Path) -> list[Path]:
     if input_path.is_dir():
+        # 特征组以 manifest 为唯一股票清单。目录中可能有用户保留的副本
+        # （例如 ``AAOI 2.csv``）；它们不能被当成第二个标的重复回测。
+        manifest_path = input_path / "group_manifest.csv"
+        if manifest_path.is_file():
+            try:
+                symbols = pd.read_csv(manifest_path, usecols=["symbol"])["symbol"].dropna()
+                manifest_files = [input_path / f"{str(symbol).upper()}.csv" for symbol in symbols]
+                files = [path for path in manifest_files if path.is_file()]
+                if files:
+                    return files
+            except (OSError, ValueError, KeyError):
+                # 旧目录或损坏 manifest 退回到下方的 OHLC 表头识别逻辑。
+                pass
         # 目录中可能同时存放 manifest、扫描结果和价格文件；按首行表头识别 OHLC，
         # 避免将 search_stage*.csv 等结果文件误送入回测。
         files = []
