@@ -836,19 +836,11 @@ with tabs[0]:
                 chart_start, chart_end = max(0, signal_position - 15), min(len(ohlc), exit_position + 11)
                 chart_data = ohlc.iloc[chart_start:chart_end].copy()
                 chart_data["ChartIndex"] = range(len(chart_data))
-                # Vega 的表达式过滤器对非 ASCII 字段名在不同运行环境中的
-                # 兼容性不一致。用内部英文列名，展示文字仍保持中文，确保标记
-                # 和 K 线使用同一份资料且每次都能被图层筛选出来。
-                chart_data["TradeMarker"] = None
-                chart_data["TradeMarkerPrice"] = np.nan
                 marker_rows = (
-                    (int(signal_position - chart_start), float(ohlc.loc[ohlc["Date"] == signal_date, "Close"].iloc[0]), "基准点"),
-                    (int(ohlc.index[ohlc["Date"] == entry_date][0] - chart_start), float(trade["entry_px"]), "入场点"),
-                    (int(exit_position - chart_start), float(trade["exit_px"]), "出场点"),
+                    (int(signal_position - chart_start), signal_position, "基准点（t0）"),
+                    (int(ohlc.index[ohlc["Date"] == entry_date][0] - chart_start), int(ohlc.index[ohlc["Date"] == entry_date][0]), "入场点"),
+                    (int(exit_position - chart_start), exit_position, "出场点"),
                 )
-                for marker_index, marker_price, marker_label in marker_rows:
-                    chart_data.loc[chart_data["ChartIndex"] == marker_index, "TradeMarker"] = marker_label
-                    chart_data.loc[chart_data["ChartIndex"] == marker_index, "TradeMarkerPrice"] = marker_price
                 candle_data = chart_data.assign(Date=chart_data["Date"].dt.strftime("%Y-%m-%d"))
                 price_span = float(chart_data["High"].max() - chart_data["Low"].min())
                 label_price = float(chart_data["Low"].min() - max(price_span * 0.06, chart_data["Low"].min() * 0.005))
@@ -857,6 +849,17 @@ with tabs[0]:
                     {"ChartIndex": int(signal_position - chart_start + offset), "LabelPrice": label_price, "持仓日": f"t{offset}"}
                     for offset, row in enumerate(holding_days.itertuples(index=False))
                 ]
+                # 不再以另一个滤镜图层呈现关键节点：该方式在 Streamlit 的
+                # vconcat 图中会偶发丢失。把节点文字加入已确认可显示的文字资料层；
+                # 文字锚定在对应 K 线最高价之上，直接写明基准、入场、出场。
+                marker_offset = max(price_span * 0.045, float(chart_data["High"].max()) * 0.004)
+                for marker_index, ohlc_index, marker_label in marker_rows:
+                    marker_high = float(ohlc.iloc[ohlc_index]["High"])
+                    day_labels.append({
+                        "ChartIndex": marker_index,
+                        "LabelPrice": marker_high + marker_offset,
+                        "持仓日": marker_label,
+                    })
                 # 图表保持在一个常见笔记本屏幕的可视高度内：短交易不会留下
                 # 大片空白，长交易仍有足够的垂直空间辨识蜡烛图。
                 chart_days = len(chart_data)
@@ -898,15 +901,7 @@ with tabs[0]:
                                          {"field": "均线值", "type": "quantitative", "title": "数值", "format": ".2f"},
                                      ],
                                  }},
-                                {"transform": [{"filter": "datum.TradeMarker != null"}], "mark": {"type": "point", "filled": True, "size": 120}, "encoding": {
-                                    "x": chart_x, "y": {"field": "TradeMarkerPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
-                                    "color": {"field": "TradeMarker", "type": "nominal", "title": "交易标记"},
-                                }},
-                                {"transform": [{"filter": "datum.TradeMarker != null"}], "mark": {"type": "text", "dy": -16, "fontWeight": "bold", "fontSize": 12}, "encoding": {
-                                    "x": chart_x, "y": {"field": "TradeMarkerPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
-                                    "text": {"field": "TradeMarker"}, "color": {"field": "TradeMarker", "type": "nominal", "legend": None},
-                                }},
-                                {"data": {"values": day_labels}, "mark": {"type": "text", "fontSize": 10, "baseline": "top", "color": "#4b5563"}, "encoding": {
+                                {"data": {"values": day_labels}, "mark": {"type": "text", "fontSize": 11, "fontWeight": "bold", "baseline": "top", "color": "#374151"}, "encoding": {
                                     "x": chart_x, "y": {"field": "LabelPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "text": {"field": "持仓日"},
                                 }},
