@@ -836,11 +836,19 @@ with tabs[0]:
                 chart_start, chart_end = max(0, signal_position - 15), min(len(ohlc), exit_position + 11)
                 chart_data = ohlc.iloc[chart_start:chart_end].copy()
                 chart_data["ChartIndex"] = range(len(chart_data))
-                markers = [
-                    {"ChartIndex": int(signal_position - chart_start), "Price": float(ohlc.loc[ohlc["Date"] == signal_date, "Close"].iloc[0]), "标记": "基准点"},
-                    {"ChartIndex": int(ohlc.index[ohlc["Date"] == entry_date][0] - chart_start), "Price": float(trade["entry_px"]), "标记": "入场点"},
-                    {"ChartIndex": int(exit_position - chart_start), "Price": float(trade["exit_px"]), "标记": "出场点"},
-                ]
+                # Vega 的表达式过滤器对非 ASCII 字段名在不同运行环境中的
+                # 兼容性不一致。用内部英文列名，展示文字仍保持中文，确保标记
+                # 和 K 线使用同一份资料且每次都能被图层筛选出来。
+                chart_data["TradeMarker"] = None
+                chart_data["TradeMarkerPrice"] = np.nan
+                marker_rows = (
+                    (int(signal_position - chart_start), float(ohlc.loc[ohlc["Date"] == signal_date, "Close"].iloc[0]), "基准点"),
+                    (int(ohlc.index[ohlc["Date"] == entry_date][0] - chart_start), float(trade["entry_px"]), "入场点"),
+                    (int(exit_position - chart_start), float(trade["exit_px"]), "出场点"),
+                )
+                for marker_index, marker_price, marker_label in marker_rows:
+                    chart_data.loc[chart_data["ChartIndex"] == marker_index, "TradeMarker"] = marker_label
+                    chart_data.loc[chart_data["ChartIndex"] == marker_index, "TradeMarkerPrice"] = marker_price
                 candle_data = chart_data.assign(Date=chart_data["Date"].dt.strftime("%Y-%m-%d"))
                 price_span = float(chart_data["High"].max() - chart_data["Low"].min())
                 label_price = float(chart_data["Low"].min() - max(price_span * 0.06, chart_data["Low"].min() * 0.005))
@@ -890,13 +898,13 @@ with tabs[0]:
                                          {"field": "均线值", "type": "quantitative", "title": "数值", "format": ".2f"},
                                      ],
                                  }},
-                                {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
-                                    "x": chart_x, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
-                                    "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
+                                {"transform": [{"filter": "datum.TradeMarker != null"}], "mark": {"type": "point", "filled": True, "size": 120}, "encoding": {
+                                    "x": chart_x, "y": {"field": "TradeMarkerPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "color": {"field": "TradeMarker", "type": "nominal", "title": "交易标记"},
                                 }},
-                                {"data": {"values": markers}, "mark": {"type": "text", "dy": -14, "fontWeight": "bold"}, "encoding": {
-                                    "x": chart_x, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
-                                    "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
+                                {"transform": [{"filter": "datum.TradeMarker != null"}], "mark": {"type": "text", "dy": -16, "fontWeight": "bold", "fontSize": 12}, "encoding": {
+                                    "x": chart_x, "y": {"field": "TradeMarkerPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "text": {"field": "TradeMarker"}, "color": {"field": "TradeMarker", "type": "nominal", "legend": None},
                                 }},
                                 {"data": {"values": day_labels}, "mark": {"type": "text", "fontSize": 10, "baseline": "top", "color": "#4b5563"}, "encoding": {
                                     "x": chart_x, "y": {"field": "LabelPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
