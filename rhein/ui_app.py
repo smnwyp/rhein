@@ -837,19 +837,12 @@ with tabs[0]:
                 chart_data = ohlc.iloc[chart_start:chart_end].copy()
                 chart_data["ChartIndex"] = range(len(chart_data))
                 markers = [
-                    {"ChartIndex": int(signal_position - chart_start), "Price": float(ohlc.loc[ohlc["Date"] == signal_date, "Close"].iloc[0]), "标记": "t0 基准点"},
-                    {"ChartIndex": int(ohlc.index[ohlc["Date"] == entry_date][0] - chart_start), "Price": float(trade["entry_px"]), "标记": "入场"},
-                    {"ChartIndex": int(exit_position - chart_start), "Price": float(trade["exit_px"]), "标记": "出场"},
+                    {"ChartIndex": int(signal_position - chart_start), "Price": float(ohlc.loc[ohlc["Date"] == signal_date, "Close"].iloc[0]), "标记": "基准点"},
+                    {"ChartIndex": int(ohlc.index[ohlc["Date"] == entry_date][0] - chart_start), "Price": float(trade["entry_px"]), "标记": "入场点"},
+                    {"ChartIndex": int(exit_position - chart_start), "Price": float(trade["exit_px"]), "标记": "出场点"},
                 ]
                 candle_data = chart_data.assign(Date=chart_data["Date"].dt.strftime("%Y-%m-%d"))
                 price_span = float(chart_data["High"].max() - chart_data["Low"].min())
-                marker_bottom = float(chart_data["Low"].min())
-                marker_top = float(chart_data["High"].max())
-                marker_label_price = marker_top + max(price_span * 0.05, marker_top * 0.003)
-                for marker in markers:
-                    marker["Bottom"] = marker_bottom
-                    marker["Top"] = marker_top
-                    marker["LabelPrice"] = marker_label_price
                 label_price = float(chart_data["Low"].min() - max(price_span * 0.06, chart_data["Low"].min() * 0.005))
                 holding_days = ohlc.iloc[signal_position:exit_position + 1]
                 day_labels = [
@@ -897,18 +890,12 @@ with tabs[0]:
                                          {"field": "均线值", "type": "quantitative", "title": "数值", "format": ".2f"},
                                      ],
                                  }},
-                                {"data": {"values": markers}, "mark": {"type": "rule", "strokeWidth": 1.5, "strokeDash": [5, 4], "opacity": 0.8}, "encoding": {
-                                    "x": chart_x,
-                                    "y": {"field": "Bottom", "type": "quantitative", "scale": {"zero": False, "nice": True}},
-                                    "y2": {"field": "Top"},
-                                    "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
-                                }},
-                                {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 150, "stroke": "white", "strokeWidth": 1.5}, "encoding": {
+                                {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
                                     "x": chart_x, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
                                 }},
-                                {"data": {"values": markers}, "mark": {"type": "text", "fontWeight": "bold", "baseline": "bottom"}, "encoding": {
-                                    "x": chart_x, "y": {"field": "LabelPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                {"data": {"values": markers}, "mark": {"type": "text", "dy": -14, "fontWeight": "bold"}, "encoding": {
+                                    "x": chart_x, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
                                 }},
                                 {"data": {"values": day_labels}, "mark": {"type": "text", "fontSize": 10, "baseline": "top", "color": "#4b5563"}, "encoding": {
@@ -935,7 +922,7 @@ with tabs[0]:
                     "autosize": {"type": "fit-x", "contains": "padding"},
                 }
                 st.vega_lite_chart(candle_data, spec, width="stretch", key=f"trade_chart_{selected_symbol}_{trade_index}")
-                st.caption("K 线与成交量窗口：t0 前 15 个交易日至出场后 10 个交易日。SMA5 = 蓝色、SMA10 = 橙色、SMA20 = 紫色；t0、t1…标示基准点起的交易日；蓝色标记 = t0 基准点；绿色 = 入场；红色 = 出场；成交量颜色与当日 K 线涨跌一致。")
+                st.caption("K 线与成交量窗口：t0 前 15 个交易日至出场后 10 个交易日。SMA5 = 蓝色、SMA10 = 橙色、SMA20 = 紫色；“基准点”“入场点”“出场点”文字与圆点标注对应 K 线；t0、t1…标示基准点起的交易日；成交量颜色与当日 K 线涨跌一致。")
         with st.expander("指标定义：选择列名查看计算方式"):
             selected_kpi = st.selectbox("指标列", list(KPI_DEFINITIONS), key="top100_kpi_definition")
             st.markdown(f"**{selected_kpi}**：{KPI_DEFINITIONS[selected_kpi]}")
