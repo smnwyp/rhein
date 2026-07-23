@@ -36,9 +36,10 @@ ATOMIC_FLAGS = {
     "use_baseline_prior_low": False,
     "use_baseline_max_rise": False,
     "use_baseline_rsi": False,
+    "use_baseline_close_above_fast_sma": False,
+    "use_baseline_fast_above_slow_sma": False,
+    "use_baseline_close_above_sma20": False,
     "use_entry_close_vs_t0": True,
-    "use_entry_close_above_fast_sma": False,
-    "use_entry_fast_above_slow_sma": False,
     "use_entry_volume_sma": False,
     "use_early_stop": True,
     "use_exit_below_entry": True,
@@ -117,9 +118,8 @@ def with_params(params: dict, metrics: dict) -> dict:
         "active_condition_ids": ", ".join(ACTIVE_CONDITION_IDS),
         "signal_lo_pct": params["band_lo"] * 100, "signal_hi_pct": params["band_hi"] * 100,
         "entry_day": f"t{params['entry_lag']}",
-        "entry_trend_filter": (f"tN-1/tN 任一天收盘>SMA{params['entry_trend_fast_sma']}"
-                               f">SMA{params['entry_trend_slow_sma']}且5日均量>20日均量")
-        if params.get("entry_trend_filter", True) else "无",
+        "entry_trend_filter": f"t0 收盘>SMA{params['entry_trend_fast_sma']}"
+                              f">SMA{params['entry_trend_slow_sma']}；入场窗口量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}",
         "entry_trend_fast_sma": params["entry_trend_fast_sma"],
         "entry_trend_slow_sma": params["entry_trend_slow_sma"],
         "entry_volume_fast_window": params["entry_volume_fast_window"],
@@ -203,7 +203,7 @@ def scan_group(folder_text: str) -> dict:
         versions["v1_full_conditions"] = {
             "label": "v1 全条件过滤（历史结果）",
             "generated_at": metadata.get("generated_at"),
-            "active_condition_ids": ["T0-01", "T0-02", "T0-03", "T0-04", "EN-01", "EN-02", "EN-03", "EN-04", "EX-01", "EX-02", "EX-03"],
+            "active_condition_ids": ["T0-01", "T0-02", "T0-03", "T0-04", "T0-05", "T0-06", "EN-01", "EN-04", "EX-01", "EX-02", "EX-03"],
             "best_by_profit_factor": metadata["best_by_profit_factor"],
             "result_files": ["search_stage1_results.csv", "search_stage2_results.csv"],
         }

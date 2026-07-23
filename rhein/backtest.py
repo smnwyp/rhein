@@ -30,9 +30,10 @@ DEFAULT_STRATEGY = {
     "use_baseline_prior_low": True,
     "use_baseline_max_rise": True,
     "use_baseline_rsi": True,
+    "use_baseline_close_above_fast_sma": True,
+    "use_baseline_fast_above_slow_sma": True,
+    "use_baseline_close_above_sma20": True,
     "use_entry_close_vs_t0": True,
-    "use_entry_close_above_fast_sma": True,
-    "use_entry_fast_above_slow_sma": True,
     "use_entry_volume_sma": True,
     "use_early_stop": True,
     "use_exit_below_entry": True,
@@ -81,8 +82,11 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                  entry_volume_fast_window=5, entry_volume_slow_window=20,
                  use_signal_band=True, use_baseline_prior_low=True,
                  use_baseline_max_rise=True, use_baseline_rsi=True,
-                 use_entry_close_vs_t0=True, use_entry_close_above_fast_sma=True,
-                 use_entry_fast_above_slow_sma=True, use_entry_volume_sma=True,
+                 use_baseline_close_above_fast_sma=True,
+                 use_baseline_fast_above_slow_sma=True,
+                 use_baseline_close_above_sma20=True,
+                 use_entry_close_vs_t0=True, use_entry_volume_sma=True,
+                 use_entry_close_above_fast_sma=None, use_entry_fast_above_slow_sma=None,
                  use_early_stop=True, use_exit_below_entry=True,
                  use_exit_below_sma=True, use_forced_exit=False,
                  forced_exit_day=5, forced_exit_days_after_entry=None,
@@ -93,10 +97,16 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
     所有筛选与出场规则均可独立启停。入场确认窗口只使用 tN-1、tN，
     不使用 tN+1，避免未来函数。
     """
-    if (use_entry_close_above_fast_sma or use_entry_fast_above_slow_sma) and entry_trend_fast_sma < 2:
-        raise ValueError("入场趋势快线 SMA 周期至少为 2")
-    if use_entry_fast_above_slow_sma and entry_trend_slow_sma <= entry_trend_fast_sma:
-        raise ValueError("入场趋势 SMA 必须满足 2 ≤ 快线周期 < 慢线周期")
+    # Deprecated EN-02/EN-03 keyword names are kept for saved profiles and
+    # command-line callers. Their semantics now belong to the t0 baseline.
+    if use_entry_close_above_fast_sma is not None:
+        use_baseline_close_above_fast_sma = use_entry_close_above_fast_sma
+    if use_entry_fast_above_slow_sma is not None:
+        use_baseline_fast_above_slow_sma = use_entry_fast_above_slow_sma
+    if (use_baseline_close_above_fast_sma or use_baseline_fast_above_slow_sma) and entry_trend_fast_sma < 2:
+        raise ValueError("基准点快线 SMA 周期至少为 2")
+    if use_baseline_fast_above_slow_sma and entry_trend_slow_sma <= entry_trend_fast_sma:
+        raise ValueError("基准点 SMA 必须满足 2 ≤ 快线周期 < 慢线周期")
     if use_entry_volume_sma and (entry_volume_fast_window < 1 or entry_volume_slow_window <= entry_volume_fast_window):
         raise ValueError("入场成交量均线必须满足 1 ≤ 短期周期 < 长期周期")
     if (use_baseline_prior_low or use_baseline_max_rise) and baseline_lookback < 1:
@@ -117,6 +127,7 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
     sma = pd.Series(c).rolling(sma_n).mean().to_numpy()
     entry_fast_sma = pd.Series(c).rolling(entry_trend_fast_sma).mean().to_numpy()
     entry_slow_sma = pd.Series(c).rolling(entry_trend_slow_sma).mean().to_numpy()
+    baseline_sma20 = pd.Series(c).rolling(20).mean().to_numpy()
     vol_fast_sma = pd.Series(v).rolling(entry_volume_fast_window).mean().to_numpy()
     vol_slow_sma = pd.Series(v).rolling(entry_volume_slow_window).mean().to_numpy()
     delta = pd.Series(c).diff()
@@ -147,6 +158,18 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
         if use_baseline_rsi and (np.isnan(rsi[i]) or rsi[i] > baseline_rsi_max):
             i += 1
             continue
+        if use_baseline_close_above_fast_sma and (np.isnan(entry_fast_sma[i]) or c[i] <= entry_fast_sma[i]):
+            i += 1
+            continue
+        if use_baseline_fast_above_slow_sma and (
+            np.isnan(entry_fast_sma[i]) or np.isnan(entry_slow_sma[i])
+            or entry_fast_sma[i] <= entry_slow_sma[i]
+        ):
+            i += 1
+            continue
+        if use_baseline_close_above_sma20 and (np.isnan(baseline_sma20[i]) or c[i] <= baseline_sma20[i]):
+            i += 1
+            continue
         # 窗口按字面包含 t0-15 与 t0；t0 不能就是最低点。
         if needs_baseline_window:
             baseline_window = c[i - baseline_lookback:i + 1]
@@ -165,21 +188,12 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
             continue
         entry_idx = confirmation_idx
         # ``entry_trend_filter=False`` is a backward-compatible way to disable
-        # all three old bundled entry filters.
+        # the legacy entry-window volume filter.
         if not entry_trend_filter:
-            use_entry_close_above_fast_sma = False
-            use_entry_fast_above_slow_sma = False
             use_entry_volume_sma = False
-        if use_entry_close_above_fast_sma or use_entry_fast_above_slow_sma or use_entry_volume_sma:
+        if use_entry_volume_sma:
             window = range(max(0, confirmation_idx - 1), min(n, confirmation_idx + 1))
             def entry_rules_pass(day: int) -> bool:
-                if use_entry_close_above_fast_sma:
-                    if np.isnan(entry_fast_sma[day]) or not c[day] > entry_fast_sma[day]:
-                        return False
-                if use_entry_fast_above_slow_sma:
-                    if (np.isnan(entry_fast_sma[day]) or np.isnan(entry_slow_sma[day])
-                            or not entry_fast_sma[day] > entry_slow_sma[day]):
-                        return False
                 if use_entry_volume_sma:
                     if (np.isnan(vol_fast_sma[day]) or np.isnan(vol_slow_sma[day])
                             or not vol_fast_sma[day] > vol_slow_sma[day]):
@@ -325,9 +339,9 @@ def markdown_report(results: list[dict], params: dict, generated_at: str) -> str
                   "实际策略参数：" + "；".join([
                       f"信号区间 {result['strategy']['band_lo']:.2%}–{result['strategy']['band_hi']:.2%}",
                       f"确认日 t{result['strategy']['entry_lag']}",
-                      (f"入场窗口 tN-1/tN：收盘>SMA{result['strategy'].get('entry_trend_fast_sma', 5)}"
-                       f">SMA{result['strategy'].get('entry_trend_slow_sma', 10)}且5日均量>20日均量")
-                      if result['strategy'].get('entry_trend_filter', True) else "无入场趋势过滤",
+                      (f"基准点：收盘>SMA{result['strategy'].get('entry_trend_fast_sma', 5)}；"
+                       f"SMA{result['strategy'].get('entry_trend_fast_sma', 5)}>SMA{result['strategy'].get('entry_trend_slow_sma', 10)}；"
+                       "收盘>SMA20；入场窗口 tN-1/tN：5日均量>20日均量"),
                       "早期止损日 " + ", ".join(f"t{d}" for d in result['strategy']['hard_stop_days']),
                       f"止损 {result['strategy']['stop_pct']:.2%}",
                       f"SMA{result['strategy']['sma_n']}",

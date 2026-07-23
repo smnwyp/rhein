@@ -3,7 +3,8 @@ from __future__ import annotations
 
 ATOMIC_TOGGLE_KEYS = (
     "use_signal_band", "use_baseline_prior_low", "use_baseline_max_rise", "use_baseline_rsi",
-    "use_entry_close_vs_t0", "use_entry_close_above_fast_sma", "use_entry_fast_above_slow_sma",
+    "use_baseline_close_above_fast_sma", "use_baseline_fast_above_slow_sma",
+    "use_baseline_close_above_sma20", "use_entry_close_vs_t0",
     "use_entry_volume_sma", "use_early_stop", "use_exit_below_entry", "use_exit_below_sma",
     "use_forced_exit", "use_forced_exit_intraday_protection",
 )
@@ -12,8 +13,10 @@ DEFAULT_CONDITION_STATES = {key: True for key in ATOMIC_TOGGLE_KEYS} | {"use_for
 CONDITION_IDS = {
     "use_signal_band": "T0-01", "use_baseline_prior_low": "T0-02",
     "use_baseline_max_rise": "T0-03", "use_baseline_rsi": "T0-04",
-    "use_entry_close_vs_t0": "EN-01", "use_entry_close_above_fast_sma": "EN-02",
-    "use_entry_fast_above_slow_sma": "EN-03", "use_entry_volume_sma": "EN-04",
+    "use_baseline_close_above_fast_sma": "T0-05",
+    "use_baseline_fast_above_slow_sma": "T0-06",
+    "use_baseline_close_above_sma20": "T0-07",
+    "use_entry_close_vs_t0": "EN-01", "use_entry_volume_sma": "EN-04",
     "use_early_stop": "EX-01", "use_exit_below_entry": "EX-02",
     "use_exit_below_sma": "EX-03", "use_forced_exit": "EX-04",
     "use_forced_exit_intraday_protection": "EX-05",
@@ -58,10 +61,11 @@ def params_to_text(params: dict) -> str:
     if on("use_baseline_prior_low"): rules.append(f"{params['baseline_lookback']}日低点不在t0")
     if on("use_baseline_max_rise"): rules.append(f"相对低点延伸≤{params['baseline_max_rise']:.0%}")
     if on("use_baseline_rsi"): rules.append(f"RSI{params['baseline_rsi_period']}≤{params['baseline_rsi_max']}")
-    if on("use_entry_close_vs_t0"): rules.append("tN收盘≥t0")
+    if on("use_baseline_close_above_fast_sma"): rules.append(f"t0收盘>SMA{params['entry_trend_fast_sma']}")
+    if on("use_baseline_fast_above_slow_sma"): rules.append(f"t0 SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}")
+    if on("use_baseline_close_above_sma20"): rules.append("t0收盘>SMA20")
     entry = []
-    if on("use_entry_close_above_fast_sma"): entry.append(f"收盘>SMA{params['entry_trend_fast_sma']}")
-    if on("use_entry_fast_above_slow_sma"): entry.append(f"SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}")
+    if on("use_entry_close_vs_t0"): entry.append("tN收盘≥t0")
     if on("use_entry_volume_sma"): entry.append(f"量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}")
     if entry: rules.append("tN-1/tN任一天：" + "且".join(entry))
     if on("use_early_stop"): rules.append(f"早期止损t{','.join(map(str, params['hard_stop_days']))} / {params['stop_pct']:.2%}")
@@ -88,8 +92,9 @@ def strategy_narrative(params: dict) -> str:
     if on("use_baseline_max_rise"): t0.append(f"相对该低点涨幅不超过{params['baseline_max_rise']:.0%}")
     if on("use_baseline_rsi"): t0.append(f"RSI({params['baseline_rsi_period']})不高于{params['baseline_rsi_max']}")
     if on("use_entry_close_vs_t0"): entry.append("tN收盘不低于t0")
-    if on("use_entry_close_above_fast_sma"): entry.append(f"收盘>SMA{params['entry_trend_fast_sma']}")
-    if on("use_entry_fast_above_slow_sma"): entry.append(f"SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}")
+    if on("use_baseline_close_above_fast_sma"): t0.append(f"收盘>SMA{params['entry_trend_fast_sma']}")
+    if on("use_baseline_fast_above_slow_sma"): t0.append(f"SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}")
+    if on("use_baseline_close_above_sma20"): t0.append("收盘>SMA20")
     if on("use_entry_volume_sma"): entry.append(f"量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}")
     paragraphs = [
         f"基准点：t0 需满足“{'、'.join(t0) if t0 else '无基准筛选'}”。",
