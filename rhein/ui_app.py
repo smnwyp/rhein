@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from itertools import product
+import importlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,11 @@ from rhein.strategy import (
     parse_percent_list,
     parse_percent_ranges,
 )
+# Streamlit 保留已 import 的模块。策略函数新增参数时，已运行的本地应用会
+# 同时拿到新 UI/metadata 与旧函数对象，造成 "unexpected keyword argument"。
+# 只在检测到函数签名过旧时 reload；日常 rerun 不 reload，避免不必要的状态扰动。
+if "use_baseline_close_above_fast_sma" not in _backtest.run_backtest.__code__.co_varnames:
+    _backtest = importlib.reload(_backtest)
 input_files, load_ohlc, run_backtest = _backtest.input_files, _backtest.load_ohlc, _backtest.run_backtest
 
 
