@@ -810,7 +810,12 @@ with tabs[0]:
                     {"Date": str(row.Date.date()), "LabelPrice": label_price, "持仓日": f"t{offset}"}
                     for offset, row in enumerate(holding_days.itertuples(index=False))
                 ]
-                price_height = min(760, max(560, len(chart_data) * 18))
+                # 图表保持在一个常见笔记本屏幕的可视高度内：短交易不会留下
+                # 大片空白，长交易仍有足够的垂直空间辨识蜡烛图。
+                chart_days = len(chart_data)
+                price_height = min(520, max(340, chart_days * 12))
+                volume_height = min(120, max(90, round(price_height * 0.23)))
+                candle_width = min(12, max(5, round(300 / max(chart_days, 1))))
                 price_axis = {"field": "Low", "type": "quantitative", "title": "价格", "scale": {"zero": False, "nice": True}}
                 spec = {
                     "title": f"{selected_symbol}｜{trade.signal} → {trade.exit}｜{trade.reason}",
@@ -820,7 +825,7 @@ with tabs[0]:
                             "encoding": {"x": {"field": "Date", "type": "temporal", "axis": {"title": None, "labels": False, "ticks": False}}},
                             "layer": [
                                 {"mark": {"type": "rule"}, "encoding": {"y": price_axis, "y2": {"field": "High"}}},
-                                {"mark": {"type": "bar", "size": 7}, "encoding": {
+                                {"mark": {"type": "bar", "size": candle_width}, "encoding": {
                                     "y": {"field": "Open", "type": "quantitative", "scale": {"zero": False, "nice": True}}, "y2": {"field": "Close"},
                                     "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
                                     "tooltip": [
@@ -847,8 +852,8 @@ with tabs[0]:
                             ],
                         },
                         {
-                            "height": 150,
-                            "mark": {"type": "bar", "size": 7},
+                            "height": volume_height,
+                            "mark": {"type": "bar", "size": candle_width},
                             "encoding": {
                                 "x": {"field": "Date", "type": "temporal", "title": "日期"},
                                 "y": {"field": "Volume", "type": "quantitative", "title": "成交量", "scale": {"zero": True, "nice": True}},
@@ -861,6 +866,7 @@ with tabs[0]:
                         },
                     ],
                     "resolve": {"scale": {"x": "shared"}},
+                    "autosize": {"type": "fit-x", "contains": "padding"},
                 }
                 st.vega_lite_chart(candle_data, spec, width="stretch", key=f"trade_chart_{selected_symbol}_{trade_index}")
                 st.caption("K 线与成交量窗口：t0 前 10 个交易日至出场后 10 个交易日。t0、t1…标示基准点起的交易日；蓝色 = t0 基准点；绿色 = 入场；红色 = 出场；成交量颜色与当日 K 线涨跌一致。")
