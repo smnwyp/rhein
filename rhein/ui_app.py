@@ -688,10 +688,9 @@ except (KeyError, ValueError) as exc:
         "stop_pct": .02, "sma_n": 5, "cost_bps": 0.0,
     })
 
-st.info("当前设置：" + params_to_text(parameters))
+st.subheader("当前设置")
+st.info(strategy_narrative(parameters))
 with st.sidebar:
-    st.subheader("当前策略（自然语言）")
-    st.info(strategy_narrative(parameters))
     if saved_combos_path(data_path) is not None:
         st.subheader("保存当前组合到本组")
         combo_name = st.text_input("组合名称", key="saved_combo_name", placeholder="例如：高波动稳健版 v1")
