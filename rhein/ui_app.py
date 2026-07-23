@@ -226,8 +226,48 @@ def load_saved_combos(data_path: str) -> list[dict]:
         return []
 
 
+def normalize_parameters(raw_params: dict) -> dict:
+    """补齐旧搜索 metadata 中不存在的策略字段。
+
+    搜索结果会长期保存在各分组目录，而策略条件会持续新增。这里是唯一的
+    向后兼容边界：无论预设来自历史 metadata 还是用户保存的组合，进入 UI 前
+    都先变成当前版本可运行的完整参数，不能让缺一个新字段导致整个页面停止。
+    """
+    params = dict(raw_params)
+    defaults = {
+        "band_lo": .02, "band_hi": .025, "entry_lag": 2,
+        "hard_stop_days": (3, 4), "stop_pct": .02, "sma_n": 5,
+        "cost_bps": 0.0, "stop_intraday": True,
+        "entry_trend_fast_sma": 5, "entry_trend_slow_sma": 10,
+        "entry_volume_fast_window": 5, "entry_volume_slow_window": 20,
+        "baseline_lookback": 15, "baseline_max_rise": .20,
+        "baseline_rsi_period": 14, "baseline_rsi_max": 90,
+        "forced_exit_intraday_stop_pct": .01,
+    }
+    for key, value in defaults.items():
+        params.setdefault(key, value)
+    params["hard_stop_days"] = tuple(params["hard_stop_days"])
+    params.setdefault(
+        "forced_exit_day",
+        params["entry_lag"] + params.get("forced_exit_days_after_entry", 3),
+    )
+    for toggle_key, default in DEFAULT_CONDITION_STATES.items():
+        params.setdefault(toggle_key, default)
+    return params
+
+
+def reset_group_session_state() -> None:
+    """切换数据组时只清理与旧组绑定的 UI 状态和回测结果。"""
+    for key in (
+        "applied_preset_token", "single_kpis", "single_trades", "single_params",
+        "single_mode", "chart_trade_index", "top_symbol_table", "saved_combo_name",
+    ):
+        st.session_state.pop(key, None)
+
+
 def apply_parameters_to_controls(params: dict, token: str) -> None:
     """Synchronize a saved/preset parameter dict into sidebar controls before rerun."""
+    params = normalize_parameters(params)
     st.session_state.update({
         "band_range": (round(params["band_lo"] * 100, 1), round(params["band_hi"] * 100, 1)),
         "entry_lag": int(params["entry_lag"]),
@@ -449,7 +489,11 @@ with st.sidebar:
     st.header("单组策略参数")
     st.subheader("数据与预设")
     scope_options = available_data_scopes()
-    selected_scope = st.selectbox("数据范围", list(scope_options), index=0)
+    selected_scope = st.selectbox(
+        "数据范围", list(scope_options), index=0, key="data_scope",
+        on_change=reset_group_session_state,
+        help="切换分组会清除上一组的预设选择与回测结果，不会自动运行回测。",
+    )
     if selected_scope == "自定义路径":
         data_path = st.text_input("数据目录或单个 CSV", "data")
     else:
@@ -461,6 +505,7 @@ with st.sidebar:
     if versioned_presets:
         selected_version = st.selectbox(
             "参数预设版本", ["custom", *versioned_presets],
+            key=f"strategy_version_choice::{Path(data_path).name}",
             format_func=lambda value: "自定义参数" if value == "custom" else versioned_presets[value].get("label", value),
             help="每个版本固定记录启用条件、搜索域、生成时间与本组盈利因子最高组合。",
         )
@@ -480,6 +525,7 @@ with st.sidebar:
         combo_by_id = {item.get("id", ""): item for item in saved_group_combos if item.get("id")}
         saved_combo_id = st.selectbox(
             "选择已保存组合", ["", *combo_by_id],
+            key=f"saved_combo_choice::{Path(data_path).name}",
             format_func=lambda value: "请选择" if not value else (
                 f"{combo_by_id[value]['name']}（{combo_by_id[value].get('created_at', '')}）"),
         )
@@ -583,21 +629,8 @@ with st.sidebar:
 
 try:
     if selected_preset:
-        parameters = dict(selected_preset["best_by_profit_factor"]["parameters"])
-        parameters["hard_stop_days"] = tuple(parameters["hard_stop_days"])
+        parameters = normalize_parameters(selected_preset["best_by_profit_factor"]["parameters"])
         parameters["entry_trend_filter"] = True
-        parameters.setdefault("entry_trend_fast_sma", 5)
-        parameters.setdefault("entry_trend_slow_sma", 10)
-        parameters.setdefault("baseline_lookback", 15)
-        parameters.setdefault("baseline_max_rise", .20)
-        parameters.setdefault("baseline_rsi_period", 14)
-        parameters.setdefault("baseline_rsi_max", 90)
-        parameters.setdefault("entry_volume_fast_window", 5)
-        parameters.setdefault("entry_volume_slow_window", 20)
-        parameters.setdefault("forced_exit_day", parameters.get("entry_lag", 2) + parameters.get("forced_exit_days_after_entry", 3))
-        parameters.setdefault("forced_exit_intraday_stop_pct", .01)
-        for toggle_key in ATOMIC_TOGGLE_KEYS:
-            parameters.setdefault(toggle_key, DEFAULT_CONDITION_STATES[toggle_key])
     else:
         hard_stop_days = parse_ints(stop_days_text) if use_early_stop else (entry_lag + 1,)
         if use_early_stop and any(day <= entry_lag for day in hard_stop_days):
