@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from itertools import product
-import importlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -11,7 +10,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-# Streamlit 会缓存已导入模块；显式刷新以避免 UI 更新后仍调用旧版回测函数签名。
 import rhein.backtest as _backtest
 from rhein.paths import DATA_ROOT, GROUP_ROOT
 from rhein.strategy import (
@@ -22,7 +20,6 @@ from rhein.strategy import (
     parse_percent_list,
     parse_percent_ranges,
 )
-_backtest = importlib.reload(_backtest)
 input_files, load_ohlc, run_backtest = _backtest.input_files, _backtest.load_ohlc, _backtest.run_backtest
 
 
@@ -257,11 +254,21 @@ def normalize_parameters(raw_params: dict) -> dict:
 
 
 def reset_group_session_state() -> None:
-    """切换数据组时只清理与旧组绑定的 UI 状态和回测结果。"""
-    for key in (
+    """切换数据组时清理旧组绑定的结果及可能互相冲突的策略控件。"""
+    group_keys = (
         "applied_preset_token", "single_kpis", "single_trades", "single_params",
         "single_mode", "chart_trade_index", "top_symbol_table", "saved_combo_name",
-    ):
+    )
+    # 新组应从一套有效默认参数开始。否则上一组预设可能出现例如 t4 入场却
+    # 沿用 t3 止损日的矛盾组合，导致参数校验 st.stop()，表面上表现为白屏。
+    parameter_keys = (
+        "band_range", "entry_lag", "stop_days_text", "stop_pct", "close_stop", "sma_n",
+        "cost_bps", "entry_trend_fast_sma", "entry_trend_slow_sma",
+        "entry_volume_fast_window", "entry_volume_slow_window", "baseline_lookback",
+        "baseline_max_rise_pct", "baseline_rsi_period", "baseline_rsi_max",
+        "forced_exit_day", "forced_exit_intraday_stop_pct", *ATOMIC_TOGGLE_KEYS,
+    )
+    for key in (*group_keys, *parameter_keys):
         st.session_state.pop(key, None)
 
 
@@ -491,7 +498,6 @@ with st.sidebar:
     scope_options = available_data_scopes()
     selected_scope = st.selectbox(
         "数据范围", list(scope_options), index=0, key="data_scope",
-        on_change=reset_group_session_state,
         help="切换分组会清除上一组的预设选择与回测结果，不会自动运行回测。",
     )
     if selected_scope == "自定义路径":
@@ -499,6 +505,11 @@ with st.sidebar:
     else:
         data_path = scope_options[selected_scope]
         st.caption(f"当前目录：`{data_path}`")
+    # 不在 selectbox 回调里操作 session state：回调和控件重建交错时会令
+    # Streamlit 的前端丢失本次 rerun。这里在当前选择已确定后再做一次性清理。
+    if st.session_state.get("active_data_path") != data_path:
+        reset_group_session_state()
+        st.session_state["active_data_path"] = data_path
     group_preset = load_group_preset(data_path)
     versioned_presets = group_preset_versions(group_preset) if group_preset else {}
     selected_preset = None
@@ -669,8 +680,13 @@ try:
             "entry_trend_filter": True, "stop_intraday": not close_stop, "cost_bps": cost_bps,
         }
 except (KeyError, ValueError) as exc:
-    st.error(f"参数错误：{exc}")
-    st.stop()
+    # 参数输入永远不应让整个 Streamlit 脚本中止；中止会在某些浏览器会话中
+    # 只留下空白页。保留提示，并使用安全默认策略让用户仍可继续调整或加载组合。
+    st.error(f"参数错误，已临时使用安全默认值：{exc}")
+    parameters = normalize_parameters({
+        "band_lo": .02, "band_hi": .025, "entry_lag": 2, "hard_stop_days": (3, 4),
+        "stop_pct": .02, "sma_n": 5, "cost_bps": 0.0,
+    })
 
 st.info("当前设置：" + params_to_text(parameters))
 with st.sidebar:
