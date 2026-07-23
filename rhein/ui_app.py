@@ -185,6 +185,16 @@ def group_preset_versions(metadata: dict) -> dict[str, dict]:
     return {}
 
 
+def best_combo_for_record(record: dict, fallback: dict | None = None) -> dict:
+    """取得任一版本的最佳组合，兼容旧版“盈利因子最高”metadata。"""
+    for source in (record, fallback or {}):
+        for key in ("best_combo", "best_by_median_symbol_return", "best_by_profit_factor"):
+            candidate = source.get(key)
+            if isinstance(candidate, dict) and candidate.get("parameters"):
+                return candidate
+    return {}
+
+
 def load_group_best_overview() -> pd.DataFrame:
     """One best-combo row per group, using each group's active versioned metadata record."""
     rows = []
@@ -194,13 +204,14 @@ def load_group_best_overview() -> pd.DataFrame:
         versions = group_preset_versions(metadata)
         version_id = metadata.get("active_strategy_version") or next(iter(versions), None)
         record = versions.get(version_id, {})
-        best = record.get("best_by_profit_factor", metadata.get("best_by_profit_factor", {}))
+        best = best_combo_for_record(record, metadata)
         params, metrics = best.get("parameters", {}), best.get("metrics", {})
         if not params or not metrics:
             continue
         rows.append({
             "策略分组": metadata.get("group", folder.name.replace("_", "－")),
             "策略版本": record.get("label", version_id or "历史版本"),
+            "优化目标": record.get("optimization_label", "盈利因子最高"),
             "启用条件": "、".join(record.get("active_condition_ids", active_condition_ids(params))),
             "信号区间 (%)": f"{params['band_lo'] * 100:.2f}–{params['band_hi'] * 100:.2f}",
             "入场确认日": f"t{params['entry_lag']}",
@@ -369,8 +380,11 @@ def load_all_group_combinations() -> pd.DataFrame:
     for folder in sorted(path for path in GROUP_ROOT.glob("[0-9][0-9]_*") if path.is_dir() and not path.name.startswith("10_")):
         metadata = load_group_preset(str(folder)) or {}
         group_name = metadata.get("group", folder.name.replace("_", "－"))
-        for filename, stage in (("search_stage1_results.csv", "第一阶段"),
-                                ("search_stage2_results.csv", "第二阶段")):
+        versions = group_preset_versions(metadata)
+        version_id = metadata.get("active_strategy_version") or next(iter(versions), None)
+        record = versions.get(version_id, {})
+        result_files = record.get("result_files", ["search_stage1_results.csv", "search_stage2_results.csv"])
+        for filename, stage in zip(result_files, ("第一阶段", "第二阶段"), strict=False):
             path = folder / filename
             if not path.is_file():
                 continue
@@ -380,13 +394,15 @@ def load_all_group_combinations() -> pd.DataFrame:
                 continue
             frame.insert(0, "策略分组", group_name)
             frame.insert(1, "搜索阶段", stage)
+            frame.insert(2, "策略版本", record.get("label", version_id or "历史版本"))
+            frame.insert(3, "优化目标", record.get("optimization_label", "盈利因子最高"))
             frames.append(frame.rename(columns=column_names))
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 def apply_group_preset(preset: dict, token: str) -> None:
     """在控件创建前，把分组最佳组合写入左侧面板的 session state。"""
-    apply_parameters_to_controls(preset["best_by_profit_factor"]["parameters"], token)
+    apply_parameters_to_controls(best_combo_for_record(preset)["parameters"], token)
 
 
 def switch_to_custom_params() -> None:
@@ -541,7 +557,7 @@ with st.sidebar:
             "参数预设版本", ["custom", *versioned_presets],
             key=f"strategy_version_choice::{Path(data_path).name}",
             format_func=lambda value: "自定义参数" if value == "custom" else versioned_presets[value].get("label", value),
-            help="每个版本固定记录启用条件、搜索域、生成时间与本组盈利因子最高组合。",
+            help="每个版本固定记录启用条件、搜索域、生成时间、优化目标与本组最佳组合。",
         )
         if selected_version != "custom":
             selected_preset = versioned_presets[selected_version]
@@ -675,7 +691,7 @@ with st.sidebar:
 
 try:
     if selected_preset:
-        parameters = normalize_parameters(selected_preset["best_by_profit_factor"]["parameters"])
+        parameters = normalize_parameters(best_combo_for_record(selected_preset)["parameters"])
         parameters["entry_trend_filter"] = True
     else:
         hard_stop_days = parse_ints(stop_days_text) if use_early_stop else (entry_lag + 1,)
@@ -738,10 +754,13 @@ with st.sidebar:
             except ValueError as exc:
                 st.error(str(exc))
 if selected_preset:
-    best_metrics = selected_preset["best_by_profit_factor"]["metrics"]
+    selected_best_combo = best_combo_for_record(selected_preset)
+    best_metrics = selected_best_combo["metrics"]
     preset_passes_drawdown = best_metrics["q25_individual_max_drawdown_pct"] >= -max_drawdown_limit
     st.warning(
-        f"已使用本组预设：盈利因子 {best_metrics['profit_factor']:.3f}；"
+        f"已使用本组预设（{selected_preset.get('optimization_label', '盈利因子最高')}）："
+        f"中位标的累计收益 {best_metrics['median_symbol_cumulative_return_pct']:.2f}%；"
+        f"盈利因子 {best_metrics['profit_factor']:.3f}；"
         f"独立回撤 25 分位数 {best_metrics['q25_individual_max_drawdown_pct']:.2f}%；"
         f"{'满足' if preset_passes_drawdown else '不满足'}当前 -{max_drawdown_limit:.1f}% 回撤阈值。"
     )
@@ -991,7 +1010,7 @@ with tabs[2]:
     if best_overview.empty:
         st.info("尚未找到各组版本化 metadata。")
     else:
-        st.caption("每组仅展示 metadata 当前激活策略版本中、按盈利因子选出的最佳组合。")
+        st.caption("每组仅展示 metadata 当前激活策略版本中、按该版本优化目标选出的最佳组合。")
         st.dataframe(
             style_by_drawdown(best_overview, "回撤25分位数 (%)", -max_drawdown_limit,
                                integer_columns=("趋势 SMA 周期", "交易数")),

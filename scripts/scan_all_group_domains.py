@@ -28,8 +28,10 @@ ENTRY_LAGS, SMAS = [1, 2, 3], [3, 5, 8, 10]
 ENTRY_TREND_FAST_SMA, ENTRY_TREND_SLOW_SMA = 5, 10
 ENTRY_VOLUME_FAST_WINDOW, ENTRY_VOLUME_SLOW_WINDOW = 5, 20
 BASELINE_LOOKBACK, BASELINE_MAX_RISE, BASELINE_RSI_PERIOD, BASELINE_RSI_MAX = 15, .20, 14, 90
-STRATEGY_VERSION = "v4_t0_trend_volume"
-STRATEGY_LABEL = "v4 基准趋势量能：T0-01/02/03/05/06/07/08、EN-01、EX-01～EX-03"
+STRATEGY_VERSION = "v5_t0_trend_volume_return_max"
+STRATEGY_LABEL = "v5 收益率优先：T0-01/02/03/05/06/07/08、EN-01、EX-01～EX-03"
+OPTIMIZATION_TARGET = "median_symbol_cumulative_return_pct"
+OPTIMIZATION_LABEL = "中位标的累计收益率最高"
 ACTIVE_CONDITION_IDS = (
     "T0-01", "T0-02", "T0-03", "T0-05", "T0-06", "T0-07", "T0-08",
     "EN-01", "EX-01", "EX-02", "EX-03",
@@ -136,7 +138,10 @@ def with_params(params: dict, metrics: dict) -> dict:
 
 
 def sort_results(frame: pd.DataFrame) -> pd.DataFrame:
-    return frame.sort_values(["profit_factor", "median_symbol_cumulative_return_pct"], ascending=False)
+    # 组内标的是独立固定资金账户，故以有交易标的的累计收益率中位数作为
+    # 收益目标：它不会被一两个极端赢家主导，也与 UI 展示口径一致。
+    # 盈利因子仅作同收益率时的次级排序。
+    return frame.sort_values([OPTIMIZATION_TARGET, "profit_factor"], ascending=False, na_position="last")
 
 
 def scan_group(folder_text: str) -> dict:
@@ -218,14 +223,16 @@ def scan_group(folder_text: str) -> dict:
         "active_condition_ids": list(ACTIVE_CONDITION_IDS),
         "condition_flags": ATOMIC_FLAGS,
         "cost_bps": cost_bps, "stage1_combinations": len(stage1), "stage2_combinations": len(stage2),
-        "best_by_profit_factor": {"parameters": best_params, "metrics": best},
+        "optimization_target": OPTIMIZATION_TARGET,
+        "optimization_label": OPTIMIZATION_LABEL,
+        "best_combo": {"parameters": best_params, "metrics": best},
         "result_files": [stage1_file, stage2_file],
         "risk_note": "最高盈利因子不代表已满足 15% 组合最大回撤硬条件；该字段仅包含独立标的回撤代理。",
     }
     versions[STRATEGY_VERSION] = version_record
     metadata.update({"generated_at": version_record["generated_at"], "group": group, "symbols": len(datasets),
                      "mode": "固定仓位", "search_method": "版本化两阶段受约束搜索",
-                     "best_by_profit_factor": version_record["best_by_profit_factor"],
+                     "best_combo": version_record["best_combo"],
                      "active_strategy_version": STRATEGY_VERSION,
                      "risk_note": version_record["risk_note"]})
     (folder / "search_metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -243,7 +250,7 @@ def main() -> None:
         for folder in folders:
             summary = scan_group(str(folder))
             summaries.append(summary)
-            print(f"完成：{folder.name}；PF={summary['profit_factor']:.3f}")
+            print(f"完成：{folder.name}；中位收益={summary['median_symbol_cumulative_return_pct']:.3f}%")
     else:
         with ProcessPoolExecutor(max_workers=args.workers) as executor:
             futures = {executor.submit(scan_group, str(folder)): folder.name for folder in folders}
@@ -251,7 +258,7 @@ def main() -> None:
                 name = futures[future]
                 summary = future.result()
                 summaries.append(summary)
-                print(f"完成：{name}；PF={summary['profit_factor']:.3f}")
+                print(f"完成：{name}；中位收益={summary['median_symbol_cumulative_return_pct']:.3f}%")
     overview = sort_results(pd.DataFrame(summaries))
     output = Path("reports")
     output.mkdir(exist_ok=True)
