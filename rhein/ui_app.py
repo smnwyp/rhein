@@ -833,18 +833,20 @@ with tabs[0]:
                 signal_date, entry_date, exit_date = (pd.Timestamp(trade[column]) for column in ("signal", "entry", "exit"))
                 signal_position = ohlc.index[ohlc["Date"] == signal_date][0]
                 exit_position = ohlc.index[ohlc["Date"] == exit_date][0]
-                chart_data = ohlc.iloc[max(0, signal_position - 15):min(len(ohlc), exit_position + 11)]
+                chart_start, chart_end = max(0, signal_position - 15), min(len(ohlc), exit_position + 11)
+                chart_data = ohlc.iloc[chart_start:chart_end].copy()
+                chart_data["ChartIndex"] = range(len(chart_data))
                 markers = [
-                    {"Date": str(signal_date.date()), "Price": float(ohlc.loc[ohlc["Date"] == signal_date, "Close"].iloc[0]), "标记": "t0 基准点"},
-                    {"Date": str(entry_date.date()), "Price": float(trade["entry_px"]), "标记": "入场"},
-                    {"Date": str(exit_date.date()), "Price": float(trade["exit_px"]), "标记": "出场"},
+                    {"ChartIndex": int(signal_position - chart_start), "Price": float(ohlc.loc[ohlc["Date"] == signal_date, "Close"].iloc[0]), "标记": "t0 基准点"},
+                    {"ChartIndex": int(ohlc.index[ohlc["Date"] == entry_date][0] - chart_start), "Price": float(trade["entry_px"]), "标记": "入场"},
+                    {"ChartIndex": int(exit_position - chart_start), "Price": float(trade["exit_px"]), "标记": "出场"},
                 ]
                 candle_data = chart_data.assign(Date=chart_data["Date"].dt.strftime("%Y-%m-%d"))
                 price_span = float(chart_data["High"].max() - chart_data["Low"].min())
                 label_price = float(chart_data["Low"].min() - max(price_span * 0.06, chart_data["Low"].min() * 0.005))
                 holding_days = ohlc.iloc[signal_position:exit_position + 1]
                 day_labels = [
-                    {"Date": str(row.Date.date()), "LabelPrice": label_price, "持仓日": f"t{offset}"}
+                    {"ChartIndex": int(signal_position - chart_start + offset), "LabelPrice": label_price, "持仓日": f"t{offset}"}
                     for offset, row in enumerate(holding_days.itertuples(index=False))
                 ]
                 # 图表保持在一个常见笔记本屏幕的可视高度内：短交易不会留下
@@ -854,12 +856,13 @@ with tabs[0]:
                 volume_height = min(120, max(90, round(price_height * 0.23)))
                 candle_width = min(12, max(5, round(300 / max(chart_days, 1))))
                 price_axis = {"field": "Low", "type": "quantitative", "title": "价格", "scale": {"zero": False, "nice": True}}
+                chart_x = {"field": "ChartIndex", "type": "quantitative", "scale": {"domain": [0, max(chart_days - 1, 1)], "nice": False}}
                 spec = {
                     "title": f"{selected_symbol}｜{trade.signal} → {trade.exit}｜{trade.reason}",
                     "vconcat": [
                         {
                             "height": price_height,
-                            "encoding": {"x": {"field": "Date", "type": "ordinal", "axis": {"title": None, "labels": False, "ticks": False}}},
+                            "encoding": {"x": {**chart_x, "axis": {"title": None, "labels": False, "ticks": False}}},
                             "layer": [
                                 {"mark": {"type": "rule"}, "encoding": {"y": price_axis, "y2": {"field": "High"}}},
                                 {"mark": {"type": "bar", "size": candle_width}, "encoding": {
@@ -876,7 +879,7 @@ with tabs[0]:
                                 }},
                                 {"transform": [{"fold": ["SMA5", "SMA10", "SMA20"], "as": ["均线", "均线值"]}],
                                  "mark": {"type": "line", "strokeWidth": 2}, "encoding": {
-                                     "x": {"field": "Date", "type": "ordinal"},
+                                     "x": chart_x,
                                      "y": {"field": "均线值", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                      "color": {"field": "均线", "type": "nominal", "title": "均线",
                                                "scale": {"domain": ["SMA5", "SMA10", "SMA20"],
@@ -888,15 +891,15 @@ with tabs[0]:
                                      ],
                                  }},
                                 {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
-                                    "x": {"field": "Date", "type": "ordinal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "x": chart_x, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
                                 }},
                                 {"data": {"values": markers}, "mark": {"type": "text", "dy": -14}, "encoding": {
-                                    "x": {"field": "Date", "type": "ordinal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "x": chart_x, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
                                 }},
                                 {"data": {"values": day_labels}, "mark": {"type": "text", "fontSize": 10, "baseline": "top", "color": "#4b5563"}, "encoding": {
-                                    "x": {"field": "Date", "type": "ordinal"}, "y": {"field": "LabelPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "x": chart_x, "y": {"field": "LabelPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "text": {"field": "持仓日"},
                                 }},
                             ],
@@ -905,7 +908,7 @@ with tabs[0]:
                             "height": volume_height,
                             "mark": {"type": "bar", "size": candle_width},
                             "encoding": {
-                                "x": {"field": "Date", "type": "ordinal", "title": "日期"},
+                                "x": {**chart_x, "axis": {"title": "交易日（日期见悬停）", "labels": False, "ticks": False}},
                                 "y": {"field": "Volume", "type": "quantitative", "title": "成交量", "scale": {"zero": True, "nice": True}},
                                 "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728", "legend": None},
                                 "tooltip": [
