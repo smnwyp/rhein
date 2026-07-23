@@ -796,7 +796,7 @@ with tabs[0]:
                 signal_date, entry_date, exit_date = (pd.Timestamp(trade[column]) for column in ("signal", "entry", "exit"))
                 signal_position = ohlc.index[ohlc["Date"] == signal_date][0]
                 exit_position = ohlc.index[ohlc["Date"] == exit_date][0]
-                chart_data = ohlc.iloc[max(0, signal_position - 10):min(len(ohlc), exit_position + 11)]
+                chart_data = ohlc.iloc[max(0, signal_position - 15):min(len(ohlc), exit_position + 11)]
                 markers = [
                     {"Date": str(signal_date.date()), "Price": float(ohlc.loc[ohlc["Date"] == signal_date, "Close"].iloc[0]), "标记": "t0 基准点"},
                     {"Date": str(entry_date.date()), "Price": float(trade["entry_px"]), "标记": "入场"},
@@ -869,7 +869,7 @@ with tabs[0]:
                     "autosize": {"type": "fit-x", "contains": "padding"},
                 }
                 st.vega_lite_chart(candle_data, spec, width="stretch", key=f"trade_chart_{selected_symbol}_{trade_index}")
-                st.caption("K 线与成交量窗口：t0 前 10 个交易日至出场后 10 个交易日。t0、t1…标示基准点起的交易日；蓝色 = t0 基准点；绿色 = 入场；红色 = 出场；成交量颜色与当日 K 线涨跌一致。")
+                st.caption("K 线与成交量窗口：t0 前 15 个交易日至出场后 10 个交易日。t0、t1…标示基准点起的交易日；蓝色 = t0 基准点；绿色 = 入场；红色 = 出场；成交量颜色与当日 K 线涨跌一致。")
         with st.expander("指标定义：选择列名查看计算方式"):
             selected_kpi = st.selectbox("指标列", list(KPI_DEFINITIONS), key="top100_kpi_definition")
             st.markdown(f"**{selected_kpi}**：{KPI_DEFINITIONS[selected_kpi]}")
