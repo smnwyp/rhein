@@ -28,19 +28,22 @@ ENTRY_LAGS, SMAS = [1, 2, 3], [3, 5, 8, 10]
 ENTRY_TREND_FAST_SMA, ENTRY_TREND_SLOW_SMA = 5, 10
 ENTRY_VOLUME_FAST_WINDOW, ENTRY_VOLUME_SLOW_WINDOW = 5, 20
 BASELINE_LOOKBACK, BASELINE_MAX_RISE, BASELINE_RSI_PERIOD, BASELINE_RSI_MAX = 15, .20, 14, 90
-STRATEGY_VERSION = "v2_core_breakout_only"
-STRATEGY_LABEL = "v2 核心突破：T0-01、EN-01、EX-01～EX-03"
-ACTIVE_CONDITION_IDS = ("T0-01", "EN-01", "EX-01", "EX-02", "EX-03")
+STRATEGY_VERSION = "v4_t0_trend_volume"
+STRATEGY_LABEL = "v4 基准趋势量能：T0-01/02/03/05/06/07/08、EN-01、EX-01～EX-03"
+ACTIVE_CONDITION_IDS = (
+    "T0-01", "T0-02", "T0-03", "T0-05", "T0-06", "T0-07", "T0-08",
+    "EN-01", "EX-01", "EX-02", "EX-03",
+)
 ATOMIC_FLAGS = {
     "use_signal_band": True,
-    "use_baseline_prior_low": False,
-    "use_baseline_max_rise": False,
+    "use_baseline_prior_low": True,
+    "use_baseline_max_rise": True,
     "use_baseline_rsi": False,
-    "use_baseline_close_above_fast_sma": False,
-    "use_baseline_fast_above_slow_sma": False,
-    "use_baseline_close_above_sma20": False,
+    "use_baseline_close_above_fast_sma": True,
+    "use_baseline_fast_above_slow_sma": True,
+    "use_baseline_close_above_sma20": True,
+    "use_baseline_volume_sma": True,
     "use_entry_close_vs_t0": True,
-    "use_entry_volume_sma": False,
     "use_early_stop": True,
     "use_exit_below_entry": True,
     "use_exit_below_sma": True,
@@ -118,8 +121,9 @@ def with_params(params: dict, metrics: dict) -> dict:
         "active_condition_ids": ", ".join(ACTIVE_CONDITION_IDS),
         "signal_lo_pct": params["band_lo"] * 100, "signal_hi_pct": params["band_hi"] * 100,
         "entry_day": f"t{params['entry_lag']}",
-        "entry_trend_filter": f"t0 收盘>SMA{params['entry_trend_fast_sma']}"
-                              f">SMA{params['entry_trend_slow_sma']}；入场窗口量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}",
+        "entry_trend_filter": f"t0 收盘>SMA{params['entry_trend_fast_sma']}；"
+                              f"SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}；"
+                              f"收盘>SMA20；量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}",
         "entry_trend_fast_sma": params["entry_trend_fast_sma"],
         "entry_trend_slow_sma": params["entry_trend_slow_sma"],
         "entry_volume_fast_window": params["entry_volume_fast_window"],

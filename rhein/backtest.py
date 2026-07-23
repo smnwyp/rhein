@@ -33,8 +33,8 @@ DEFAULT_STRATEGY = {
     "use_baseline_close_above_fast_sma": True,
     "use_baseline_fast_above_slow_sma": True,
     "use_baseline_close_above_sma20": True,
+    "use_baseline_volume_sma": True,
     "use_entry_close_vs_t0": True,
-    "use_entry_volume_sma": True,
     "use_early_stop": True,
     "use_exit_below_entry": True,
     "use_exit_below_sma": True,
@@ -85,8 +85,9 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                  use_baseline_close_above_fast_sma=True,
                  use_baseline_fast_above_slow_sma=True,
                  use_baseline_close_above_sma20=True,
-                 use_entry_close_vs_t0=True, use_entry_volume_sma=True,
+                 use_baseline_volume_sma=True, use_entry_close_vs_t0=True,
                  use_entry_close_above_fast_sma=None, use_entry_fast_above_slow_sma=None,
+                 use_entry_volume_sma=None,
                  use_early_stop=True, use_exit_below_entry=True,
                  use_exit_below_sma=True, use_forced_exit=False,
                  forced_exit_day=5, forced_exit_days_after_entry=None,
@@ -103,12 +104,14 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
         use_baseline_close_above_fast_sma = use_entry_close_above_fast_sma
     if use_entry_fast_above_slow_sma is not None:
         use_baseline_fast_above_slow_sma = use_entry_fast_above_slow_sma
+    if use_entry_volume_sma is not None:
+        use_baseline_volume_sma = use_entry_volume_sma
     if (use_baseline_close_above_fast_sma or use_baseline_fast_above_slow_sma) and entry_trend_fast_sma < 2:
         raise ValueError("基准点快线 SMA 周期至少为 2")
     if use_baseline_fast_above_slow_sma and entry_trend_slow_sma <= entry_trend_fast_sma:
         raise ValueError("基准点 SMA 必须满足 2 ≤ 快线周期 < 慢线周期")
-    if use_entry_volume_sma and (entry_volume_fast_window < 1 or entry_volume_slow_window <= entry_volume_fast_window):
-        raise ValueError("入场成交量均线必须满足 1 ≤ 短期周期 < 长期周期")
+    if use_baseline_volume_sma and (entry_volume_fast_window < 1 or entry_volume_slow_window <= entry_volume_fast_window):
+        raise ValueError("基准点成交量均线必须满足 1 ≤ 短期周期 < 长期周期")
     if (use_baseline_prior_low or use_baseline_max_rise) and baseline_lookback < 1:
         raise ValueError("基准点回看窗口至少为 1")
     if use_baseline_rsi and baseline_rsi_period < 2:
@@ -170,6 +173,12 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
         if use_baseline_close_above_sma20 and (np.isnan(baseline_sma20[i]) or c[i] <= baseline_sma20[i]):
             i += 1
             continue
+        if use_baseline_volume_sma and (
+            np.isnan(vol_fast_sma[i]) or np.isnan(vol_slow_sma[i])
+            or vol_fast_sma[i] <= vol_slow_sma[i]
+        ):
+            i += 1
+            continue
         # 窗口按字面包含 t0-15 与 t0；t0 不能就是最低点。
         if needs_baseline_window:
             baseline_window = c[i - baseline_lookback:i + 1]
@@ -187,22 +196,6 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
             i = t0 + 1
             continue
         entry_idx = confirmation_idx
-        # ``entry_trend_filter=False`` is a backward-compatible way to disable
-        # the legacy entry-window volume filter.
-        if not entry_trend_filter:
-            use_entry_volume_sma = False
-        if use_entry_volume_sma:
-            window = range(max(0, confirmation_idx - 1), min(n, confirmation_idx + 1))
-            def entry_rules_pass(day: int) -> bool:
-                if use_entry_volume_sma:
-                    if (np.isnan(vol_fast_sma[day]) or np.isnan(vol_slow_sma[day])
-                            or not vol_fast_sma[day] > vol_slow_sma[day]):
-                        return False
-                return True
-            trend_days = [day for day in window if entry_rules_pass(day)]
-            if not trend_days:
-                i = t0 + 1
-                continue
         entry_px = c[entry_idx]
         effective_stop = (stop_pct * sig[entry_idx] / 0.01
                           if vol_scaled and not np.isnan(sig[entry_idx]) else stop_pct)

@@ -5,7 +5,7 @@ description: Backtest Chloe's daily-candle momentum breakout strategy ("sharp ri
 
 # Momentum Breakout Backtest
 
-Owner: Chloe. Version: v1.10 (2026-07-23: former EN-02/EN-03 now evaluate at t0 as T0-05/T0-06; added T0-07, t0 close > SMA20). Instrument scope: single instrument, one position at a time, long only, daily OHLCV candles. Capital: EUR 10,000. Baseline single-side cost: 0 bps.
+Owner: Chloe. Version: v1.11 (2026-07-23: former EN-04 now evaluates at t0 as T0-08; baseline volume SMA5 > SMA20). Instrument scope: single instrument, one position at a time, long only, daily OHLCV candles. Capital: EUR 10,000. Baseline single-side cost: 0 bps.
 
 ## Strategy specification (canonical — do not silently reinterpret)
 
@@ -21,7 +21,7 @@ Owner: Chloe. Version: v1.10 (2026-07-23: former EN-02/EN-03 now evaluate at t0 
 | T0-05 | t0 close is above fast SMA |
 | T0-06 | t0 fast SMA is above slow SMA |
 | T0-07 | t0 close is above SMA20 |
-| EN-04 | Confirmation-window volume short SMA is above volume long SMA |
+| T0-08 | t0 volume short SMA is above volume long SMA |
 | EX-01 | Early hard stop |
 | EX-02 | Later close below entry-price exit |
 | EX-03 | Later close below exit-SMA exit |
@@ -30,11 +30,11 @@ Owner: Chloe. Version: v1.10 (2026-07-23: former EN-02/EN-03 now evaluate at t0 
 
 These identifiers are stable labels for the UI, notes and experiments; the corresponding engine flags remain `use_*` parameters.
 
-**Signal and baseline (t0):** the following are seven independent conditions, all enabled by default: (1) `close[t0] / close[t0-1] − 1` is within [2.0%, 2.5%] (band, not open-ended); (2) in the inclusive window `t0-15 … t0`, the lowest close (`t-min`) must not be t0; (3) `close[t0] ≤ 1.20 × close[t-min]`; (4) Wilder RSI(14) at t0 is ≤90; (5) `close[t0] > SMA_fast[t0]`; (6) `SMA_fast[t0] > SMA_slow[t0]`; and (7) `close[t0] > SMA20[t0]`. Any disabled condition is not evaluated for eligibility. Lookback, extension, RSI period and RSI ceiling remain configurable; price `SMA_fast = 5` and `SMA_slow = 10` by default.
+**Signal and baseline (t0):** the following are eight independent conditions, all enabled by default: (1) `close[t0] / close[t0-1] − 1` is within [2.0%, 2.5%] (band, not open-ended); (2) in the inclusive window `t0-15 … t0`, the lowest close (`t-min`) must not be t0; (3) `close[t0] ≤ 1.20 × close[t-min]`; (4) Wilder RSI(14) at t0 is ≤90; (5) `close[t0] > SMA_fast[t0]`; (6) `SMA_fast[t0] > SMA_slow[t0]`; (7) `close[t0] > SMA20[t0]`; and (8) `VolumeSMA_short[t0] > VolumeSMA_long[t0]`. Any disabled condition is not evaluated for eligibility. Lookback, extension, RSI period and RSI ceiling remain configurable; price `SMA_fast = 5`, `SMA_slow = 10`, and volume `SMA_short = 5`, `SMA_long = 20` by default.
 
 **Entry confirmation (default t2):** `entry_lag` trading days after t0. The base condition `close[tN] >= close[t0]` is independently switchable and enabled by default.
 
-**Entry condition (independently switchable, enabled by default):** inspect only `tN-1` and `tN`; never use tN+1. At least one of those days must satisfy `VolumeSMA_short[d] > VolumeSMA_long[d]`. Defaults are volume `SMA_short = 5` and `SMA_long = 20`, with short < long.
+There is no longer a separate EN-04 entry-volume condition; it is now T0-08 and is evaluated at the baseline point only.
 
 Buy at `close[tN]` if the base confirmation and this filter pass; otherwise skip. This uses no future-day information.
 

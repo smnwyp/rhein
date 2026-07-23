@@ -6,7 +6,7 @@
 
 ## v2 核心突破版本（`v2_core_breakout_only`）
 
-本版本只启用 `T0-01`、`EN-01`、`EX-01`、`EX-02`、`EX-03`；其余原子条件全部关闭。每个特征组独立两阶段搜索，并在该组 `search_metadata.json` 的 `strategy_versions.v2_core_breakout_only` 中保留启用条件、搜索时间、全部结果文件名和按盈利因子选出的最佳组合。旧版 `v1_full_conditions` 会保留，不会被覆盖。
+本版本只启用 `T0-01`、`T0-02`、`T0-03`、`T0-05`、`T0-06`、`T0-07`、`T0-08`、`EN-01`、`EX-01`、`EX-02`、`EX-03`；其余原子条件全部关闭。每个特征组独立两阶段搜索，并在该组 `search_metadata.json` 的 `strategy_versions.v4_t0_trend_volume` 中保留启用条件、搜索时间、全部结果文件名和按盈利因子选出的最佳组合。历史版本会保留，不会被覆盖。
 
 | 搜索变量 | 候选值 |
 |---|---|

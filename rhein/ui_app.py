@@ -63,11 +63,11 @@ def params_to_text(params: dict) -> str:
         rules.append(f"t0 SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}")
     if on("use_baseline_close_above_sma20"):
         rules.append("t0收盘>SMA20")
+    if on("use_baseline_volume_sma"):
+        rules.append(f"t0量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}")
     if on("use_entry_close_vs_t0"):
         rules.append("tN收盘≥t0")
     entry = []
-    if on("use_entry_volume_sma"):
-        entry.append(f"量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}")
     if entry:
         rules.append("tN-1/tN任一天：" + "且".join(entry))
     if on("use_early_stop"):
@@ -100,9 +100,9 @@ def strategy_narrative(params: dict) -> str:
     if on("use_baseline_close_above_fast_sma"): t0.append(f"收盘>SMA{params['entry_trend_fast_sma']}")
     if on("use_baseline_fast_above_slow_sma"): t0.append(f"SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}")
     if on("use_baseline_close_above_sma20"): t0.append("收盘>SMA20")
+    if on("use_baseline_volume_sma"): t0.append(f"量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}")
     entry = []
     if on("use_entry_close_vs_t0"): entry.append("tN收盘不低于t0")
-    if on("use_entry_volume_sma"): entry.append(f"量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}")
     paragraphs = [
         f"基准点：t0 需满足“{'、'.join(t0) if t0 else '无基准筛选'}”。",
         f"入场点：在 t{params['entry_lag']}，需满足“{'、'.join(entry) if entry else '无入场确认筛选'}”后按收盘价入场。",
@@ -240,6 +240,7 @@ def normalize_parameters(raw_params: dict) -> dict:
     legacy_baseline_flags = {
         "use_entry_close_above_fast_sma": "use_baseline_close_above_fast_sma",
         "use_entry_fast_above_slow_sma": "use_baseline_fast_above_slow_sma",
+        "use_entry_volume_sma": "use_baseline_volume_sma",
     }
     for old_key, new_key in legacy_baseline_flags.items():
         if new_key not in params and old_key in params:
@@ -613,19 +614,21 @@ with st.sidebar:
         "【T0-07】启用：t0 收盘价高于 SMA20", key="use_baseline_close_above_sma20",
         on_change=switch_to_custom_params,
     )
+    use_baseline_volume_sma = st.toggle(
+        "【T0-08】启用：t0 成交量短均线高于长均线", key="use_baseline_volume_sma",
+        on_change=switch_to_custom_params,
+    )
+    entry_volume_fast_window = st.number_input("基准点成交量短期均线周期", min_value=1, max_value=100,
+                                                key="entry_volume_fast_window", on_change=switch_to_custom_params,
+                                                disabled=not use_baseline_volume_sma)
+    entry_volume_slow_window = st.number_input("基准点成交量长期均线周期", min_value=2, max_value=250,
+                                                key="entry_volume_slow_window", on_change=switch_to_custom_params,
+                                                disabled=not use_baseline_volume_sma)
     st.subheader("入场点（tN）")
     entry_lag = st.selectbox("入场确认日", [1, 2, 3, 4, 5],
                              format_func=lambda value: f"t{value}", key="entry_lag",
                              on_change=switch_to_custom_params)
-    st.caption("成交量条件只考察 tN-1、tN 的任一天，绝不使用 tN+1。")
     use_entry_close_vs_t0 = st.toggle("【EN-01】启用：tN 收盘价不低于 t0 收盘价", key="use_entry_close_vs_t0", on_change=switch_to_custom_params)
-    use_entry_volume_sma = st.toggle("【EN-04】启用：确认窗口成交量短均线高于长均线", key="use_entry_volume_sma", on_change=switch_to_custom_params)
-    entry_volume_fast_window = st.number_input("入场成交量短期均线周期", min_value=1, max_value=100,
-                                                key="entry_volume_fast_window", on_change=switch_to_custom_params,
-                                                disabled=not use_entry_volume_sma)
-    entry_volume_slow_window = st.number_input("入场成交量长期均线周期", min_value=2, max_value=250,
-                                                key="entry_volume_slow_window", on_change=switch_to_custom_params,
-                                                disabled=not use_entry_volume_sma)
     st.subheader("出场点：早期止损")
     use_early_stop = st.toggle("【EX-01】启用：早期止损", key="use_early_stop", on_change=switch_to_custom_params)
     stop_days_text = st.text_input(
@@ -676,8 +679,8 @@ try:
             raise ValueError("信号区间下限必须小于上限")
         if use_baseline_fast_above_slow_sma and entry_trend_fast_sma >= entry_trend_slow_sma:
             raise ValueError("基准点快线 SMA 周期必须小于慢线 SMA 周期")
-        if use_entry_volume_sma and entry_volume_fast_window >= entry_volume_slow_window:
-            raise ValueError("入场成交量短期均线周期必须小于长期均线周期")
+        if use_baseline_volume_sma and entry_volume_fast_window >= entry_volume_slow_window:
+            raise ValueError("基准点成交量短期均线周期必须小于长期均线周期")
         parameters = {
             "band_lo": band_lo_pct / 100, "band_hi": band_hi_pct / 100,
             "entry_lag": entry_lag, "hard_stop_days": hard_stop_days,
@@ -695,8 +698,8 @@ try:
             "use_baseline_close_above_fast_sma": use_baseline_close_above_fast_sma,
             "use_baseline_fast_above_slow_sma": use_baseline_fast_above_slow_sma,
             "use_baseline_close_above_sma20": use_baseline_close_above_sma20,
+            "use_baseline_volume_sma": use_baseline_volume_sma,
             "use_entry_close_vs_t0": use_entry_close_vs_t0,
-            "use_entry_volume_sma": use_entry_volume_sma,
             "use_early_stop": use_early_stop,
             "use_exit_below_entry": use_exit_below_entry,
             "use_exit_below_sma": use_exit_below_sma,
