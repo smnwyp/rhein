@@ -828,6 +828,8 @@ with tabs[0]:
                 trade = symbol_trades.iloc[trade_index]
                 source_path = kpis.loc[kpis["标的"] == selected_symbol, "源文件"].iloc[0]
                 ohlc = load_ohlc(Path(source_path))
+                for period in (5, 10, 20):
+                    ohlc[f"SMA{period}"] = ohlc["Close"].rolling(period).mean()
                 signal_date, entry_date, exit_date = (pd.Timestamp(trade[column]) for column in ("signal", "entry", "exit"))
                 signal_position = ohlc.index[ohlc["Date"] == signal_date][0]
                 exit_position = ohlc.index[ohlc["Date"] == exit_date][0]
@@ -872,6 +874,19 @@ with tabs[0]:
                                         {"field": "Volume", "type": "quantitative", "title": "成交量", "format": ",.0f"},
                                     ],
                                 }},
+                                {"transform": [{"fold": ["SMA5", "SMA10", "SMA20"], "as": ["均线", "均线值"]}],
+                                 "mark": {"type": "line", "strokeWidth": 2}, "encoding": {
+                                     "x": {"field": "Date", "type": "temporal"},
+                                     "y": {"field": "均线值", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                     "color": {"field": "均线", "type": "nominal", "title": "均线",
+                                               "scale": {"domain": ["SMA5", "SMA10", "SMA20"],
+                                                         "range": ["#2563eb", "#f59e0b", "#7c3aed"]}},
+                                     "tooltip": [
+                                         {"field": "Date", "type": "temporal", "title": "日期"},
+                                         {"field": "均线", "type": "nominal", "title": "均线"},
+                                         {"field": "均线值", "type": "quantitative", "title": "数值", "format": ".2f"},
+                                     ],
+                                 }},
                                 {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
                                     "x": {"field": "Date", "type": "temporal"}, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
@@ -904,7 +919,7 @@ with tabs[0]:
                     "autosize": {"type": "fit-x", "contains": "padding"},
                 }
                 st.vega_lite_chart(candle_data, spec, width="stretch", key=f"trade_chart_{selected_symbol}_{trade_index}")
-                st.caption("K 线与成交量窗口：t0 前 15 个交易日至出场后 10 个交易日。t0、t1…标示基准点起的交易日；蓝色 = t0 基准点；绿色 = 入场；红色 = 出场；成交量颜色与当日 K 线涨跌一致。")
+                st.caption("K 线与成交量窗口：t0 前 15 个交易日至出场后 10 个交易日。SMA5 = 蓝色、SMA10 = 橙色、SMA20 = 紫色；t0、t1…标示基准点起的交易日；蓝色标记 = t0 基准点；绿色 = 入场；红色 = 出场；成交量颜色与当日 K 线涨跌一致。")
         with st.expander("指标定义：选择列名查看计算方式"):
             selected_kpi = st.selectbox("指标列", list(KPI_DEFINITIONS), key="top100_kpi_definition")
             st.markdown(f"**{selected_kpi}**：{KPI_DEFINITIONS[selected_kpi]}")
