@@ -393,9 +393,12 @@ def load_all_group_combinations() -> pd.DataFrame:
             except (OSError, ValueError):
                 continue
             frame.insert(0, "策略分组", group_name)
-            frame.insert(1, "搜索阶段", stage)
-            frame.insert(2, "策略版本", record.get("label", version_id or "历史版本"))
-            frame.insert(3, "优化目标", record.get("optimization_label", "盈利因子最高"))
+            # v6 的条件筛选/完整复验文件已带有更精确的“搜索阶段”列；
+            # 旧版本则沿用由文件位置推断的第一/二阶段。
+            if "搜索阶段" not in frame.columns:
+                frame.insert(1, "搜索阶段", stage)
+            frame.insert(1, "策略版本", record.get("label", version_id or "历史版本"))
+            frame.insert(2, "优化目标", record.get("optimization_label", "盈利因子最高"))
             frames.append(frame.rename(columns=column_names))
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
@@ -1022,15 +1025,16 @@ with tabs[2]:
         )
 
     st.subheader("全部分组参数组合")
-    st.caption("汇总九个成熟分组的第一阶段 18 组与第二阶段 36 组搜索结果，共 486 行；不包含历史不足一年的标的组。")
+    st.caption("汇总九个成熟分组当前激活版本的搜索结果；条件开关搜索会显示“条件筛选”和“完整复验”两个阶段。")
     all_group_results = load_all_group_combinations()
     if all_group_results.empty:
         st.info("尚未找到分组搜索结果。请先运行 scan_all_group_domains.py。")
     else:
         groups = list(all_group_results["策略分组"].drop_duplicates())
         selected_groups = st.multiselect("策略分组", groups, default=groups, key="all_group_filter")
+        stages = list(all_group_results["搜索阶段"].drop_duplicates())
         selected_stages = st.multiselect(
-            "搜索阶段", ["第一阶段", "第二阶段"], default=["第一阶段", "第二阶段"], key="all_stage_filter",
+            "搜索阶段", stages, default=stages, key="all_stage_filter",
         )
         sort_options = {
             "盈利因子（高→低）": ("盈利因子", False),
