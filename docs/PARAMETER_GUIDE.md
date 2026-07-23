@@ -1,6 +1,6 @@
 # NVDA / TSLA 参数档案使用说明
 
-`backtest.py` 保持同一个 momentum breakout 策略结构，但会按 CSV 文件名读取 `strategy_profiles.json` 中对应的参数。`nvda.csv` 使用 `NVDA` 档案，`tesla.csv` 使用 `TESLA` 档案。
+`rhein.backtest` 保持同一个 momentum breakout 策略结构，但会按 CSV 文件名读取 `config/strategy_profiles.json` 中对应的参数。`nvda.csv` 使用 `NVDA` 档案，`tesla.csv` 使用 `TESLA` 档案。
 
 ## 时间标记
 
@@ -24,35 +24,35 @@
 使用两个标的各自档案：
 
 ```bash
-.venv/bin/python backtest.py data
+.venv/bin/python -m scripts.backtest data
 ```
 
 测试所有标的改为 t3 确认、t4/t5 早期止损（命令行参数会覆盖档案）：
 
 ```bash
-.venv/bin/python backtest.py data --entry-lag 3 --hard-stop-days 4,5
+.venv/bin/python -m scripts.backtest data --entry-lag 3 --hard-stop-days 4,5
 ```
 
 测试统一更宽的 2%–3% 信号带与 3% 止损：
 
 ```bash
-.venv/bin/python backtest.py data --band-lo 0.02 --band-hi 0.03 --stop-pct 0.03
+.venv/bin/python -m scripts.backtest data --band-lo 0.02 --band-hi 0.03 --stop-pct 0.03
 ```
 
 仅测试一个标的，避免把参数意外覆盖到另一只股票：
 
 ```bash
-.venv/bin/python backtest.py data/tesla.csv --entry-lag 3 --hard-stop-days 4,5
+.venv/bin/python -m scripts.backtest data/tesla.csv --entry-lag 3 --hard-stop-days 4,5
 ```
 
 每次输出的 Markdown 报告都会在每个标的标题下列出“实际策略参数”，它才是该次结果的准确口径。
 
 ## 参数组合扫描
 
-`parameter_grid.json` 定义每只股票要枚举的信号区间、确认日与止损比例。早期止损日会随确认日自动对应：t1 入场检查 t2/t3，t2 入场检查 t3/t4，t3 入场检查 t4/t5。
+`config/parameter_grid.json` 定义每只股票要枚举的信号区间、确认日与止损比例。早期止损日会随确认日自动对应：t1 入场检查 t2/t3，t2 入场检查 t3/t4，t3 入场检查 t4/t5。
 
 ```bash
-.venv/bin/python backtest.py data --sweep
+.venv/bin/python -m scripts.backtest data --sweep
 ```
 
 扫描会生成完整 Markdown 表格、CSV 与 JSON。默认使用复利模式；加入 `--no-compound` 可改用固定仓位模式。扫描结果仅是样本内比较，不能直接把排名第一的组合当成最终实盘参数。

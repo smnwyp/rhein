@@ -3,8 +3,8 @@
 ## Entrypoints
 
 - `app.py` — Streamlit Cloud entrypoint; delegates to `rhein.ui_app`.
-- `backtest.py` — backward-compatible CLI entrypoint; delegates to `rhein.backtest`.
-- Root-level analysis and scan files are backward-compatible wrappers for `scripts/`.
+- `app.py` is the sole root-level application entrypoint for Streamlit Cloud.
+- CLI commands live in `scripts/` and can be invoked with `python -m scripts.<name>`.
 
 ## Application package: `rhein/`
 
@@ -20,10 +20,9 @@
 - Research and scans: `scan_all_group_domains.py`, `scan_high_volatility_group.py`,
   `analyze_group_statistics.py`, `analyze_group_symbol_quality.py`
 
-Run either the legacy root wrapper or the canonical module form, for example:
+Run the canonical module form, for example:
 
 ```bash
-.venv/bin/python scan_all_group_domains.py
 .venv/bin/python -m scripts.scan_all_group_domains
 ```
 

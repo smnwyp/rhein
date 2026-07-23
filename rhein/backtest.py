@@ -7,6 +7,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .paths import CONFIG_ROOT, REPORTS_ROOT
+
 
 DEFAULT_STRATEGY = {
     "band_lo": 0.02,
@@ -548,7 +550,7 @@ def run_sweep(files: list[Path], profiles: dict, args) -> None:
 def main():
     ap = argparse.ArgumentParser(description="动量突破策略批量回测与中文 KPI 报告")
     ap.add_argument("input", help="单个 CSV 文件或包含 CSV 的目录，例如 data")
-    ap.add_argument("--profile-config", default="strategy_profiles.json",
+    ap.add_argument("--profile-config", default=str(CONFIG_ROOT / "strategy_profiles.json"),
                     help="按股票代码加载 JSON 参数档案；传空字符串禁用")
     ap.add_argument("--band-lo", type=float, help="覆盖所有标的档案的信号涨幅下限")
     ap.add_argument("--band-hi", type=float, help="覆盖所有标的档案的信号涨幅上限")
@@ -565,9 +567,9 @@ def main():
     ap.add_argument("--both-modes", action="store_true", help="同时运行复利与固定仓位模式")
     ap.add_argument("--no-compound", action="store_true", help="兼容旧命令；固定仓位本来就是默认值")
     ap.add_argument("--close-stop", action="store_true", help="t3/t4 以收盘价而不是盘中低价触发止损")
-    ap.add_argument("--output-dir", default="reports", help="报告输出目录")
+    ap.add_argument("--output-dir", default=str(REPORTS_ROOT), help="报告输出目录")
     ap.add_argument("--sweep", action="store_true", help="执行参数组合扫描并生成完整比较报告")
-    ap.add_argument("--grid-config", default="parameter_grid.json", help="参数扫描范围 JSON 文件")
+    ap.add_argument("--grid-config", default=str(CONFIG_ROOT / "parameter_grid.json"), help="参数扫描范围 JSON 文件")
     args = ap.parse_args()
 
     profiles = load_profiles(args.profile_config or None)

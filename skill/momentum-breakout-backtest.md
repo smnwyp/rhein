@@ -59,13 +59,13 @@ If both later exits are off, the position stays open until the data ends (unless
 
 ## How to run
 
-Engine: `backtest.py` (pandas/numpy only, no network needed).
+Engine: `rhein/backtest.py` (pandas/numpy only, no network needed).
 
 ```bash
-.venv/bin/python backtest.py data.csv
-.venv/bin/python backtest.py data.csv --close-stop
-.venv/bin/python backtest.py data.csv --entry-trend-fast-sma 8 --entry-trend-slow-sma 20
-.venv/bin/python backtest.py data.csv --stop-pct 0.03 --sma 10 --capital 10000 --compound
+.venv/bin/python -m scripts.backtest data.csv
+.venv/bin/python -m scripts.backtest data.csv --close-stop
+.venv/bin/python -m scripts.backtest data.csv --entry-trend-fast-sma 8 --entry-trend-slow-sma 20
+.venv/bin/python -m scripts.backtest data.csv --stop-pct 0.03 --sma 10 --capital 10000 --compound
 ```
 
 Data format: CSV with `Date, Open, High, Low, Close, Volume`, daily, oldest→newest (loader sorts anyway). The sandbox cannot reach Yahoo Finance; either the user uploads a CSV, or she runs locally: `yf.download("^GDAXI", start="2010-01-01").to_csv("dax.csv")`.
