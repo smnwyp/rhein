@@ -843,6 +843,13 @@ with tabs[0]:
                 ]
                 candle_data = chart_data.assign(Date=chart_data["Date"].dt.strftime("%Y-%m-%d"))
                 price_span = float(chart_data["High"].max() - chart_data["Low"].min())
+                marker_bottom = float(chart_data["Low"].min())
+                marker_top = float(chart_data["High"].max())
+                marker_label_price = marker_top + max(price_span * 0.05, marker_top * 0.003)
+                for marker in markers:
+                    marker["Bottom"] = marker_bottom
+                    marker["Top"] = marker_top
+                    marker["LabelPrice"] = marker_label_price
                 label_price = float(chart_data["Low"].min() - max(price_span * 0.06, chart_data["Low"].min() * 0.005))
                 holding_days = ohlc.iloc[signal_position:exit_position + 1]
                 day_labels = [
@@ -890,12 +897,18 @@ with tabs[0]:
                                          {"field": "均线值", "type": "quantitative", "title": "数值", "format": ".2f"},
                                      ],
                                  }},
-                                {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 100}, "encoding": {
+                                {"data": {"values": markers}, "mark": {"type": "rule", "strokeWidth": 1.5, "strokeDash": [5, 4], "opacity": 0.8}, "encoding": {
+                                    "x": chart_x,
+                                    "y": {"field": "Bottom", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                    "y2": {"field": "Top"},
+                                    "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
+                                }},
+                                {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 150, "stroke": "white", "strokeWidth": 1.5}, "encoding": {
                                     "x": chart_x, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "color": {"field": "标记", "type": "nominal", "title": "交易标记"},
                                 }},
-                                {"data": {"values": markers}, "mark": {"type": "text", "dy": -14}, "encoding": {
-                                    "x": chart_x, "y": {"field": "Price", "type": "quantitative", "scale": {"zero": False, "nice": True}},
+                                {"data": {"values": markers}, "mark": {"type": "text", "fontWeight": "bold", "baseline": "bottom"}, "encoding": {
+                                    "x": chart_x, "y": {"field": "LabelPrice", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                     "text": {"field": "标记"}, "color": {"field": "标记", "type": "nominal", "legend": None},
                                 }},
                                 {"data": {"values": day_labels}, "mark": {"type": "text", "fontSize": 10, "baseline": "top", "color": "#4b5563"}, "encoding": {
