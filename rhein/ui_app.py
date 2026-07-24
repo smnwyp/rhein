@@ -22,6 +22,12 @@ from rhein.strategy import (
     parse_percent_ranges,
 )
 from rhein.ui.strategy_text import params_to_text
+from rhein.ui.presets import (
+    available_data_scopes,
+    best_combo_for_record,
+    group_preset_versions,
+    load_group_preset,
+)
 # Streamlit 保留已 import 的模块。策略函数新增参数时，已运行的本地应用会
 # 同时拿到新 UI/metadata 与旧函数对象，造成 "unexpected keyword argument"。
 # 只在检测到函数签名过旧时 reload；日常 rerun 不 reload，避免不必要的状态扰动。
@@ -102,57 +108,6 @@ def strategy_narrative(params: dict) -> str:
             )
         paragraphs.append(forced_text)
     return "\n\n".join(paragraphs)
-
-
-def available_data_scopes() -> dict[str, str]:
-    """返回 UI 可选数据范围及其目录；分组不存在时仍可使用基础数据。"""
-    scopes = {
-        "示例数据（NVDA、TSLA）": str(DATA_ROOT),
-        "全部 Nasdaq 当前股票池": str(DATA_ROOT / "nasdaq_10y"),
-    }
-    if GROUP_ROOT.is_dir():
-        for folder in sorted(path for path in GROUP_ROOT.iterdir() if path.is_dir()):
-            manifest = folder / "group_manifest.csv"
-            try:
-                count = len(pd.read_csv(manifest, usecols=["symbol"]))
-            except (FileNotFoundError, ValueError):
-                count = "?"
-            label = f"{folder.name.replace('_', ' ')}（{count} 个标的）"
-            scopes[label] = str(folder)
-    scopes["自定义路径"] = ""
-    return scopes
-
-
-def load_group_preset(data_path: str) -> dict | None:
-    """读取分组搜索完成后写入的最佳组合；非分组目录返回 None。"""
-    metadata_path = Path(data_path) / "search_metadata.json"
-    if not metadata_path.is_file():
-        return None
-    try:
-        import json
-        return json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-
-
-def group_preset_versions(metadata: dict) -> dict[str, dict]:
-    """Return versioned presets, with a read-only fallback for old metadata."""
-    versions = metadata.get("strategy_versions")
-    if isinstance(versions, dict) and versions:
-        return versions
-    if "best_by_profit_factor" in metadata:
-        return {"v1_legacy": {"label": "v1 历史最佳组合", **metadata}}
-    return {}
-
-
-def best_combo_for_record(record: dict, fallback: dict | None = None) -> dict:
-    """取得任一版本的最佳组合，兼容旧版“盈利因子最高”metadata。"""
-    for source in (record, fallback or {}):
-        for key in ("best_combo", "best_by_median_symbol_return", "best_by_profit_factor"):
-            candidate = source.get(key)
-            if isinstance(candidate, dict) and candidate.get("parameters"):
-                return candidate
-    return {}
 
 
 def load_group_best_overview() -> pd.DataFrame:
