@@ -14,6 +14,7 @@ from .engine.kpis import calculate_kpis, cross_asset_summary
 from .engine.indicators import compute_indicators
 from .engine.eligibility import baseline_is_eligible, validate_run_parameters
 from .engine.exits import find_exit
+from .configuration import load_profiles as _load_profiles, load_sweep_grid as _load_sweep_grid, parse_days
 
 
 DEFAULT_STRATEGY = {
@@ -242,38 +243,8 @@ def markdown_report(results: list[dict], params: dict, generated_at: str) -> str
     return "\n".join(lines) + "\n"
 
 
-def parse_days(value: str) -> tuple[int, ...]:
-    try:
-        days = tuple(int(day.strip()) for day in value.split(",") if day.strip())
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("止损日必须是逗号分隔的整数，例如 3,4") from exc
-    if not days or any(day < 1 for day in days):
-        raise argparse.ArgumentTypeError("止损日必须是正整数，例如 3,4")
-    return days
-
-
 def load_profiles(path: str | None) -> dict:
-    if path is None:
-        return {}
-    profile_path = Path(path)
-    if not profile_path.is_file():
-        raise ValueError(f"找不到参数档案文件：{profile_path}")
-    with profile_path.open(encoding="utf-8") as fh:
-        raw = json.load(fh)
-    if not isinstance(raw, dict):
-        raise ValueError("参数档案必须是一个 JSON 对象")
-    profiles = {}
-    for symbol, values in raw.items():
-        if not isinstance(values, dict):
-            raise ValueError(f"{symbol} 的参数档案必须是 JSON 对象")
-        unknown = set(values) - PROFILE_KEYS
-        if unknown:
-            raise ValueError(f"{symbol} 的未知参数：{', '.join(sorted(unknown))}")
-        profile = dict(values)
-        if "hard_stop_days" in profile:
-            profile["hard_stop_days"] = tuple(profile["hard_stop_days"])
-        profiles[symbol.upper()] = profile
-    return profiles
+    return _load_profiles(path, PROFILE_KEYS)
 
 
 def resolve_strategy(symbol: str, profiles: dict, args) -> dict:
@@ -301,18 +272,8 @@ def resolve_strategy(symbol: str, profiles: dict, args) -> dict:
 
 
 def load_sweep_grid(path: str) -> dict:
-    """读取参数扫描范围；每个标的可有不同的候选值。"""
-    grid_path = Path(path)
-    if not grid_path.is_file():
-        raise ValueError(f"找不到参数扫描文件：{grid_path}")
-    with grid_path.open(encoding="utf-8") as fh:
-        grid = json.load(fh)
-    required = {"band_ranges", "entry_lags", "stop_pcts"}
-    for symbol, values in grid.items():
-        missing = required - set(values)
-        if missing:
-            raise ValueError(f"{symbol} 的扫描范围缺少：{', '.join(sorted(missing))}")
-    return {symbol.upper(): values for symbol, values in grid.items()}
+    """Compatibility wrapper for the historical public import path."""
+    return _load_sweep_grid(path)
 
 
 def sweep_report(rows: list[dict], generated_at: str, mode: str, grid_path: str) -> str:
