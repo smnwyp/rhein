@@ -49,3 +49,19 @@ def test_streamlit_entrypoint_renders() -> None:
     assert len(app.tabs) == 5
     scope = next(widget for widget in app.selectbox if widget.label == "数据范围")
     assert len([item for item in scope.options if "流动性" in str(item)]) == 9
+
+
+def test_group_selection_loads_a_preset_and_runs_current_combo() -> None:
+    """Regression path for the historical group-selection white-screen bug."""
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file("app.py")
+    app.run(timeout=45)
+    scope = next(widget for widget in app.selectbox if widget.label == "数据范围")
+    group = next(str(option) for option in scope.options if str(option).startswith("03 "))
+    scope.select(group).run(timeout=45)
+    assert not app.exception
+    next(button for button in app.button if button.label == "运行当前参数").click().run(timeout=90)
+    assert not app.exception
+    assert any(widget.label == "参数预设版本" for widget in app.selectbox)
+    assert len(app.dataframe) >= 1
