@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from rhein.paths import GROUP_ROOT
-from rhein.strategy import active_condition_ids, parse_ints, parse_percent_ranges
+from rhein.domain import conditions
+from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
 
 
 def test_strategy_parsers_and_condition_ids() -> None:
@@ -11,6 +12,13 @@ def test_strategy_parsers_and_condition_ids() -> None:
         "T0-01", "T0-02", "T0-03", "T0-04", "T0-05", "T0-06", "T0-07", "T0-08", "EN-01",
         "EX-01", "EX-02", "EX-03", "EX-05",
     ]
+
+
+def test_legacy_strategy_import_is_a_domain_compatibility_facade() -> None:
+    """Staged migration must not break callers using ``rhein.strategy``."""
+    assert CONDITION_IDS is conditions.CONDITION_IDS
+    assert active_condition_ids is conditions.active_condition_ids
+    assert parse_ints is conditions.parse_ints
 
 
 def test_nine_mature_group_directories_exist() -> None:
