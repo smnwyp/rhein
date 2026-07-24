@@ -21,7 +21,7 @@ from rhein.strategy import (
     parse_percent_list,
     parse_percent_ranges,
 )
-from rhein.ui.strategy_text import params_to_text, strategy_narrative
+import rhein.ui.strategy_text as _strategy_text
 from rhein.ui.presets import (
     available_data_scopes,
     best_combo_for_record,
@@ -48,6 +48,12 @@ from rhein.ui.controls import (
 # 只在检测到函数签名过旧时 reload；日常 rerun 不 reload，避免不必要的状态扰动。
 if "use_baseline_close_above_fast_sma" not in _backtest.run_backtest.__code__.co_varnames:
     _backtest = importlib.reload(_backtest)
+# 与回测函数同理：Streamlit rerun 会缓存已 import 的模块。若本地服务从
+# 提取 narrative 前启动，旧模块没有该函数，直接 from-import 会白屏。
+if not hasattr(_strategy_text, "strategy_narrative"):
+    _strategy_text = importlib.reload(_strategy_text)
+params_to_text = _strategy_text.params_to_text
+strategy_narrative = _strategy_text.strategy_narrative
 input_files, load_ohlc, run_backtest = _backtest.input_files, _backtest.load_ohlc, _backtest.run_backtest
 
 
