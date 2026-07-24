@@ -35,6 +35,7 @@ from rhein.ui.persistence import (
     saved_combos_path,
 )
 from rhein.ui.summaries import aggregate_scan, style_by_drawdown
+from rhein.ui.result_runner import collect_results
 # Streamlit 保留已 import 的模块。策略函数新增参数时，已运行的本地应用会
 # 同时拿到新 UI/metadata 与旧函数对象，造成 "unexpected keyword argument"。
 # 只在检测到函数签名过旧时 reload；日常 rerun 不 reload，避免不必要的状态扰动。
@@ -278,40 +279,6 @@ def initialize_parameter_controls() -> None:
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
-
-
-def collect_results(paths: list[Path], params: dict, capital: float, compound: bool,
-                    progress_label: str = "回测中") -> tuple[pd.DataFrame, pd.DataFrame]:
-    """每个股票独立运行并整理成逐标的 KPI 与逐笔交易表。"""
-    progress = st.progress(0, text=progress_label)
-    status = st.empty()
-    kpis, trades = [], []
-    errors = []
-    total = len(paths)
-    for index, path in enumerate(paths, start=1):
-        try:
-            trade_df, stats = run_backtest(load_ohlc(path), capital=capital, compound=compound, **params)
-            kpis.append({"标的": path.stem.upper(), "源文件": str(path), **stats})
-            if not trade_df.empty:
-                item = trade_df.copy()
-                item.insert(0, "symbol", path.stem.upper())
-                trades.append(item)
-        except Exception as exc:  # 个别异常文件不阻断整个股票池
-            errors.append({"source": str(path), "error": str(exc)})
-        if index == total or index % max(1, total // 100) == 0:
-            progress.progress(index / total, text=f"{progress_label}：{index}/{total}")
-            status.caption(f"已处理 {index}/{total} 个标的")
-    progress.empty()
-    status.empty()
-    if errors:
-        st.warning(f"{len(errors)} 个文件未能运行。", icon="⚠️")
-        st.dataframe(pd.DataFrame(errors), hide_index=True)
-    kpi_frame = pd.DataFrame(kpis)
-    if not kpi_frame.empty:
-        kpi_frame["cumulative_return_pct"] = (
-            kpi_frame["final_equity"] / kpi_frame["initial_capital"] - 1
-        ) * 100
-    return kpi_frame, (pd.concat(trades, ignore_index=True) if trades else pd.DataFrame())
 
 
 def kpi_formulas() -> None:
@@ -598,7 +565,9 @@ with tabs[0]:
             paths = input_files(Path(data_path))
             if file_limit:
                 paths = paths[:int(file_limit)]
-            kpis, trades = collect_results(paths, parameters, capital, compound)
+            kpis, trades = collect_results(
+                paths, parameters, capital, compound, load_ohlc=load_ohlc, run_backtest=run_backtest,
+            )
             st.session_state["single_kpis"] = kpis
             st.session_state["single_trades"] = trades
             st.session_state["single_params"] = parameters
@@ -806,8 +775,10 @@ with tabs[1]:
                 scan_params = parameters | {"band_lo": lo, "band_hi": hi, "entry_lag": entry,
                                              "hard_stop_days": (entry + 1, entry + 2),
                                              "stop_pct": stop, "sma_n": sma}
-                combo_kpis, _ = collect_results(paths, scan_params, capital, compound,
-                                                 f"组合 {index}/{len(combos)}")
+                combo_kpis, _ = collect_results(
+                    paths, scan_params, capital, compound, load_ohlc=load_ohlc,
+                    run_backtest=run_backtest, progress_label=f"组合 {index}/{len(combos)}",
+                )
                 scan_rows.append(aggregate_scan(combo_kpis, scan_params))
                 combo_progress.progress(index / len(combos), text=f"已完成组合 {index}/{len(combos)}")
             combo_progress.empty()
