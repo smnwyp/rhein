@@ -11,6 +11,7 @@ from .paths import CONFIG_ROOT, REPORTS_ROOT
 from .data.discovery import input_files
 from .data.ohlc import load_ohlc
 from .engine.kpis import calculate_kpis, cross_asset_summary
+from .engine.indicators import compute_indicators
 
 
 DEFAULT_STRATEGY = {
@@ -108,21 +109,19 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
     c, o, lo, v = (df[name].to_numpy() for name in ("Close", "Open", "Low", "Volume"))
     signal_start = pd.Timestamp(signal_start) if signal_start is not None else None
     n = len(df)
-    ret1 = np.full(n, np.nan)
-    ret1[1:] = c[1:] / c[:-1] - 1.0
-    sma = pd.Series(c).rolling(sma_n).mean().to_numpy()
-    entry_fast_sma = pd.Series(c).rolling(entry_trend_fast_sma).mean().to_numpy()
-    entry_slow_sma = pd.Series(c).rolling(entry_trend_slow_sma).mean().to_numpy()
-    baseline_sma20 = pd.Series(c).rolling(20).mean().to_numpy()
-    vol_fast_sma = pd.Series(v).rolling(entry_volume_fast_window).mean().to_numpy()
-    vol_slow_sma = pd.Series(v).rolling(entry_volume_slow_window).mean().to_numpy()
-    delta = pd.Series(c).diff()
-    avg_gain = delta.clip(lower=0).ewm(alpha=1 / baseline_rsi_period, adjust=False,
-                                       min_periods=baseline_rsi_period).mean()
-    avg_loss = (-delta.clip(upper=0)).ewm(alpha=1 / baseline_rsi_period, adjust=False,
-                                           min_periods=baseline_rsi_period).mean()
-    rsi = (100 - 100 / (1 + avg_gain / avg_loss)).to_numpy()
-    sig = pd.Series(ret1).rolling(vol_window).std().shift(1).to_numpy()
+    indicators = compute_indicators(
+        df, sma_n=sma_n, entry_trend_fast_sma=entry_trend_fast_sma,
+        entry_trend_slow_sma=entry_trend_slow_sma,
+        entry_volume_fast_window=entry_volume_fast_window,
+        entry_volume_slow_window=entry_volume_slow_window,
+        baseline_rsi_period=baseline_rsi_period, vol_window=vol_window,
+    )
+    ret1, sma, entry_fast_sma, entry_slow_sma = (
+        indicators[key] for key in ("ret1", "sma", "entry_fast_sma", "entry_slow_sma")
+    )
+    baseline_sma20, vol_fast_sma, vol_slow_sma, rsi, sig = (
+        indicators[key] for key in ("baseline_sma20", "vol_fast_sma", "vol_slow_sma", "rsi", "sig")
+    )
 
     trades, equity = [], capital
     i = 1
