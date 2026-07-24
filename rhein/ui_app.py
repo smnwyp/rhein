@@ -34,6 +34,7 @@ from rhein.ui.persistence import (
     save_combo,
     saved_combos_path,
 )
+from rhein.ui.summaries import aggregate_scan, style_by_drawdown
 # Streamlit 保留已 import 的模块。策略函数新增参数时，已运行的本地应用会
 # 同时拿到新 UI/metadata 与旧函数对象，造成 "unexpected keyword argument"。
 # 只在检测到函数签名过旧时 reload；日常 rerun 不 reload，避免不必要的状态扰动。
@@ -311,51 +312,6 @@ def collect_results(paths: list[Path], params: dict, capital: float, compound: b
             kpi_frame["final_equity"] / kpi_frame["initial_capital"] - 1
         ) * 100
     return kpi_frame, (pd.concat(trades, ignore_index=True) if trades else pd.DataFrame())
-
-
-def aggregate_scan(kpis: pd.DataFrame, params: dict) -> dict:
-    active = kpis[kpis["n_trades"] > 0]
-    total_trades = int(kpis["n_trades"].sum())
-    weighted_win_rate = ((kpis["win_rate_pct"].fillna(0) * kpis["n_trades"]).sum() / total_trades
-                         if total_trades else np.nan)
-    gross_profit = kpis["gross_profit"].fillna(0).sum()
-    gross_loss = kpis["gross_loss"].fillna(0).sum()
-    return {
-        "信号下限": params["band_lo"], "信号上限": params["band_hi"],
-        "入场确认": f"t{params['entry_lag']}",
-        "早期止损日": ",".join(f"t{day}" for day in params["hard_stop_days"]),
-        "止损": params["stop_pct"], "SMA": params["sma_n"],
-        "交易数": total_trades, "有交易标的": len(active),
-        "胜率_%": weighted_win_rate,
-        "平均标的胜率_%": active["win_rate_pct"].mean() if len(active) else np.nan,
-        "中位标的胜率_%": active["win_rate_pct"].median() if len(active) else np.nan,
-        "中位标的累计收益_%": active["cumulative_return_pct"].median() if len(active) else np.nan,
-        "平均标的累计收益_%": active["cumulative_return_pct"].mean() if len(active) else np.nan,
-        "盈利因子": gross_profit / gross_loss if gross_loss > 0 else np.nan,
-        "中位最大回撤_%": active["max_drawdown_pct"].median() if len(active) else np.nan,
-        "回撤25分位数_%": active["max_drawdown_pct"].quantile(.25) if len(active) else np.nan,
-        "平均每标的交易数": kpis["n_trades"].mean(),
-    }
-
-
-def style_by_drawdown(frame: pd.DataFrame, drawdown_column: str,
-                      threshold_pct: float, integer_columns: tuple[str, ...] = ()) -> pd.io.formats.style.Styler:
-    """按回撤阈值整行着色，并统一数值显示格式。"""
-    def style_row(row: pd.Series) -> list[str]:
-        drawdown = row[drawdown_column]
-        if pd.isna(drawdown):
-            color = ""
-        elif drawdown < threshold_pct:
-            color = "color: #d62728"
-        else:
-            color = "color: #198754"
-        return [color for _ in row]
-
-    formatters = {
-        column: "{:,.0f}" if column in integer_columns else "{:,.2f}"
-        for column in frame.select_dtypes(include="number").columns
-    }
-    return frame.style.apply(style_row, axis=1).format(formatters, na_rep="—")
 
 
 def kpi_formulas() -> None:
