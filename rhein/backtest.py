@@ -13,6 +13,7 @@ from .data.ohlc import load_ohlc
 from .engine.kpis import calculate_kpis, cross_asset_summary
 from .engine.indicators import compute_indicators
 from .engine.eligibility import baseline_is_eligible, validate_run_parameters
+from .engine.exits import find_exit
 
 
 DEFAULT_STRATEGY = {
@@ -144,35 +145,10 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
         effective_stop = (stop_pct * sig[entry_idx] / 0.01
                           if vol_scaled and not np.isnan(sig[entry_idx]) else stop_pct)
         stop_level = (1 - effective_stop) * entry_px
-        exit_px = exit_idx = reason = None
-        for j in range(entry_idx + 1, n):
-            day_from_signal = j - t0
-            if use_early_stop and day_from_signal in hard_stop_days:
-                if stop_intraday and lo[j] <= stop_level:
-                    exit_px = min(o[j], stop_level) if o[j] < stop_level else stop_level
-                    exit_idx, reason = j, f"t{day_from_signal} 日内止损"
-                    break
-                if not stop_intraday and c[j] <= stop_level:
-                    exit_px, exit_idx, reason = c[j], j, f"t{day_from_signal} 收盘止损"
-                    break
-            # 强制平仓为持有上限；若同日早期止损已触发，早期止损优先。
-            if use_forced_exit and day_from_signal == forced_exit_day:
-                forced_protection_level = entry_px * (1 - forced_exit_intraday_stop_pct)
-                if use_forced_exit_intraday_protection and lo[j] <= forced_protection_level:
-                    exit_px = min(o[j], forced_protection_level) if o[j] < forced_protection_level else forced_protection_level
-                    exit_idx, reason = j, f"t{forced_exit_day} 强制日日内保护"
-                    break
-                exit_px, exit_idx, reason = c[j], j, f"t{forced_exit_day} 强制平仓"
-                break
-            if day_from_signal >= (max(hard_stop_days) + 1 if use_early_stop else entry_lag + 1):
-                if use_exit_below_entry and c[j] < entry_px:
-                    exit_px, exit_idx, reason = c[j], j, "收盘价低于入场价"
-                    break
-                if use_exit_below_sma and not np.isnan(sma[j]) and c[j] < sma[j]:
-                    exit_px, exit_idx, reason = c[j], j, f"收盘价低于 SMA{sma_n}"
-                    break
-        if exit_px is None:
-            exit_px, exit_idx, reason = c[-1], n - 1, "数据结束强制平仓"
+        exit_px, exit_idx, reason = find_exit(
+            close=c, open_=o, low=lo, sma=sma, sig=sig, t0=t0, entry_idx=entry_idx,
+            entry_px=entry_px, stop_level=stop_level, params=validation_params,
+        )
 
         net_return = exit_px / entry_px - 1 - 2 * cost_bps / 10_000
         stake = equity if compound else capital
