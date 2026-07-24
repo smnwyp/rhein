@@ -770,19 +770,27 @@ with tabs[0]:
         selected_best_combo = best_combo_for_record(selected_preset)
         train_metrics = selected_best_combo.get("train_metrics", selected_best_combo["metrics"])
         test_metrics = selected_best_combo.get("test_metrics", {})
-        summary = pd.DataFrame([{
-            "参数来源": selected_preset.get("optimization_label", "历史最佳组合"),
-            "样本中位收益 (%)": train_metrics.get("median_symbol_cumulative_return_pct"),
-            "测试中位收益 (%)": test_metrics.get("median_symbol_cumulative_return_pct"),
-            "样本盈利因子": train_metrics.get("profit_factor"),
-            "测试盈利因子": test_metrics.get("profit_factor"),
-            "样本交易数": train_metrics.get("trades"),
-            "测试交易数": test_metrics.get("trades"),
-            "样本回撤25分位 (%)": train_metrics.get("q25_individual_max_drawdown_pct"),
-            "测试回撤25分位 (%)": test_metrics.get("q25_individual_max_drawdown_pct"),
-        }])
+        summary = pd.DataFrame([
+            {
+                "数据集": "样本集（前 70%）",
+                "参数来源": selected_preset.get("optimization_label", "历史最佳组合"),
+                "中位标的累计收益 (%)": train_metrics.get("median_symbol_cumulative_return_pct"),
+                "盈利因子": train_metrics.get("profit_factor"),
+                "交易数": train_metrics.get("trades"),
+                "回撤25分位数 (%)": train_metrics.get("q25_individual_max_drawdown_pct"),
+            },
+            {
+                "数据集": "时间外测试集（后 30%）",
+                "参数来源": "固定使用样本集选出的参数",
+                "中位标的累计收益 (%)": test_metrics.get("median_symbol_cumulative_return_pct"),
+                "盈利因子": test_metrics.get("profit_factor"),
+                "交易数": test_metrics.get("trades"),
+                "回撤25分位数 (%)": test_metrics.get("q25_individual_max_drawdown_pct"),
+            },
+        ])
         st.dataframe(summary.style.format({
-            column: "{:,.2f}" for column in summary.columns if column != "参数来源"
+            column: "{:,.0f}" if column == "交易数" else "{:,.2f}"
+            for column in summary.columns if column not in ("数据集", "参数来源")
         }, na_rep="—"), hide_index=True, width="stretch")
         st.caption("样本集为每标的时间序列前 70%，仅样本集用于选参；测试集为后 30%，保留样本期行情仅供技术指标预热。")
     if st.button("运行当前参数", type="primary", width="stretch"):
