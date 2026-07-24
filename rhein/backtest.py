@@ -12,6 +12,7 @@ from .data.discovery import input_files
 from .data.ohlc import load_ohlc
 from .engine.kpis import calculate_kpis, cross_asset_summary
 from .engine.indicators import compute_indicators
+from .engine.eligibility import baseline_is_eligible, validate_run_parameters
 
 
 DEFAULT_STRATEGY = {
@@ -89,23 +90,11 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
         use_baseline_fast_above_slow_sma = use_entry_fast_above_slow_sma
     if use_entry_volume_sma is not None:
         use_baseline_volume_sma = use_entry_volume_sma
-    if (use_baseline_close_above_fast_sma or use_baseline_fast_above_slow_sma) and entry_trend_fast_sma < 2:
-        raise ValueError("基准点快线 SMA 周期至少为 2")
-    if use_baseline_fast_above_slow_sma and entry_trend_slow_sma <= entry_trend_fast_sma:
-        raise ValueError("基准点 SMA 必须满足 2 ≤ 快线周期 < 慢线周期")
-    if use_baseline_volume_sma and (entry_volume_fast_window < 1 or entry_volume_slow_window <= entry_volume_fast_window):
-        raise ValueError("基准点成交量均线必须满足 1 ≤ 短期周期 < 长期周期")
-    if (use_baseline_prior_low or use_baseline_max_rise) and baseline_lookback < 1:
-        raise ValueError("基准点回看窗口至少为 1")
-    if use_baseline_rsi and baseline_rsi_period < 2:
-        raise ValueError("基准点回看窗口至少为 1，RSI 周期至少为 2")
     # Accept the old relative-to-entry argument when loading historical saved combos.
     if forced_exit_days_after_entry is not None:
         forced_exit_day = entry_lag + forced_exit_days_after_entry
-    if use_forced_exit and forced_exit_day <= entry_lag:
-        raise ValueError("强制平仓日必须晚于入场确认日")
-    if use_forced_exit and use_forced_exit_intraday_protection and forced_exit_intraday_stop_pct <= 0:
-        raise ValueError("强制平仓日内保护幅度必须大于 0")
+    validation_params = locals()
+    validate_run_parameters(validation_params)
     c, o, lo, v = (df[name].to_numpy() for name in ("Close", "Open", "Low", "Volume"))
     signal_start = pd.Timestamp(signal_start) if signal_start is not None else None
     n = len(df)
@@ -137,45 +126,14 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
             blo, bhi = band_lo * sig[i] / 0.01, band_hi * sig[i] / 0.01
         else:
             blo, bhi = band_lo, band_hi
-        if use_signal_band and not blo <= ret1[i] <= bhi:
-            i += 1
-            continue
-        needs_baseline_window = use_baseline_prior_low or use_baseline_max_rise
-        if needs_baseline_window and i < baseline_lookback:
-            i += 1
-            continue
-        if use_baseline_rsi and (np.isnan(rsi[i]) or rsi[i] > baseline_rsi_max):
-            i += 1
-            continue
-        if use_baseline_close_above_fast_sma and (np.isnan(entry_fast_sma[i]) or c[i] <= entry_fast_sma[i]):
-            i += 1
-            continue
-        if use_baseline_fast_above_slow_sma and (
-            np.isnan(entry_fast_sma[i]) or np.isnan(entry_slow_sma[i])
-            or entry_fast_sma[i] <= entry_slow_sma[i]
+        eligibility_params = validation_params | {"band_lo": blo, "band_hi": bhi}
+        if not baseline_is_eligible(
+            i, close=c, ret1=ret1, rsi=rsi, entry_fast_sma=entry_fast_sma,
+            entry_slow_sma=entry_slow_sma, baseline_sma20=baseline_sma20,
+            vol_fast_sma=vol_fast_sma, vol_slow_sma=vol_slow_sma, params=eligibility_params,
         ):
             i += 1
             continue
-        if use_baseline_close_above_sma20 and (np.isnan(baseline_sma20[i]) or c[i] <= baseline_sma20[i]):
-            i += 1
-            continue
-        if use_baseline_volume_sma and (
-            np.isnan(vol_fast_sma[i]) or np.isnan(vol_slow_sma[i])
-            or vol_fast_sma[i] <= vol_slow_sma[i]
-        ):
-            i += 1
-            continue
-        # 窗口按字面包含 t0-15 与 t0；t0 不能就是最低点。
-        if needs_baseline_window:
-            baseline_window = c[i - baseline_lookback:i + 1]
-            tmin_rel = int(np.argmin(baseline_window))
-            if use_baseline_prior_low and tmin_rel == len(baseline_window) - 1:
-                i += 1
-                continue
-            tmin_close = baseline_window[tmin_rel]
-            if use_baseline_max_rise and c[i] > tmin_close * (1 + baseline_max_rise):
-                i += 1
-                continue
 
         t0, confirmation_idx = i, i + entry_lag
         if use_entry_close_vs_t0 and c[confirmation_idx] < c[t0]:
