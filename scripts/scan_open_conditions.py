@@ -24,10 +24,11 @@ from scripts.scan_all_group_domains import (
     GROUP_ROOT, SMAS, evaluate, group_labels,
 )
 
-STRATEGY_VERSION = "v6_all_conditions_return_max"
-STRATEGY_LABEL = "v6 全条件开关搜索（收益率优先）"
+STRATEGY_VERSION = "v7_all_conditions_train70_test30"
+STRATEGY_LABEL = "v7 全条件开关搜索（样本 70% / 测试 30%）"
 OPTIMIZATION_TARGET = "median_symbol_cumulative_return_pct"
-OPTIMIZATION_LABEL = "中位标的累计收益率最高（全条件开关搜索）"
+OPTIMIZATION_LABEL = "样本集中位标的累计收益率最高"
+TRAIN_RATIO = 0.70
 SCREENING_PROFILES = 48
 FINALIST_PROFILES = 2
 FLAG_KEYS = (
@@ -130,17 +131,32 @@ def record(params: dict, metrics: dict, stage: str, profile_no: int) -> dict:
     }
 
 
+def split_datasets(datasets: list[tuple[str, pd.DataFrame]]) -> tuple[list[tuple[str, pd.DataFrame]], dict[str, pd.Timestamp]]:
+    """按每个标的自身的时间轴切分，返回训练数据与测试期首日。
+
+    测试回测会使用完整数据和 signal_start，因此可读取训练期历史计算指标，
+    但只接受测试期开始后的 t0，避免任何训练交易进入测试统计。
+    """
+    train, test_starts = [], {}
+    for symbol, df in datasets:
+        split_index = max(1, min(len(df) - 1, int(len(df) * TRAIN_RATIO)))
+        train.append((symbol, df.iloc[:split_index].copy()))
+        test_starts[symbol] = pd.Timestamp(df["Date"].iloc[split_index])
+    return train, test_starts
+
+
 def scan_group(folder_text: str) -> dict:
     folder = Path(folder_text)
     group, vol_label, liquidity_label = group_labels(folder)
     datasets = [(path.stem.upper(), load_ohlc(path)) for path in input_files(folder)]
+    train_datasets, test_starts = split_datasets(datasets)
     baseline = base_params(vol_label, liquidity_label)
 
     screened: list[tuple[dict, dict, int]] = []
     for number, profile in enumerate(condition_profiles(group), start=1):
         params = {**baseline, **profile["flags"], "stop_intraday": profile["stop_intraday"],
                   "forced_exit_day": profile["forced_exit_day"]}
-        screened.append((params, evaluate(datasets, params), number))
+        screened.append((params, evaluate(train_datasets, params), number))
     screen_frame = sort_results(pd.DataFrame([
         record(params, metrics, "条件筛选", number) for params, metrics, number in screened
     ]))
@@ -156,7 +172,7 @@ def scan_group(folder_text: str) -> dict:
             params = {**flags_base, "band_lo": band[0] / 100, "band_hi": band[1] / 100,
                       "entry_lag": entry, "hard_stop_days": (entry + 1, entry + 2),
                       "stop_pct": domain["stops"][1] / 100, "sma_n": 5}
-            stage1.append((params, evaluate(datasets, params)))
+            stage1.append((params, evaluate(train_datasets, params)))
             final_rows.append((params, stage1[-1][1], number))
         stage1_frame = sort_results(pd.DataFrame([
             {"i": index, **metrics} for index, (_, metrics) in enumerate(stage1)
@@ -165,13 +181,14 @@ def scan_group(folder_text: str) -> dict:
             source, _ = stage1[int(candidate.i)]
             for stop, sma in product(domain["stops"], SMAS):
                 params = {**source, "stop_pct": stop / 100, "sma_n": sma}
-                final_rows.append((params, evaluate(datasets, params), number))
+                final_rows.append((params, evaluate(train_datasets, params), number))
 
     final_frame = sort_results(pd.DataFrame([
         record(params, metrics, "完整复验", number) for params, metrics, number in final_rows
     ]))
     # sort_values 保留原始索引，因此可准确取回产生第一名记录的完整参数字典。
     best_params, best_metrics, _ = final_rows[int(final_frame.index[0])]
+    test_metrics = evaluate(datasets, best_params, signal_starts=test_starts)
 
     screen_file = f"search_{STRATEGY_VERSION}_condition_screening.csv"
     final_file = f"search_{STRATEGY_VERSION}_full_results.csv"
@@ -184,11 +201,15 @@ def scan_group(folder_text: str) -> dict:
         "label": STRATEGY_LABEL, "generated_at": datetime.now().isoformat(timespec="seconds"),
         "mode": "固定仓位", "search_method": "48 条件候选筛选 + 前 2 名完整参数复验",
         "optimization_target": OPTIMIZATION_TARGET, "optimization_label": OPTIMIZATION_LABEL,
+        "validation_split": {"method": "每标的按日期顺序切分", "train_ratio": TRAIN_RATIO,
+                             "test_ratio": 1 - TRAIN_RATIO,
+                             "test_indicator_history": "保留训练期历史，仅测试期 t0 计入交易"},
         "condition_search": {"all_atomic_conditions": list(FLAG_KEYS), "screening_profiles": len(screen_frame),
                              "finalist_profiles": FINALIST_PROFILES},
-        "best_combo": {"parameters": best_params, "metrics": best_metrics},
+        "best_combo": {"parameters": best_params, "metrics": best_metrics,
+                       "train_metrics": best_metrics, "test_metrics": test_metrics},
         "result_files": [screen_file, final_file],
-        "risk_note": "收益率目标使用有交易标的累计收益率中位数；回撤为独立标的回撤 25 分位数代理。",
+        "risk_note": "只用样本集选择组合；测试集未参与搜索。收益率为有交易标的累计收益率中位数；回撤为独立标的回撤 25 分位数代理。",
     }
     versions[STRATEGY_VERSION] = version_record
     metadata.update({"generated_at": version_record["generated_at"], "group": group, "symbols": len(datasets),
@@ -196,7 +217,8 @@ def scan_group(folder_text: str) -> dict:
                      "mode": "固定仓位", "search_method": version_record["search_method"],
                      "risk_note": version_record["risk_note"]})
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"group": group, **best_metrics}
+    return {"group": group, **best_metrics,
+            "test_median_symbol_cumulative_return_pct": test_metrics["median_symbol_cumulative_return_pct"]}
 
 
 def main() -> None:
@@ -210,7 +232,8 @@ def main() -> None:
         for future in as_completed(futures):
             summary = future.result()
             summaries.append(summary)
-            print(f"完成：{summary['group']}；中位收益={summary['median_symbol_cumulative_return_pct']:.3f}%", flush=True)
+            print(f"完成：{summary['group']}；样本中位收益={summary['median_symbol_cumulative_return_pct']:.3f}%；"
+                  f"测试中位收益={summary['test_median_symbol_cumulative_return_pct']:.3f}%", flush=True)
     overview = sort_results(pd.DataFrame(summaries))
     report = Path("reports") / f"group_open_condition_search_overview_{STRATEGY_VERSION}.csv"
     overview.to_csv(report, index=False)

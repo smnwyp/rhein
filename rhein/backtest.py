@@ -92,11 +92,12 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                  use_exit_below_sma=True, use_forced_exit=False,
                  forced_exit_day=5, forced_exit_days_after_entry=None,
                  use_forced_exit_intraday_protection=True,
-                 forced_exit_intraday_stop_pct=0.01):
+                 forced_exit_intraday_stop_pct=0.01, signal_start=None):
     """执行动量突破策略。
 
     所有筛选与出场规则均可独立启停。入场确认窗口只使用 tN-1、tN，
-    不使用 tN+1，避免未来函数。
+    不使用 tN+1，避免未来函数。signal_start 可限制只接受该日期（含）
+    之后的 t0；此前行情仍保留，用于测试集的指标预热。
     """
     # Deprecated EN-02/EN-03 keyword names are kept for saved profiles and
     # command-line callers. Their semantics now belong to the t0 baseline.
@@ -124,6 +125,7 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
     if use_forced_exit and use_forced_exit_intraday_protection and forced_exit_intraday_stop_pct <= 0:
         raise ValueError("强制平仓日内保护幅度必须大于 0")
     c, o, lo, v = (df[name].to_numpy() for name in ("Close", "Open", "Low", "Volume"))
+    signal_start = pd.Timestamp(signal_start) if signal_start is not None else None
     n = len(df)
     ret1 = np.full(n, np.nan)
     ret1[1:] = c[1:] / c[:-1] - 1.0
@@ -144,6 +146,10 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
     trades, equity = [], capital
     i = 1
     while i < n - entry_lag:
+        # 测试集保留训练期历史以计算指标，但不允许训练期 t0 产生任何交易。
+        if signal_start is not None and df["Date"].iloc[i] < signal_start:
+            i += 1
+            continue
         if vol_scaled:
             if np.isnan(sig[i]) or sig[i] == 0:
                 i += 1

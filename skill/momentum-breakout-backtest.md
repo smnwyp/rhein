@@ -5,7 +5,7 @@ description: Backtest Chloe's daily-candle momentum breakout strategy ("sharp ri
 
 # Momentum Breakout Backtest
 
-Owner: Chloe. Version: v1.11 (2026-07-23: former EN-04 now evaluates at t0 as T0-08; baseline volume SMA5 > SMA20). Instrument scope: single instrument, one position at a time, long only, daily OHLCV candles. Capital: EUR 10,000. Baseline single-side cost: 0 bps.
+Owner: Chloe. Version: v1.12 (2026-07-24: parameter search uses chronological 70% training / 30% out-of-sample testing). Instrument scope: single instrument, one position at a time, long only, daily OHLCV candles. Capital: EUR 10,000. Baseline single-side cost: 0 bps.
 
 ## Strategy specification (canonical — do not silently reinterpret)
 
@@ -51,6 +51,12 @@ If both later exits are off, the position stays open until the data ends (unless
 **Forced-exit-day intraday protection (EX-05, enabled by default when EX-04 is used):** on the EX-04 day only, if any intraday price touches `entry_price × (1 − protection_pct)` (default `1%`), exit immediately at the protection level; if the day opens below it, exit at the open. With daily OHLC data, `low ≤ protection level` is the observable proxy for that touch. If it does not trigger, EX-04 exits at that day's close. EX-05 is independently switchable.
 
 **Portfolio logic:** signals occurring while a position is open are ignored. After an exit, scanning resumes the next day. Default mode is **fixed stake** (EUR 10k per trade, non-compounding); compounding is an explicit alternative. Multi-instrument results remain independent-account comparisons, not a capital-allocated portfolio backtest.
+
+## Parameter-search validation protocol
+
+For every group search, each symbol is split chronologically at its own 70% date: the earlier 70% is the **training set** and the later 30% is the **test set**. Condition and numeric parameter combinations are ranked only by training-set KPIs. The selected combination is then run once on the test set without re-selection.
+
+Test-set technical indicators may use the earlier history to warm up SMA, RSI and baseline-lookback calculations, but only a signal whose `t0` lies on or after the test-set start date is counted. No training-period trade may enter the test statistics. Reports must show both train and test performance; a strong train result with weak test performance is treated as overfitting evidence.
 
 ## How to run
 

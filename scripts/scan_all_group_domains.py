@@ -60,13 +60,16 @@ def group_labels(folder: Path) -> tuple[str, str, str]:
     return group, vol, liquidity
 
 
-def evaluate(datasets: list[tuple[str, pd.DataFrame]], params: dict) -> dict:
+def evaluate(datasets: list[tuple[str, pd.DataFrame]], params: dict,
+             signal_starts: dict[str, pd.Timestamp] | None = None) -> dict:
     totals = {"trades": 0, "wins": 0, "losses": 0, "return_sum": 0.0, "win_return_sum": 0.0,
               "loss_return_sum": 0.0, "gross_profit": 0.0, "gross_loss": 0.0, "days": 0.0}
     returns_by_symbol, drawdowns, payoff_ratios, win_rates_by_symbol = [], [], [], []
     profitable_symbols = 0
-    for _, df in datasets:
-        trades, stats = run_backtest(df, capital=CAPITAL, compound=COMPOUND, **params)
+    for symbol, df in datasets:
+        signal_start = signal_starts.get(symbol) if signal_starts else None
+        trades, stats = run_backtest(df, capital=CAPITAL, compound=COMPOUND,
+                                     signal_start=signal_start, **params)
         # 与 UI 的“中位标的累计收益”一致：只统计实际产生交易的标的，
         # 不让零交易标的的 0% 收益扭曲收益分布。
         if stats["n_trades"] > 0:
