@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 
 from .paths import CONFIG_ROOT, REPORTS_ROOT
+from .data.discovery import input_files
+from .data.ohlc import load_ohlc
+from .engine.kpis import calculate_kpis, cross_asset_summary
 
 
 DEFAULT_STRATEGY = {
@@ -48,28 +51,6 @@ DEFAULT_STRATEGY = {
     "cost_bps": 0.0,
 }
 PROFILE_KEYS = set(DEFAULT_STRATEGY)
-
-
-def load_ohlc(path: Path) -> pd.DataFrame:
-    """读取普通 CSV 或 yfinance 导出的三行表头 CSV。"""
-    with path.open(encoding="utf-8") as fh:
-        first = fh.readline()
-    if first.startswith("Price,"):
-        df = pd.read_csv(path, skiprows=3, header=None)
-        cols = [c.strip() for c in first.strip().split(",")]
-        cols[0] = "Date"
-        df.columns = cols
-    else:
-        df = pd.read_csv(path)
-    df.columns = [str(c).strip().capitalize() for c in df.columns]
-    need = {"Date", "Open", "High", "Low", "Close", "Volume"}
-    missing = need - set(df.columns)
-    if missing:
-        raise ValueError(f"{path}: CSV 缺少字段：{', '.join(sorted(missing))}")
-    df["Date"] = pd.to_datetime(df["Date"])
-    for column in need - {"Date"}:
-        df[column] = pd.to_numeric(df[column], errors="raise")
-    return df.sort_values("Date").reset_index(drop=True)
 
 
 def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
@@ -257,73 +238,10 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
     return trades_df, calculate_kpis(trades_df, capital, compound)
 
 
-def calculate_kpis(trades: pd.DataFrame, capital: float, compound: bool) -> dict:
-    """计算报告中的 KPI；金额均以输入资本的计价货币表示。"""
-    mode = "复利" if compound else "固定仓位"
-    if trades.empty:
-        return {"mode": mode, "n_trades": 0, "initial_capital": capital,
-                "final_equity": capital, "total_pnl": 0.0}
-    returns = trades["ret_pct"] / 100
-    pnl = trades["pnl_eur"]
-    winners, losers = returns > 0, returns <= 0
-    equity = (capital * (1 + returns).cumprod() if compound
-              else capital + pnl.cumsum())
-    drawdown = equity / equity.cummax() - 1
-    gross_profit = float(pnl[pnl > 0].sum())
-    gross_loss = float(-pnl[pnl <= 0].sum())
-    avg_win = float(returns[winners].mean()) if winners.any() else None
-    avg_loss = float(returns[losers].mean()) if losers.any() else None
-    payoff_ratio = (avg_win / abs(avg_loss) if avg_win is not None and avg_loss not in (None, 0)
-                    else None)
-    profit_factor = gross_profit / gross_loss if gross_loss > 0 else None
-    return {
-        "mode": mode,
-        "n_trades": int(len(trades)),
-        "initial_capital": round(capital, 2),
-        "final_equity": round(float(equity.iloc[-1]), 2),
-        "total_pnl": round(float(equity.iloc[-1] - capital), 2),
-        "win_rate_pct": round(float(winners.mean() * 100), 2),
-        "avg_return_pct": round(float(returns.mean() * 100), 3),
-        "avg_win_pct": round(avg_win * 100, 3) if avg_win is not None else None,
-        "avg_loss_pct": round(avg_loss * 100, 3) if avg_loss is not None else None,
-        "payoff_ratio": round(payoff_ratio, 3) if payoff_ratio is not None else None,
-        "profit_factor": round(profit_factor, 3) if profit_factor is not None else None,
-        "max_drawdown_pct": round(float(drawdown.min() * 100), 2),
-        "avg_days_held": round(float(trades["days_held"].mean()), 2),
-        "max_win_pct": round(float(returns.max() * 100), 3),
-        "max_loss_pct": round(float(returns.min() * 100), 3),
-        "gross_profit": round(gross_profit, 2),
-        "gross_loss": round(gross_loss, 2),
-    }
-
-
 def display(value, suffix="") -> str:
     if value is None:
         return "不适用"
     return f"{value}{suffix}"
-
-
-def cross_asset_summary(results: list[dict], mode: str) -> dict:
-    """将独立标的的交易合并为比较统计，不把它误当成可交易组合。"""
-    selected = [r for r in results if r["stats"]["mode"] == mode]
-    frames = [r["trades"] for r in selected if not r["trades"].empty]
-    initial = sum(r["stats"]["initial_capital"] for r in selected)
-    final = sum(r["stats"]["final_equity"] for r in selected)
-    if not frames:
-        return {"mode": mode, "n_trades": 0, "initial": initial, "final": final,
-                "pnl": final - initial, "win_rate": None, "payoff": None, "pf": None}
-    trades = pd.concat(frames, ignore_index=True)
-    returns, pnl = trades["ret_pct"] / 100, trades["pnl_eur"]
-    winners, losers = returns > 0, returns <= 0
-    avg_win = returns[winners].mean() if winners.any() else None
-    avg_loss = returns[losers].mean() if losers.any() else None
-    gross_profit, gross_loss = pnl[pnl > 0].sum(), -pnl[pnl <= 0].sum()
-    return {"mode": mode, "n_trades": len(trades), "initial": round(initial, 2),
-            "final": round(final, 2), "pnl": round(final - initial, 2),
-            "win_rate": round(float(winners.mean() * 100), 2),
-            "payoff": round(float(avg_win / abs(avg_loss)), 3)
-            if avg_win is not None and avg_loss not in (None, 0) else None,
-            "pf": round(float(gross_profit / gross_loss), 3) if gross_loss > 0 else None}
 
 
 def markdown_report(results: list[dict], params: dict, generated_at: str) -> str:
@@ -389,45 +307,6 @@ def markdown_report(results: list[dict], params: dict, generated_at: str) -> str
               "", "## 解释提醒", "",
               "每个 CSV 均以独立初始资金运行。因此“跨标的合并统计”将独立账户的资金和逐笔交易汇总，只用于观察总体交易分布；它没有按交易日期模拟资金分配或持仓重叠，不能视作一个同时持仓的组合回测。"]
     return "\n".join(lines) + "\n"
-
-
-def input_files(input_path: Path) -> list[Path]:
-    if input_path.is_dir():
-        # 特征组以 manifest 为唯一股票清单。目录中可能有用户保留的副本
-        # （例如 ``AAOI 2.csv``）；它们不能被当成第二个标的重复回测。
-        manifest_path = input_path / "group_manifest.csv"
-        if manifest_path.is_file():
-            try:
-                symbols = pd.read_csv(manifest_path, usecols=["symbol"])["symbol"].dropna()
-                manifest_files = [input_path / f"{str(symbol).upper()}.csv" for symbol in symbols]
-                files = [path for path in manifest_files if path.is_file()]
-                if files:
-                    return files
-            except (OSError, ValueError, KeyError):
-                # 旧目录或损坏 manifest 退回到下方的 OHLC 表头识别逻辑。
-                pass
-        # 目录中可能同时存放 manifest、扫描结果和价格文件；按首行表头识别 OHLC，
-        # 避免将 search_stage*.csv 等结果文件误送入回测。
-        files = []
-        required = {"Date", "Open", "High", "Low", "Close", "Volume"}
-        for path in sorted(input_path.glob("*.csv")):
-            try:
-                with path.open(encoding="utf-8") as fh:
-                    first = fh.readline().strip()
-                if first.startswith("Price,"):
-                    files.append(path)  # yfinance 三行表头；load_ohlc 会进一步校验。
-                    continue
-                columns = {column.strip().capitalize() for column in first.split(",")}
-                if required <= columns:
-                    files.append(path)
-            except OSError:
-                continue
-        if not files:
-            raise ValueError(f"{input_path} 中没有可识别的 OHLC CSV 文件")
-        return files
-    if input_path.is_file():
-        return [input_path]
-    raise ValueError(f"找不到输入路径：{input_path}")
 
 
 def parse_days(value: str) -> tuple[int, ...]:
