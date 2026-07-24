@@ -36,6 +36,13 @@ from rhein.ui.persistence import (
 )
 from rhein.ui.summaries import aggregate_scan, style_by_drawdown
 from rhein.ui.result_runner import collect_results
+from rhein.ui.controls import (
+    apply_parameters_to_controls,
+    initialize_parameter_controls,
+    load_saved_combo_to_controls,
+    reset_group_session_state,
+    switch_to_custom_params,
+)
 # Streamlit 保留已 import 的模块。策略函数新增参数时，已运行的本地应用会
 # 同时拿到新 UI/metadata 与旧函数对象，造成 "unexpected keyword argument"。
 # 只在检测到函数签名过旧时 reload；日常 rerun 不 reload，避免不必要的状态扰动。
@@ -154,57 +161,6 @@ def load_group_best_overview() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def reset_group_session_state() -> None:
-    """切换数据组时清理旧组绑定的结果及可能互相冲突的策略控件。"""
-    group_keys = (
-        "applied_preset_token", "single_kpis", "single_trades", "single_params",
-        "single_mode", "chart_trade_index", "top_symbol_table", "saved_combo_name",
-    )
-    # 新组应从一套有效默认参数开始。否则上一组预设可能出现例如 t4 入场却
-    # 沿用 t3 止损日的矛盾组合，导致参数校验 st.stop()，表面上表现为白屏。
-    parameter_keys = (
-        "band_range", "entry_lag", "stop_days_text", "stop_pct", "close_stop", "sma_n",
-        "cost_bps", "entry_trend_fast_sma", "entry_trend_slow_sma",
-        "entry_volume_fast_window", "entry_volume_slow_window", "baseline_lookback",
-        "baseline_max_rise_pct", "baseline_rsi_period", "baseline_rsi_max",
-        "forced_exit_day", "forced_exit_intraday_stop_pct", *ATOMIC_TOGGLE_KEYS,
-    )
-    for key in (*group_keys, *parameter_keys):
-        st.session_state.pop(key, None)
-
-
-def apply_parameters_to_controls(params: dict, token: str) -> None:
-    """Synchronize a saved/preset parameter dict into sidebar controls before rerun."""
-    params = normalize_parameters(params)
-    st.session_state.update({
-        "band_range": (round(params["band_lo"] * 100, 1), round(params["band_hi"] * 100, 1)),
-        "entry_lag": int(params["entry_lag"]),
-        "stop_days_text": ",".join(map(str, params["hard_stop_days"])),
-        "stop_pct": round(params["stop_pct"] * 100, 1),
-        # 历史 metadata 在 EX-01/EX-04 加入前不含这些字段；读取预设时必须补齐，
-        # 否则切换分组会在侧边栏初始化阶段因 KeyError 而停止渲染。
-        "close_stop": not bool(params.get("stop_intraday", True)), "sma_n": int(params["sma_n"]),
-        "entry_trend_fast_sma": int(params.get("entry_trend_fast_sma", 5)),
-        "entry_trend_slow_sma": int(params.get("entry_trend_slow_sma", 10)),
-        "entry_volume_fast_window": int(params.get("entry_volume_fast_window", 5)),
-        "entry_volume_slow_window": int(params.get("entry_volume_slow_window", 20)),
-        "baseline_lookback": int(params.get("baseline_lookback", 15)),
-        "baseline_max_rise_pct": float(params.get("baseline_max_rise", .20) * 100),
-        "baseline_rsi_period": int(params.get("baseline_rsi_period", 14)),
-        "baseline_rsi_max": int(params.get("baseline_rsi_max", 90)),
-        "cost_bps": float(params["cost_bps"]),
-        "forced_exit_day": int(params.get("forced_exit_day", params.get("entry_lag", 2) + params.get("forced_exit_days_after_entry", 3))),
-        "forced_exit_intraday_stop_pct": float(params.get("forced_exit_intraday_stop_pct", .01) * 100),
-        **{key: bool(params.get(key, DEFAULT_CONDITION_STATES[key])) for key in ATOMIC_TOGGLE_KEYS},
-        "applied_preset_token": token,
-    })
-
-
-def load_saved_combo_to_controls(combo: dict, data_path: str) -> None:
-    apply_parameters_to_controls(combo["parameters"], f"saved:{data_path}:{combo['id']}")
-    st.session_state[f"strategy_version_choice::{Path(data_path).name}"] = "custom"
-
-
 def load_all_group_combinations() -> pd.DataFrame:
     """汇总各成熟分组已经落盘的两阶段搜索结果，不重新执行回测。"""
     column_names = {
@@ -256,29 +212,6 @@ def load_all_group_combinations() -> pd.DataFrame:
 def apply_group_preset(preset: dict, token: str) -> None:
     """在控件创建前，把分组最佳组合写入左侧面板的 session state。"""
     apply_parameters_to_controls(best_combo_for_record(preset)["parameters"], token)
-
-
-def switch_to_custom_params() -> None:
-    """用户手动修改任一策略参数后，避免界面值与实际运行参数脱节。"""
-    data_path = st.session_state.get("active_data_path")
-    if data_path:
-        st.session_state[f"strategy_version_choice::{Path(data_path).name}"] = "custom"
-    st.session_state.pop("applied_preset_token", None)
-
-
-def initialize_parameter_controls() -> None:
-    """只在首次打开时提供控件默认值，避免与 session state 的预设值冲突。"""
-    defaults = {
-        "band_range": (2.0, 2.5), "entry_lag": 2, "stop_days_text": "3,4",
-        "stop_pct": 2.0, "close_stop": False, "sma_n": 5, "cost_bps": 0.0,
-        "entry_trend_fast_sma": 5, "entry_trend_slow_sma": 10,
-        "entry_volume_fast_window": 5, "entry_volume_slow_window": 20,
-        "baseline_lookback": 15, "baseline_max_rise_pct": 20.0,
-        "baseline_rsi_period": 14, "baseline_rsi_max": 90,
-        "forced_exit_day": 5, "forced_exit_intraday_stop_pct": 1.0, **DEFAULT_CONDITION_STATES,
-    }
-    for key, value in defaults.items():
-        st.session_state.setdefault(key, value)
 
 
 def kpi_formulas() -> None:
