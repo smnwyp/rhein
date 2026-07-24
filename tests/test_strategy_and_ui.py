@@ -3,6 +3,7 @@ from __future__ import annotations
 from rhein.paths import GROUP_ROOT
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
+from rhein.ui.strategy_text import params_to_text
 
 
 def test_strategy_parsers_and_condition_ids() -> None:
@@ -19,6 +20,18 @@ def test_legacy_strategy_import_is_a_domain_compatibility_facade() -> None:
     assert CONDITION_IDS is conditions.CONDITION_IDS
     assert active_condition_ids is conditions.active_condition_ids
     assert parse_ints is conditions.parse_ints
+
+
+def test_current_settings_text_keeps_entry_confirmation_wording() -> None:
+    params = {
+        "band_lo": 0.02, "band_hi": 0.025, "baseline_lookback": 15,
+        "baseline_max_rise": 0.20, "baseline_rsi_period": 14,
+        "baseline_rsi_max": 90, "entry_trend_fast_sma": 5,
+        "entry_trend_slow_sma": 10, "entry_volume_fast_window": 5,
+        "entry_volume_slow_window": 20, "hard_stop_days": (3, 4),
+        "stop_pct": 0.02, "sma_n": 5, "cost_bps": 0.0,
+    }
+    assert "tN收盘≥t0" in params_to_text(params)
 
 
 def test_nine_mature_group_directories_exist() -> None:
