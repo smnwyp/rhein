@@ -61,6 +61,18 @@ def test_t0_bullish_candle_condition_rejects_bearish_and_doji_candles() -> None:
     assert not baseline_is_eligible(1, close=[1, 1], open_=[1, 2], **common)
 
 
+def test_current_settings_updates_when_t0_09_is_toggled() -> None:
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file("app.py")
+    app.run(timeout=45)
+    assert "阳线（收盘>开盘）" in app.info[0].value
+    toggle = next(widget for widget in app.get("toggle") if "【T0-09】" in widget.label)
+    toggle.set_value(False).run(timeout=45)
+    assert not app.exception
+    assert "阳线（收盘>开盘）" not in app.info[0].value
+
+
 def test_nine_mature_group_directories_exist() -> None:
     groups = [path for path in GROUP_ROOT.glob("[0-9][0-9]_*") if path.is_dir() and not path.name.startswith("10_")]
     assert len(groups) == 9
