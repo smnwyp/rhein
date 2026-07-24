@@ -65,3 +65,14 @@ def test_group_selection_loads_a_preset_and_runs_current_combo() -> None:
     assert not app.exception
     assert any(widget.label == "参数预设版本" for widget in app.selectbox)
     assert len(app.dataframe) >= 1
+
+
+def test_condition_toggle_reruns_without_breaking_controls() -> None:
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file("app.py")
+    app.run(timeout=45)
+    toggle = next(widget for widget in app.get("toggle") if "【T0-01】" in widget.label)
+    toggle.set_value(False).run(timeout=45)
+    assert not app.exception
+    assert not next(widget for widget in app.get("toggle") if "【T0-01】" in widget.label).value
