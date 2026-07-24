@@ -15,6 +15,7 @@ from .engine.indicators import compute_indicators
 from .engine.eligibility import baseline_is_eligible, validate_run_parameters
 from .engine.exits import find_exit
 from .configuration import load_profiles as _load_profiles, load_sweep_grid as _load_sweep_grid, parse_days
+from .reporting.formatting import display
 
 
 DEFAULT_STRATEGY = {
@@ -170,12 +171,6 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
 
     trades_df = pd.DataFrame(trades)
     return trades_df, calculate_kpis(trades_df, capital, compound)
-
-
-def display(value, suffix="") -> str:
-    if value is None:
-        return "不适用"
-    return f"{value}{suffix}"
 
 
 def markdown_report(results: list[dict], params: dict, generated_at: str) -> str:
