@@ -24,3 +24,8 @@ output/
 .DS_Store
 .idea/
 .vscode/
+
+# Browser end-to-end test dependencies and artifacts
+node_modules/
+cypress/videos/
+cypress/screenshots/

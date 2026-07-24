@@ -1,0 +1,2 @@
+# Development and regression-test dependencies. Runtime dependencies stay in requirements.txt.
+pytest==9.0.2
