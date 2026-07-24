@@ -205,7 +205,9 @@ def load_group_best_overview() -> pd.DataFrame:
         version_id = metadata.get("active_strategy_version") or next(iter(versions), None)
         record = versions.get(version_id, {})
         best = best_combo_for_record(record, metadata)
-        params, metrics = best.get("parameters", {}), best.get("metrics", {})
+        params = best.get("parameters", {})
+        metrics = best.get("train_metrics", best.get("metrics", {}))
+        test_metrics = best.get("test_metrics", {})
         if not params or not metrics:
             continue
         rows.append({
@@ -219,8 +221,12 @@ def load_group_best_overview() -> pd.DataFrame:
             "趋势 SMA 周期": params["sma_n"],
             "交易数": metrics.get("trades"), "合并胜率 (%)": metrics.get("win_rate_pct"),
             "盈利因子": metrics.get("profit_factor"),
-            "中位标的累计收益 (%)": metrics.get("median_symbol_cumulative_return_pct"),
-            "回撤25分位数 (%)": metrics.get("q25_individual_max_drawdown_pct"),
+            "样本中位标的累计收益 (%)": metrics.get("median_symbol_cumulative_return_pct"),
+            "测试中位标的累计收益 (%)": test_metrics.get("median_symbol_cumulative_return_pct"),
+            "样本盈利因子": metrics.get("profit_factor"),
+            "测试盈利因子": test_metrics.get("profit_factor"),
+            "样本回撤25分位数 (%)": metrics.get("q25_individual_max_drawdown_pct"),
+            "测试回撤25分位数 (%)": test_metrics.get("q25_individual_max_drawdown_pct"),
         })
     return pd.DataFrame(rows)
 
@@ -756,21 +762,29 @@ with st.sidebar:
                 st.rerun()
             except ValueError as exc:
                 st.error(str(exc))
-if selected_preset:
-    selected_best_combo = best_combo_for_record(selected_preset)
-    best_metrics = selected_best_combo["metrics"]
-    preset_passes_drawdown = best_metrics["q25_individual_max_drawdown_pct"] >= -max_drawdown_limit
-    st.warning(
-        f"已使用本组预设（{selected_preset.get('optimization_label', '盈利因子最高')}）："
-        f"中位标的累计收益 {best_metrics['median_symbol_cumulative_return_pct']:.2f}%；"
-        f"盈利因子 {best_metrics['profit_factor']:.3f}；"
-        f"独立回撤 25 分位数 {best_metrics['q25_individual_max_drawdown_pct']:.2f}%；"
-        f"{'满足' if preset_passes_drawdown else '不满足'}当前 -{max_drawdown_limit:.1f}% 回撤阈值。"
-    )
 tabs = st.tabs(["单组回测与 Top 100", "参数组合扫描", "全部分组组合", "分组标的分析", "KPI 公式"])
 
 with tabs[0]:
     st.subheader("单组回测")
+    if selected_preset:
+        selected_best_combo = best_combo_for_record(selected_preset)
+        train_metrics = selected_best_combo.get("train_metrics", selected_best_combo["metrics"])
+        test_metrics = selected_best_combo.get("test_metrics", {})
+        summary = pd.DataFrame([{
+            "参数来源": selected_preset.get("optimization_label", "历史最佳组合"),
+            "样本中位收益 (%)": train_metrics.get("median_symbol_cumulative_return_pct"),
+            "测试中位收益 (%)": test_metrics.get("median_symbol_cumulative_return_pct"),
+            "样本盈利因子": train_metrics.get("profit_factor"),
+            "测试盈利因子": test_metrics.get("profit_factor"),
+            "样本交易数": train_metrics.get("trades"),
+            "测试交易数": test_metrics.get("trades"),
+            "样本回撤25分位 (%)": train_metrics.get("q25_individual_max_drawdown_pct"),
+            "测试回撤25分位 (%)": test_metrics.get("q25_individual_max_drawdown_pct"),
+        }])
+        st.dataframe(summary.style.format({
+            column: "{:,.2f}" for column in summary.columns if column != "参数来源"
+        }, na_rep="—"), hide_index=True, width="stretch")
+        st.caption("样本集为每标的时间序列前 70%，仅样本集用于选参；测试集为后 30%，保留样本期行情仅供技术指标预热。")
     if st.button("运行当前参数", type="primary", width="stretch"):
         try:
             paths = input_files(Path(data_path))
@@ -1013,9 +1027,9 @@ with tabs[2]:
     if best_overview.empty:
         st.info("尚未找到各组版本化 metadata。")
     else:
-        st.caption("每组仅展示 metadata 当前激活策略版本中、按该版本优化目标选出的最佳组合。")
+        st.caption("每组仅展示 metadata 当前激活策略版本中、按该版本优化目标选出的最佳组合。v7 同时列出样本集与未参与选参的测试集表现。")
         st.dataframe(
-            style_by_drawdown(best_overview, "回撤25分位数 (%)", -max_drawdown_limit,
+            style_by_drawdown(best_overview, "样本回撤25分位数 (%)", -max_drawdown_limit,
                                integer_columns=("趋势 SMA 周期", "交易数")),
             hide_index=True, width="stretch",
         )
