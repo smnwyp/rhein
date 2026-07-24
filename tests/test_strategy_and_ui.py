@@ -3,7 +3,7 @@ from __future__ import annotations
 from rhein.paths import GROUP_ROOT
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
-from rhein.ui.strategy_text import params_to_text
+from rhein.ui.strategy_text import params_to_text, strategy_narrative
 
 
 def test_strategy_parsers_and_condition_ids() -> None:
@@ -32,6 +32,20 @@ def test_current_settings_text_keeps_entry_confirmation_wording() -> None:
         "stop_pct": 0.02, "sma_n": 5, "cost_bps": 0.0,
     }
     assert "tN收盘≥t0" in params_to_text(params)
+
+
+def test_current_settings_describes_the_actual_early_stop_execution_price() -> None:
+    params = {
+        "band_lo": .02, "band_hi": .025, "baseline_lookback": 15,
+        "baseline_max_rise": .20, "baseline_rsi_period": 14,
+        "baseline_rsi_max": 90, "entry_trend_fast_sma": 5,
+        "entry_trend_slow_sma": 10, "entry_volume_fast_window": 5,
+        "entry_volume_slow_window": 20, "entry_lag": 2, "hard_stop_days": (3, 4),
+        "stop_pct": .02, "sma_n": 5, "cost_bps": 0, "stop_intraday": True,
+    }
+    assert "盘中任意即时价格" in strategy_narrative(params)
+    params["stop_intraday"] = False
+    assert "收盘价触及" in strategy_narrative(params)
 
 
 def test_nine_mature_group_directories_exist() -> None:

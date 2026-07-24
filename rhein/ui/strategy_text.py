@@ -56,7 +56,15 @@ def strategy_narrative(params: dict) -> str:
     if on("use_entry_close_vs_t0"): entry.append("tN收盘不低于t0")
     paragraphs = [f"基准点：t0 需满足“{'、'.join(t0) if t0 else '无基准筛选'}”。",
                   f"入场点：在 t{params['entry_lag']}，需满足“{'、'.join(entry) if entry else '无入场确认筛选'}”后按收盘价入场。"]
-    if on("use_early_stop"): paragraphs.append(f"早期出场：在 {stop_days}，收盘价触及 {params['stop_pct']:.1%} 止损幅度即按收盘价出场。")
+    if on("use_early_stop"):
+        if params.get("stop_intraday", True):
+            paragraphs.append(
+                f"早期出场：在 {stop_days}，盘中任意即时价格触及 {params['stop_pct']:.1%} 止损幅度即出场。"
+            )
+        else:
+            paragraphs.append(
+                f"早期出场：在 {stop_days}，收盘价触及 {params['stop_pct']:.1%} 止损幅度即按收盘价出场。"
+            )
     exits = (["跌破入场价"] if on("use_exit_below_entry") else []) + ([f"跌破SMA{params['sma_n']}"] if on("use_exit_below_sma") else [])
     forced_exit_day = params.get("forced_exit_day", 5)
     if exits:
