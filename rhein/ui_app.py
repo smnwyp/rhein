@@ -28,6 +28,12 @@ from rhein.ui.presets import (
     group_preset_versions,
     load_group_preset,
 )
+from rhein.ui.persistence import (
+    load_saved_combos,
+    normalize_parameters,
+    save_combo,
+    saved_combos_path,
+)
 # Streamlit 保留已 import 的模块。策略函数新增参数时，已运行的本地应用会
 # 同时拿到新 UI/metadata 与旧函数对象，造成 "unexpected keyword argument"。
 # 只在检测到函数签名过旧时 reload；日常 rerun 不 reload，避免不必要的状态扰动。
@@ -146,66 +152,6 @@ def load_group_best_overview() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def saved_combos_path(data_path: str) -> Path | None:
-    """Saved combos are intentionally scoped to a concrete feature-group folder."""
-    folder = Path(data_path)
-    return folder / "saved_combos.json" if (folder / "group_manifest.csv").is_file() else None
-
-
-def load_saved_combos(data_path: str) -> list[dict]:
-    path = saved_combos_path(data_path)
-    if path is None or not path.is_file():
-        return []
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        combos = payload.get("combos", [])
-        return combos if isinstance(combos, list) else []
-    except (OSError, ValueError):
-        return []
-
-
-def normalize_parameters(raw_params: dict) -> dict:
-    """补齐旧搜索 metadata 中不存在的策略字段。
-
-    搜索结果会长期保存在各分组目录，而策略条件会持续新增。这里是唯一的
-    向后兼容边界：无论预设来自历史 metadata 还是用户保存的组合，进入 UI 前
-    都先变成当前版本可运行的完整参数，不能让缺一个新字段导致整个页面停止。
-    """
-    params = dict(raw_params)
-    # EN-02/EN-03 were renamed to T0-05/T0-06 and now evaluate at t0.
-    # Historical presets retain their intent while no longer passing obsolete
-    # keyword arguments into the engine.
-    legacy_baseline_flags = {
-        "use_entry_close_above_fast_sma": "use_baseline_close_above_fast_sma",
-        "use_entry_fast_above_slow_sma": "use_baseline_fast_above_slow_sma",
-        "use_entry_volume_sma": "use_baseline_volume_sma",
-    }
-    for old_key, new_key in legacy_baseline_flags.items():
-        if new_key not in params and old_key in params:
-            params[new_key] = params[old_key]
-        params.pop(old_key, None)
-    defaults = {
-        "band_lo": .02, "band_hi": .025, "entry_lag": 2,
-        "hard_stop_days": (3, 4), "stop_pct": .02, "sma_n": 5,
-        "cost_bps": 0.0, "stop_intraday": True,
-        "entry_trend_fast_sma": 5, "entry_trend_slow_sma": 10,
-        "entry_volume_fast_window": 5, "entry_volume_slow_window": 20,
-        "baseline_lookback": 15, "baseline_max_rise": .20,
-        "baseline_rsi_period": 14, "baseline_rsi_max": 90,
-        "forced_exit_intraday_stop_pct": .01,
-    }
-    for key, value in defaults.items():
-        params.setdefault(key, value)
-    params["hard_stop_days"] = tuple(params["hard_stop_days"])
-    params.setdefault(
-        "forced_exit_day",
-        params["entry_lag"] + params.get("forced_exit_days_after_entry", 3),
-    )
-    for toggle_key, default in DEFAULT_CONDITION_STATES.items():
-        params.setdefault(toggle_key, default)
-    return params
-
-
 def reset_group_session_state() -> None:
     """切换数据组时清理旧组绑定的结果及可能互相冲突的策略控件。"""
     group_keys = (
@@ -255,25 +201,6 @@ def apply_parameters_to_controls(params: dict, token: str) -> None:
 def load_saved_combo_to_controls(combo: dict, data_path: str) -> None:
     apply_parameters_to_controls(combo["parameters"], f"saved:{data_path}:{combo['id']}")
     st.session_state[f"strategy_version_choice::{Path(data_path).name}"] = "custom"
-
-
-def save_combo(data_path: str, name: str, params: dict) -> None:
-    path = saved_combos_path(data_path)
-    if path is None:
-        raise ValueError("只有特征组目录可以保存组合。")
-    clean_name = name.strip()
-    if not clean_name:
-        raise ValueError("请为组合填写名称。")
-    combos = load_saved_combos(data_path)
-    if any(item.get("name", "").casefold() == clean_name.casefold() for item in combos):
-        raise ValueError("该组内已有同名组合；请使用不同名称。")
-    serializable_params = {key: list(value) if isinstance(value, tuple) else value for key, value in params.items()}
-    now = datetime.now().isoformat(timespec="seconds")
-    combos.append({"id": f"manual_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}", "name": clean_name,
-                   "created_at": now, "active_condition_ids": active_condition_ids(params),
-                   "parameters": serializable_params})
-    path.write_text(json.dumps({"schema_version": 1, "group_folder": Path(data_path).name,
-                                "updated_at": now, "combos": combos}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def load_all_group_combinations() -> pd.DataFrame:
