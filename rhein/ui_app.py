@@ -308,6 +308,11 @@ with st.sidebar:
     entry_volume_slow_window = st.number_input("基准点成交量长期均线周期", min_value=2, max_value=250,
                                                 key="entry_volume_slow_window", on_change=switch_to_custom_params,
                                                 disabled=not use_baseline_volume_sma)
+    use_baseline_bullish_candle = st.toggle(
+        "【T0-09】启用：t0 必须为阳线（收盘价高于开盘价）",
+        key="use_baseline_bullish_candle", on_change=switch_to_custom_params,
+        help="Close 必须严格大于 Open；十字星（收盘价等于开盘价）与阴线均不通过。",
+    )
     st.subheader("入场点（tN）")
     entry_lag = st.selectbox("入场确认日", [1, 2, 3, 4, 5],
                              format_func=lambda value: f"t{value}", key="entry_lag",
@@ -383,6 +388,7 @@ try:
             "use_baseline_fast_above_slow_sma": use_baseline_fast_above_slow_sma,
             "use_baseline_close_above_sma20": use_baseline_close_above_sma20,
             "use_baseline_volume_sma": use_baseline_volume_sma,
+            "use_baseline_bullish_candle": use_baseline_bullish_candle,
             "use_entry_close_vs_t0": use_entry_close_vs_t0,
             "use_early_stop": use_early_stop,
             "use_exit_below_entry": use_exit_below_entry,

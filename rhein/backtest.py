@@ -42,6 +42,7 @@ DEFAULT_STRATEGY = {
     "use_baseline_fast_above_slow_sma": True,
     "use_baseline_close_above_sma20": True,
     "use_baseline_volume_sma": True,
+    "use_baseline_bullish_candle": True,
     "use_entry_close_vs_t0": True,
     "use_early_stop": True,
     "use_exit_below_entry": True,
@@ -71,7 +72,8 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                  use_baseline_close_above_fast_sma=True,
                  use_baseline_fast_above_slow_sma=True,
                  use_baseline_close_above_sma20=True,
-                 use_baseline_volume_sma=True, use_entry_close_vs_t0=True,
+                 use_baseline_volume_sma=True, use_baseline_bullish_candle=True,
+                 use_entry_close_vs_t0=True,
                  use_entry_close_above_fast_sma=None, use_entry_fast_above_slow_sma=None,
                  use_entry_volume_sma=None,
                  use_early_stop=True, use_exit_below_entry=True,
@@ -131,7 +133,7 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
             blo, bhi = band_lo, band_hi
         eligibility_params = validation_params | {"band_lo": blo, "band_hi": bhi}
         if not baseline_is_eligible(
-            i, close=c, ret1=ret1, rsi=rsi, entry_fast_sma=entry_fast_sma,
+            i, close=c, open_=o, ret1=ret1, rsi=rsi, entry_fast_sma=entry_fast_sma,
             entry_slow_sma=entry_slow_sma, baseline_sma20=baseline_sma20,
             vol_fast_sma=vol_fast_sma, vol_slow_sma=vol_slow_sma, params=eligibility_params,
         ):

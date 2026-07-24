@@ -24,7 +24,7 @@ def validate_run_parameters(params: dict) -> int:
     return forced_exit_day
 
 
-def baseline_is_eligible(i: int, *, close, ret1, rsi, entry_fast_sma, entry_slow_sma,
+def baseline_is_eligible(i: int, *, close, open_, ret1, rsi, entry_fast_sma, entry_slow_sma,
                          baseline_sma20, vol_fast_sma, vol_slow_sma, params: dict) -> bool:
     """Return whether a candidate date satisfies every enabled t0 condition."""
     if params["use_signal_band"] and not params["band_lo"] <= ret1[i] <= params["band_hi"]:
@@ -41,6 +41,9 @@ def baseline_is_eligible(i: int, *, close, ret1, rsi, entry_fast_sma, entry_slow
     if params["use_baseline_close_above_sma20"] and (np.isnan(baseline_sma20[i]) or close[i] <= baseline_sma20[i]):
         return False
     if params["use_baseline_volume_sma"] and (np.isnan(vol_fast_sma[i]) or np.isnan(vol_slow_sma[i]) or vol_fast_sma[i] <= vol_slow_sma[i]):
+        return False
+    # t0 must be a bullish candle. A doji (Close == Open) is deliberately not bullish.
+    if params["use_baseline_bullish_candle"] and close[i] <= open_[i]:
         return False
     if needs_window:
         window = close[i - params["baseline_lookback"]:i + 1]

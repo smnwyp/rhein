@@ -35,7 +35,7 @@ FLAG_KEYS = (
     "use_signal_band", "use_baseline_prior_low", "use_baseline_max_rise",
     "use_baseline_rsi", "use_baseline_close_above_fast_sma",
     "use_baseline_fast_above_slow_sma", "use_baseline_close_above_sma20",
-    "use_baseline_volume_sma", "use_entry_close_vs_t0", "use_early_stop",
+    "use_baseline_volume_sma", "use_baseline_bullish_candle", "use_entry_close_vs_t0", "use_early_stop",
     "use_exit_below_entry", "use_exit_below_sma", "use_forced_exit",
     "use_forced_exit_intraday_protection",
 )
@@ -91,6 +91,7 @@ def condition_profiles(group_name: str) -> list[dict]:
         "use_baseline_close_above_fast_sma": True,
         "use_baseline_fast_above_slow_sma": True,
         "use_baseline_close_above_sma20": True, "use_baseline_volume_sma": True,
+        "use_baseline_bullish_candle": True,
         "use_entry_close_vs_t0": True, "use_early_stop": True,
         "use_exit_below_entry": True, "use_exit_below_sma": True,
         "use_forced_exit": False, "use_forced_exit_intraday_protection": False,

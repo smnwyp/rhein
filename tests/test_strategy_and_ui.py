@@ -4,13 +4,14 @@ from rhein.paths import GROUP_ROOT
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
 from rhein.ui.strategy_text import params_to_text, strategy_narrative
+from rhein.engine.eligibility import baseline_is_eligible
 
 
 def test_strategy_parsers_and_condition_ids() -> None:
     assert parse_ints("3, 4") == (3, 4)
     assert parse_percent_ranges("2-2.5") == [(0.02, 0.025)]
     assert active_condition_ids({"use_signal_band": True, "use_forced_exit": False}) == [
-        "T0-01", "T0-02", "T0-03", "T0-04", "T0-05", "T0-06", "T0-07", "T0-08", "EN-01",
+        "T0-01", "T0-02", "T0-03", "T0-04", "T0-05", "T0-06", "T0-07", "T0-08", "T0-09", "EN-01",
         "EX-01", "EX-02", "EX-03", "EX-05",
     ]
 
@@ -46,6 +47,18 @@ def test_current_settings_describes_the_actual_early_stop_execution_price() -> N
     assert "盘中任意即时价格" in strategy_narrative(params)
     params["stop_intraday"] = False
     assert "收盘价触及" in strategy_narrative(params)
+
+
+def test_t0_bullish_candle_condition_rejects_bearish_and_doji_candles() -> None:
+    params = {key: False for key in conditions.ATOMIC_TOGGLE_KEYS}
+    params.update({"use_baseline_bullish_candle": True, "baseline_lookback": 1,
+                   "band_lo": .02, "band_hi": .025, "baseline_rsi_max": 90,
+                   "baseline_max_rise": .20})
+    common = dict(ret1=[0, 0], rsi=[0, 0], entry_fast_sma=[0, 0], entry_slow_sma=[0, 0],
+                  baseline_sma20=[0, 0], vol_fast_sma=[0, 0], vol_slow_sma=[0, 0], params=params)
+    assert baseline_is_eligible(1, close=[1, 2], open_=[1, 1], **common)
+    assert not baseline_is_eligible(1, close=[1, 1], open_=[1, 1], **common)
+    assert not baseline_is_eligible(1, close=[1, 1], open_=[1, 2], **common)
 
 
 def test_nine_mature_group_directories_exist() -> None:

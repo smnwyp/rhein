@@ -29,11 +29,11 @@ ENTRY_TREND_FAST_SMA, ENTRY_TREND_SLOW_SMA = 5, 10
 ENTRY_VOLUME_FAST_WINDOW, ENTRY_VOLUME_SLOW_WINDOW = 5, 20
 BASELINE_LOOKBACK, BASELINE_MAX_RISE, BASELINE_RSI_PERIOD, BASELINE_RSI_MAX = 15, .20, 14, 90
 STRATEGY_VERSION = "v5_t0_trend_volume_return_max"
-STRATEGY_LABEL = "v5 收益率优先：T0-01/02/03/05/06/07/08、EN-01、EX-01～EX-03"
+STRATEGY_LABEL = "v5 收益率优先：T0-01/02/03/05/06/07/08/09、EN-01、EX-01～EX-03"
 OPTIMIZATION_TARGET = "median_symbol_cumulative_return_pct"
 OPTIMIZATION_LABEL = "中位标的累计收益率最高"
 ACTIVE_CONDITION_IDS = (
-    "T0-01", "T0-02", "T0-03", "T0-05", "T0-06", "T0-07", "T0-08",
+    "T0-01", "T0-02", "T0-03", "T0-05", "T0-06", "T0-07", "T0-08", "T0-09",
     "EN-01", "EX-01", "EX-02", "EX-03",
 )
 ATOMIC_FLAGS = {
@@ -45,6 +45,7 @@ ATOMIC_FLAGS = {
     "use_baseline_fast_above_slow_sma": True,
     "use_baseline_close_above_sma20": True,
     "use_baseline_volume_sma": True,
+    "use_baseline_bullish_candle": True,
     "use_entry_close_vs_t0": True,
     "use_early_stop": True,
     "use_exit_below_entry": True,

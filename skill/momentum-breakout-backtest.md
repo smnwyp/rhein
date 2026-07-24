@@ -22,6 +22,7 @@ Owner: Chloe. Version: v1.12 (2026-07-24: parameter search uses chronological 70
 | T0-06 | t0 fast SMA is above slow SMA |
 | T0-07 | t0 close is above SMA20 |
 | T0-08 | t0 volume short SMA is above volume long SMA |
+| T0-09 | t0 is a bullish candle: close is strictly above open |
 | EX-01 | Early hard stop |
 | EX-02 | Later close below entry-price exit |
 | EX-03 | Later close below exit-SMA exit |
@@ -30,7 +31,7 @@ Owner: Chloe. Version: v1.12 (2026-07-24: parameter search uses chronological 70
 
 These identifiers are stable labels for the UI, notes and experiments; the corresponding engine flags remain `use_*` parameters.
 
-**Signal and baseline (t0):** the following are eight independent conditions, all enabled by default: (1) `close[t0] / close[t0-1] − 1` is within [2.0%, 2.5%] (band, not open-ended); (2) in the inclusive window `t0-15 … t0`, the lowest close (`t-min`) must not be t0; (3) `close[t0] ≤ 1.20 × close[t-min]`; (4) Wilder RSI(14) at t0 is ≤90; (5) `close[t0] > SMA_fast[t0]`; (6) `SMA_fast[t0] > SMA_slow[t0]`; (7) `close[t0] > SMA20[t0]`; and (8) `VolumeSMA_short[t0] > VolumeSMA_long[t0]`. Any disabled condition is not evaluated for eligibility. Lookback, extension, RSI period and RSI ceiling remain configurable; price `SMA_fast = 5`, `SMA_slow = 10`, and volume `SMA_short = 5`, `SMA_long = 20` by default.
+**Signal and baseline (t0):** the following are nine independent conditions, all enabled by default: (1) `close[t0] / close[t0-1] − 1` is within [2.0%, 2.5%] (band, not open-ended); (2) in the inclusive window `t0-15 … t0`, the lowest close (`t-min`) must not be t0; (3) `close[t0] ≤ 1.20 × close[t-min]`; (4) Wilder RSI(14) at t0 is ≤90; (5) `close[t0] > SMA_fast[t0]`; (6) `SMA_fast[t0] > SMA_slow[t0]`; (7) `close[t0] > SMA20[t0]`; (8) `VolumeSMA_short[t0] > VolumeSMA_long[t0]`; and (9) `close[t0] > open[t0]`. A doji (`close == open`) is not bullish and fails T0-09. Any disabled condition is not evaluated for eligibility. Lookback, extension, RSI period and RSI ceiling remain configurable; price `SMA_fast = 5`, `SMA_slow = 10`, and volume `SMA_short = 5`, `SMA_long = 20` by default.
 
 **Entry confirmation (default t2):** `entry_lag` trading days after t0. The base condition `close[tN] >= close[t0]` is independently switchable and enabled by default.
 

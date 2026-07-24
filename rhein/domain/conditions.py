@@ -4,7 +4,7 @@ from __future__ import annotations
 ATOMIC_TOGGLE_KEYS = (
     "use_signal_band", "use_baseline_prior_low", "use_baseline_max_rise", "use_baseline_rsi",
     "use_baseline_close_above_fast_sma", "use_baseline_fast_above_slow_sma",
-    "use_baseline_close_above_sma20", "use_baseline_volume_sma",
+    "use_baseline_close_above_sma20", "use_baseline_volume_sma", "use_baseline_bullish_candle",
     "use_entry_close_vs_t0", "use_early_stop", "use_exit_below_entry", "use_exit_below_sma",
     "use_forced_exit", "use_forced_exit_intraday_protection",
 )
@@ -17,6 +17,7 @@ CONDITION_IDS = {
     "use_baseline_fast_above_slow_sma": "T0-06",
     "use_baseline_close_above_sma20": "T0-07",
     "use_baseline_volume_sma": "T0-08",
+    "use_baseline_bullish_candle": "T0-09",
     "use_entry_close_vs_t0": "EN-01",
     "use_early_stop": "EX-01", "use_exit_below_entry": "EX-02",
     "use_exit_below_sma": "EX-03", "use_forced_exit": "EX-04",
@@ -66,6 +67,7 @@ def params_to_text(params: dict) -> str:
     if on("use_baseline_fast_above_slow_sma"): rules.append(f"t0 SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}")
     if on("use_baseline_close_above_sma20"): rules.append("t0收盘>SMA20")
     if on("use_baseline_volume_sma"): rules.append(f"t0量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}")
+    if on("use_baseline_bullish_candle"): rules.append("t0为阳线（收盘>开盘）")
     entry = []
     if on("use_entry_close_vs_t0"): entry.append("tN收盘≥t0")
     if entry: rules.append("tN-1/tN任一天：" + "且".join(entry))
@@ -97,6 +99,7 @@ def strategy_narrative(params: dict) -> str:
     if on("use_baseline_fast_above_slow_sma"): t0.append(f"SMA{params['entry_trend_fast_sma']}>SMA{params['entry_trend_slow_sma']}")
     if on("use_baseline_close_above_sma20"): t0.append("收盘>SMA20")
     if on("use_baseline_volume_sma"): t0.append(f"量SMA{params['entry_volume_fast_window']}>量SMA{params['entry_volume_slow_window']}")
+    if on("use_baseline_bullish_candle"): t0.append("阳线（收盘>开盘）")
     paragraphs = [
         f"基准点：t0 需满足“{'、'.join(t0) if t0 else '无基准筛选'}”。",
         f"入场点：在 t{params['entry_lag']}，需满足“{'、'.join(entry) if entry else '无入场确认筛选'}”后按收盘价入场。",
