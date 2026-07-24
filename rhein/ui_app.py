@@ -46,7 +46,10 @@ from rhein.ui.controls import (
 # Streamlit 保留已 import 的模块。策略函数新增参数时，已运行的本地应用会
 # 同时拿到新 UI/metadata 与旧函数对象，造成 "unexpected keyword argument"。
 # 只在检测到函数签名过旧时 reload；日常 rerun 不 reload，避免不必要的状态扰动。
-if "use_baseline_close_above_fast_sma" not in _backtest.run_backtest.__code__.co_varnames:
+if (
+    "use_baseline_close_above_fast_sma" not in _backtest.run_backtest.__code__.co_varnames
+    or "use_baseline_bullish_candle" not in _backtest.run_backtest.__code__.co_varnames
+):
     _backtest = importlib.reload(_backtest)
 # 当前设置文案是无状态的纯函数。每次 rerun 重载它，确保长时间运行的本地
 # Streamlit 服务不会继续使用旧条件集合（例如新增 T0-09 后漏显示）。

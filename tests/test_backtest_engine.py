@@ -17,6 +17,12 @@ def test_bundled_data_loads_and_runs() -> None:
     assert stats["final_equity"] > 0
 
 
+def test_runner_accepts_the_t0_bullish_candle_toggle() -> None:
+    frame = load_ohlc(DATA_ROOT / "nvda.csv")
+    _, stats = run_backtest(frame, use_baseline_bullish_candle=False)
+    assert stats["n_trades"] >= 0
+
+
 def test_group_directory_excludes_metadata_csvs() -> None:
     group = GROUP_ROOT / "03_高流动性_高波动"
     files = input_files(group)
