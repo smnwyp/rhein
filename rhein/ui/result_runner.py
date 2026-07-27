@@ -15,8 +15,16 @@ def collect_results(paths: list[Path], params: dict, capital: float, compound: b
     total = len(paths)
     for index, path in enumerate(paths, start=1):
         try:
-            trade_df, stats = run_backtest(load_ohlc(path), capital=capital, compound=compound, **params)
-            kpis.append({"标的": path.stem.upper(), "源文件": str(path), **stats})
+            ohlc = load_ohlc(path)
+            trade_df, stats = run_backtest(ohlc, capital=capital, compound=compound, **params)
+            calendar_days = max(int((ohlc["Date"].iloc[-1] - ohlc["Date"].iloc[0]).days), 1)
+            equity_multiple = stats["final_equity"] / stats["initial_capital"]
+            annualized_return_pct = (equity_multiple ** (365.25 / calendar_days) - 1) * 100
+            kpis.append({
+                "标的": path.stem.upper(), "源文件": str(path),
+                "数据覆盖天数": calendar_days, "annualized_return_pct": annualized_return_pct,
+                **stats,
+            })
             if not trade_df.empty:
                 item = trade_df.copy()
                 item.insert(0, "symbol", path.stem.upper())
