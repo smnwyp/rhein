@@ -23,6 +23,7 @@ from rhein.strategy import (
 )
 import rhein.ui.strategy_text as _strategy_text
 import rhein.ui.result_runner as _result_runner
+import rhein.ui.gauges as _gauges
 from rhein.ui.presets import (
     available_data_scopes,
     best_combo_for_record,
@@ -36,7 +37,6 @@ from rhein.ui.persistence import (
     saved_combos_path,
 )
 from rhein.ui.summaries import aggregate_scan, style_by_drawdown
-from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.controls import (
     apply_parameters_to_controls,
     initialize_parameter_controls,
@@ -56,9 +56,11 @@ if (
 # Streamlit 服务不会继续使用旧条件集合（例如新增 T0-09 后漏显示）。
 _strategy_text = importlib.reload(_strategy_text)
 _result_runner = importlib.reload(_result_runner)
+_gauges = importlib.reload(_gauges)
 params_to_text = _strategy_text.params_to_text
 strategy_narrative = _strategy_text.strategy_narrative
 collect_results = _result_runner.collect_results
+kpi_gauge_html = _gauges.kpi_gauge_html
 input_files, load_ohlc, run_backtest = _backtest.input_files, _backtest.load_ohlc, _backtest.run_backtest
 
 
