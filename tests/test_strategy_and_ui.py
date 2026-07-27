@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from rhein.paths import GROUP_ROOT
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
@@ -121,3 +123,22 @@ def test_condition_toggle_reruns_without_breaking_controls() -> None:
     toggle.set_value(False).run(timeout=45)
     assert not app.exception
     assert not next(widget for widget in app.get("toggle") if "【T0-01】" in widget.label).value
+
+
+def test_old_cached_kpis_remain_displayable_after_risk_metrics_are_added() -> None:
+    """A session created before Sharpe/annualized fields must not white-screen."""
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file("app.py")
+    app.run(timeout=45)
+    app.session_state["single_kpis"] = pd.DataFrame([{
+        "标的": "TEST", "n_trades": 1, "gross_profit": 1.0, "gross_loss": 1.0,
+        "cumulative_return_pct": 1.0, "max_drawdown_pct": -1.0, "win_rate_pct": 50.0,
+        "profit_factor": 1.0, "payoff_ratio": 1.0, "avg_return_pct": 1.0,
+        "avg_days_held": 1.0,
+    }])
+    app.session_state["single_mode"] = "固定仓位"
+    app.run(timeout=45)
+
+    assert not app.exception
+    assert any("更新前的缓存" in info.value for info in app.info)

@@ -479,6 +479,15 @@ with tabs[0]:
     kpis = st.session_state.get("single_kpis")
     required_kpi_columns = {"n_trades", "gross_profit", "gross_loss", "cumulative_return_pct", "max_drawdown_pct"}
     if kpis is not None and not kpis.empty and required_kpi_columns <= set(kpis.columns):
+        # A Streamlit session can outlive a code reload.  Results created before
+        # risk metrics existed lack these columns, so retain the old table and
+        # ask for a rerun instead of failing during column selection/sorting.
+        missing_risk_metrics = {"sharpe_ratio", "annualized_return_pct"} - set(kpis.columns)
+        if missing_risk_metrics:
+            kpis = kpis.copy()
+            for column in missing_risk_metrics:
+                kpis[column] = pd.NA
+            st.info("当前展示的是更新前的缓存结果；点击“运行当前参数”后即可计算夏普比率与年化收益。")
         active = kpis[kpis["n_trades"] > 0]
         total_trades = int(kpis["n_trades"].sum())
         gross_profit, gross_loss = kpis["gross_profit"].fillna(0).sum(), kpis["gross_loss"].fillna(0).sum()
@@ -659,8 +668,9 @@ with tabs[0]:
                            file_name="top100_backtest.csv", mime="text/csv")
         st.download_button("下载全部逐标的 KPI CSV", kpis.to_csv(index=False).encode("utf-8-sig"),
                            file_name="stock_kpis_backtest.csv", mime="text/csv")
-        if not st.session_state["single_trades"].empty:
-            st.download_button("下载逐笔交易 CSV", st.session_state["single_trades"].to_csv(index=False).encode("utf-8-sig"),
+        cached_trades = st.session_state.get("single_trades", pd.DataFrame())
+        if not cached_trades.empty:
+            st.download_button("下载逐笔交易 CSV", cached_trades.to_csv(index=False).encode("utf-8-sig"),
                                file_name="trades_backtest.csv", mime="text/csv")
     elif kpis is not None:
         st.warning("本次没有生成可展示的标的 KPI。请检查数据范围与参数后重新运行。")
