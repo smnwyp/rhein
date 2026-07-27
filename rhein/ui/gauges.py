@@ -12,6 +12,17 @@ def _clamp_percent(value: float, low: float, high: float) -> float:
     return max(0.0, min(100.0, (value - low) / (high - low) * 100))
 
 
+def _tick_html(position: float, label: str) -> str:
+    """Anchor a tick at its actual position rather than approximating with spaces."""
+    if position <= 0:
+        alignment = "left:0;transform:none;"
+    elif position >= 100:
+        alignment = "left:100%;transform:translateX(-100%);"
+    else:
+        alignment = f"left:{position:.2f}%;transform:translateX(-50%);"
+    return f'<span style="position:absolute;top:0;white-space:nowrap;{alignment}">{label}</span>'
+
+
 def kpi_gauge_html(kind: str, value: float | None, *, max_drawdown_limit: float) -> str:
     """Render a labelled horizontal gauge for one of the three core KPIs."""
     try:
@@ -32,7 +43,7 @@ def kpi_gauge_html(kind: str, value: float | None, *, max_drawdown_limit: float)
             note = "可作为候选：夏普 ≥ 1"
         else:
             note = "较强：夏普 ≥ 1.5"
-        scale = "−1　　0　　1　　2.5+"
+        ticks = ((0, "−1"), (28.57, "0"), (57.14, "1"), (100, "2.5+"))
     elif kind == "annualized_return":
         label, display = "中位标的年化收益", _format(value, "%")
         position = _clamp_percent(value, -10.0, 30.0) if value is not None else 0.0
@@ -47,7 +58,7 @@ def kpi_gauge_html(kind: str, value: float | None, *, max_drawdown_limit: float)
             note = "候选：年化 ≥ 10%"
         else:
             note = "较强：年化 ≥ 20%"
-        scale = "−10%　　0%　　10%　　30%+"
+        ticks = ((0, "−10%"), (25, "0%"), (50, "10%"), (100, "30%+"))
     elif kind == "drawdown":
         label, display = "中位标的最大回撤", _format(value, "%")
         drawdown = abs(value) if value is not None else 0.0
@@ -64,11 +75,13 @@ def kpi_gauge_html(kind: str, value: float | None, *, max_drawdown_limit: float)
             note = f"在 {max_drawdown_limit:.1f}% 阈值内"
         else:
             note = f"超出 {max_drawdown_limit:.1f}% 阈值"
-        scale = f"0%　　{max_drawdown_limit / 2:.1f}%　　{max_drawdown_limit:.1f}%　　{upper:.0f}%+"
+        ticks = ((0, "0%"), (half_limit, f"{max_drawdown_limit / 2:.1f}%"),
+                 (limit_position, f"{max_drawdown_limit:.1f}%"), (100, f"{upper:.0f}%+"))
     else:
         raise ValueError(f"Unknown KPI gauge: {kind}")
 
     marker = "display: none;" if value is None else f"left: calc({position:.2f}% - 6px);"
+    tick_labels = "".join(_tick_html(tick_position, tick_label) for tick_position, tick_label in ticks)
     return f"""
     <div style="border:1px solid #e6e9ef;border-radius:10px;padding:14px 14px 10px;background:#fff;min-height:126px;box-sizing:border-box;">
       <div style="font-size:0.9rem;color:#4a5568;font-weight:600;">{label}</div>
@@ -76,7 +89,7 @@ def kpi_gauge_html(kind: str, value: float | None, *, max_drawdown_limit: float)
       <div style="position:relative;height:10px;border-radius:999px;background:linear-gradient(to right,{gradient});margin:11px 2px 7px;">
         <span style="position:absolute;top:-4px;width:18px;height:18px;border-radius:50%;background:#1f2937;border:3px solid white;box-shadow:0 1px 3px #667085;{marker}"></span>
       </div>
-      <div style="font-size:0.72rem;color:#718096;white-space:pre;overflow:hidden;">{scale}</div>
+      <div style="position:relative;height:15px;font-size:0.72rem;color:#718096;margin:0 2px;">{tick_labels}</div>
       <div style="font-size:0.78rem;color:#4a5568;margin-top:7px;">{note}</div>
     </div>
     """
