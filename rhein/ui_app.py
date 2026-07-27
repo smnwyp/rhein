@@ -67,7 +67,7 @@ DEFAULT_MAX_DRAWDOWN_PCT = 15.0
 KPI_LABELS = {
     "标的": "标的", "n_trades": "交易次数", "win_rate_pct": "胜率 (%)",
     "cumulative_return_pct": "累计收益率 (%)", "annualized_return_pct": "年化收益率 (%)",
-    "payoff_ratio": "盈亏比", "profit_factor": "盈利因子",
+    "sharpe_ratio": "夏普比率", "payoff_ratio": "盈亏比", "profit_factor": "盈利因子",
     "max_drawdown_pct": "最大回撤 (%)", "avg_return_pct": "平均单笔收益 (%)",
     "avg_days_held": "平均持仓天数",
 }
@@ -76,6 +76,7 @@ KPI_DEFINITIONS = {
     "胜率 (%)": "盈利交易数 ÷ 总交易数 × 100%；净收益率大于 0 才计为盈利。",
     "累计收益率 (%)": "(最终权益 ÷ 初始资金 − 1) × 100%；用于横向比较不同标的，避免相加独立账户金额。",
     "年化收益率 (%)": "(最终权益 ÷ 初始资金)^(365.25 ÷ 数据覆盖日历天数) − 1，再乘以 100%。按每个标的实际 CSV 首末日期年化；不是把各标的独立账户收益相加。",
+    "夏普比率": "逐日策略收益率的平均值 ÷ 逐日策略收益率的样本标准差 × √252；无风险利率暂按 0。持仓日按收盘价逐日盯市，出场日按实际净交易收益校准，空仓日收益为 0。数值越高代表每单位波动取得的收益越多。",
     "盈亏比": "平均盈利收益率 ÷ |平均亏损收益率|；衡量单笔平均赚赔幅度。",
     "盈利因子": "所有盈利金额之和 ÷ |所有亏损金额之和|；大于 1 表示历史总盈利额高于总亏损额。",
     "最大回撤 (%)": "min(权益_t ÷ 截至 t 的历史最高权益 − 1) × 100%；越接近 0，回撤越小。",
@@ -188,6 +189,7 @@ def kpi_formulas() -> None:
 - **最终权益**：复利为 `初始资金 × ∏(1 + 每笔净收益率)`；固定仓位为 `初始资金 + 各笔盈亏金额之和`。
 - **总盈亏** = `最终权益 − 初始资金`。
 - **年化收益率** = `(最终权益 ÷ 初始资金)^(365.25 ÷ 数据覆盖日历天数) − 1`，再乘以 100%。每个标的按其 CSV 的首末日期独立年化，不把独立账户相加。
+- **夏普比率** = `逐日策略收益率的平均值 ÷ 逐日策略收益率的样本标准差 × √252`，无风险利率暂按 0。入场后持仓日以收盘价逐日盯市；出场日以实际记录的净交易收益校准，因此包含手续费、跳空与盘中止损的实际出场影响；空仓日收益为 0。数值越高，表示单位波动获得的收益越多。
 - **最大回撤** = `min(权益_t ÷ 截至 t 的历史最高权益 − 1) × 100%`。数值越接近 0，回撤越小。
 - **平均持仓天数** = 所有交易从入场日到出场日的交易日间隔的平均值。
 
@@ -480,6 +482,13 @@ with tabs[0]:
         active = kpis[kpis["n_trades"] > 0]
         total_trades = int(kpis["n_trades"].sum())
         gross_profit, gross_loss = kpis["gross_profit"].fillna(0).sum(), kpis["gross_loss"].fillna(0).sum()
+        risk_columns = st.columns(3)
+        median_sharpe = active["sharpe_ratio"].median() if "sharpe_ratio" in active else None
+        median_annualized = active["annualized_return_pct"].median() if "annualized_return_pct" in active else None
+        median_drawdown = active["max_drawdown_pct"].median() if len(active) else None
+        risk_columns[0].metric("中位标的夏普比率", f"{median_sharpe:.2f}" if pd.notna(median_sharpe) else "不适用")
+        risk_columns[1].metric("中位标的年化收益", f"{median_annualized:.2f}%" if pd.notna(median_annualized) else "不适用")
+        risk_columns[2].metric("中位标的最大回撤", f"{median_drawdown:.2f}%" if pd.notna(median_drawdown) else "不适用")
         columns = st.columns(7)
         columns[0].metric("标的数", len(kpis))
         columns[1].metric("总交易数", f"{total_trades:,}")
@@ -487,7 +496,7 @@ with tabs[0]:
         columns[3].metric("平均标的胜率", f"{active['win_rate_pct'].mean():.2f}%" if len(active) else "不适用")
         columns[4].metric("合并盈利因子", f"{gross_profit / gross_loss:.3f}" if gross_loss else "不适用")
         columns[5].metric("中位标的累计收益", f"{active['cumulative_return_pct'].median():.2f}%" if len(active) else "不适用")
-        columns[6].metric("中位标的年化收益", f"{active['annualized_return_pct'].median():.2f}%" if len(active) else "不适用")
+        columns[6].metric("回撤阈值", f"-{max_drawdown_limit:.2f}%")
         st.caption(
             f"资金模式：{st.session_state['single_mode']}；所有收益率均按每个标的独立账户计算，不汇总为虚假的组合金额。"
         )
@@ -497,6 +506,7 @@ with tabs[0]:
             "盈利因子（高→低）": ("profit_factor", False),
             "累计收益率（高→低）": ("cumulative_return_pct", False),
             "年化收益率（高→低）": ("annualized_return_pct", False),
+            "夏普比率（高→低）": ("sharpe_ratio", False),
             "胜率（高→低）": ("win_rate_pct", False),
             "盈亏比（高→低）": ("payoff_ratio", False),
             "平均单笔收益（高→低）": ("avg_return_pct", False),
@@ -508,8 +518,9 @@ with tabs[0]:
         metric, ascending = metric_options[rank_name]
         ranked = kpis[(kpis["n_trades"] >= min_trades) & kpis[metric].notna()].copy()
         ranked = ranked.sort_values(metric, ascending=ascending).head(100)
-        display_columns = ["标的", "n_trades", "win_rate_pct", "cumulative_return_pct", "annualized_return_pct", "payoff_ratio", "profit_factor",
-                           "max_drawdown_pct", "avg_return_pct", "avg_days_held"]
+        display_columns = ["标的", "n_trades", "sharpe_ratio", "annualized_return_pct", "max_drawdown_pct",
+                           "win_rate_pct", "cumulative_return_pct", "payoff_ratio", "profit_factor",
+                           "avg_return_pct", "avg_days_held"]
         top_display = ranked[display_columns].rename(columns=KPI_LABELS).reset_index(drop=True)
         st.caption(
             f"绿色行：该标的最大回撤不低于 -{max_drawdown_limit:.1f}%，符合阈值；"
