@@ -108,9 +108,6 @@ def test_group_selection_loads_a_preset_and_runs_current_combo() -> None:
     assert "夏普比率（高→低）" in next(
         widget.options for widget in app.selectbox if widget.label == "排序指标"
     )
-    assert any(widget.label == "中位标的夏普比率" for widget in app.metric)
-    assert any(widget.label == "中位标的年化收益" for widget in app.metric)
-    assert any(widget.label == "中位标的最大回撤" for widget in app.metric)
     assert len(app.dataframe) >= 1
 
 

@@ -36,6 +36,7 @@ from rhein.ui.persistence import (
     saved_combos_path,
 )
 from rhein.ui.summaries import aggregate_scan, style_by_drawdown
+from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.controls import (
     apply_parameters_to_controls,
     initialize_parameter_controls,
@@ -497,9 +498,15 @@ with tabs[0]:
         median_sharpe = active["sharpe_ratio"].median() if "sharpe_ratio" in active else None
         median_annualized = active["annualized_return_pct"].median() if "annualized_return_pct" in active else None
         median_drawdown = active["max_drawdown_pct"].median() if len(active) else None
-        risk_columns[0].metric("中位标的夏普比率", f"{median_sharpe:.2f}" if pd.notna(median_sharpe) else "不适用")
-        risk_columns[1].metric("中位标的年化收益", f"{median_annualized:.2f}%" if pd.notna(median_annualized) else "不适用")
-        risk_columns[2].metric("中位标的最大回撤", f"{median_drawdown:.2f}%" if pd.notna(median_drawdown) else "不适用")
+        with risk_columns[0]:
+            st.html(kpi_gauge_html("sharpe", median_sharpe, max_drawdown_limit=max_drawdown_limit))
+        with risk_columns[1]:
+            st.html(kpi_gauge_html("annualized_return", median_annualized, max_drawdown_limit=max_drawdown_limit))
+        with risk_columns[2]:
+            st.html(kpi_gauge_html("drawdown", median_drawdown, max_drawdown_limit=max_drawdown_limit))
+        st.caption(
+            f"筛选参考（非保证）：夏普 ≥ 1、年化收益 ≥ 10%、最大回撤不超过 {max_drawdown_limit:.1f}%（由左侧风险阈值控制）。"
+        )
         columns = st.columns(7)
         columns[0].metric("标的数", len(kpis))
         columns[1].metric("总交易数", f"{total_trades:,}")
