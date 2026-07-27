@@ -22,6 +22,7 @@ from rhein.strategy import (
     parse_percent_ranges,
 )
 import rhein.ui.strategy_text as _strategy_text
+import rhein.ui.result_runner as _result_runner
 from rhein.ui.presets import (
     available_data_scopes,
     best_combo_for_record,
@@ -35,7 +36,6 @@ from rhein.ui.persistence import (
     saved_combos_path,
 )
 from rhein.ui.summaries import aggregate_scan, style_by_drawdown
-from rhein.ui.result_runner import collect_results
 from rhein.ui.controls import (
     apply_parameters_to_controls,
     initialize_parameter_controls,
@@ -54,8 +54,10 @@ if (
 # 当前设置文案是无状态的纯函数。每次 rerun 重载它，确保长时间运行的本地
 # Streamlit 服务不会继续使用旧条件集合（例如新增 T0-09 后漏显示）。
 _strategy_text = importlib.reload(_strategy_text)
+_result_runner = importlib.reload(_result_runner)
 params_to_text = _strategy_text.params_to_text
 strategy_narrative = _strategy_text.strategy_narrative
+collect_results = _result_runner.collect_results
 input_files, load_ohlc, run_backtest = _backtest.input_files, _backtest.load_ohlc, _backtest.run_backtest
 
 
