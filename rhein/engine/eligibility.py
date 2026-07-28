@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import numpy as np
 
+MA20_RISE_MIN_PCT = 0.0001
+
 
 def validate_run_parameters(params: dict) -> int:
     """Validate run-time parameters and return the normalized forced-exit day."""
     if (params["use_baseline_close_above_fast_sma"] or params["use_baseline_fast_above_slow_sma"]) and params["entry_trend_fast_sma"] < 2:
-        raise ValueError("基准点快线 SMA 周期至少为 2")
+        raise ValueError("基准点快线 MA 周期至少为 2")
     if params["use_baseline_fast_above_slow_sma"] and params["entry_trend_slow_sma"] <= params["entry_trend_fast_sma"]:
-        raise ValueError("基准点 SMA 必须满足 2 ≤ 快线周期 < 慢线周期")
+        raise ValueError("基准点 MA 必须满足 2 ≤ 快线周期 < 慢线周期")
     if params["use_baseline_volume_sma"] and (params["entry_volume_fast_window"] < 1 or params["entry_volume_slow_window"] <= params["entry_volume_fast_window"]):
         raise ValueError("基准点成交量均线必须满足 1 ≤ 短期周期 < 长期周期")
     if (params["use_baseline_prior_low"] or params["use_baseline_max_rise"]) and params["baseline_lookback"] < 1:
@@ -45,6 +47,11 @@ def baseline_is_eligible(i: int, *, close, open_, ret1, rsi, entry_fast_sma, ent
     # t0 must be a bullish candle. A doji (Close == Open) is deliberately not bullish.
     if params["use_baseline_bullish_candle"] and close[i] <= open_[i]:
         return False
+    if params["use_baseline_sma20_rising"]:
+        if i < 2 or np.isnan(baseline_sma20[i]) or np.isnan(baseline_sma20[i - 2]):
+            return False
+        if baseline_sma20[i] < baseline_sma20[i - 2] * (1 + MA20_RISE_MIN_PCT):
+            return False
     if needs_window:
         window = close[i - params["baseline_lookback"]:i + 1]
         tmin_rel = int(np.argmin(window))

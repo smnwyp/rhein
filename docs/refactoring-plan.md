@@ -21,7 +21,7 @@ rhein/
     discovery.py            # manifest 优先的价格文件发现
     presets.py              # metadata 版本、搜索预设、saved combo 读写
   engine/
-    indicators.py           # SMA、RSI、成交量均线、日收益等指标
+    indicators.py           # MA、RSI、成交量均线、日收益等指标
     eligibility.py          # t0 与 tN 的条件判定
     exits.py                # 早期止损、趋势出场、强制平仓执行
     runner.py               # 单标的交易循环；维持 run_backtest 公共接口
@@ -32,7 +32,7 @@ rhein/
   ui/
     controls.py             # 参数控件、toggle 依赖、session state 同步
     summaries.py            # 单组 KPI、Top 100、样本/测试双行汇总
-    charts.py               # K 线、成交量、SMA、t0/入场/出场文字标记
+    charts.py               # K 线、成交量、MA、t0/入场/出场文字标记
     group_views.py          # 分组预设、保存组合、分组组合表与分组分析
     styles.py               # 数字格式与回撤颜色
     app.py                  # 薄页面编排入口
@@ -60,7 +60,7 @@ rhein/
 | 参数扫描 | 当前范围解析、tN 对应 tN+1/tN+2 早期止损日、排序与回撤红绿提示保持不变。 |
 | 样本/测试验证 | 每标的按日期 70/30；参数只按样本指标选择；测试只计入测试期 t0；训练历史只用于指标预热；样本/测试双行汇总显示收益、胜率、盈亏比、交易数、回撤。 |
 | 分组结果页 | 当前激活版本的 result files 正确读取；v6 的“条件筛选/完整复验”和旧版第一/二阶段兼容；样本/测试列正确展示。 |
-| K 线 | 选中标的与交易后显示；含 t0 前 15 根 K 线、成交量、SMA5/10/20、紧凑交易日轴、t0…标签，以及“基准点/入场点/出场点”文字。 |
+| K 线 | 选中标的与交易后显示；含 t0 前 15 根 K 线、成交量、MA5/10/20、紧凑交易日轴、t0…标签，以及“基准点/入场点/出场点”文字。 |
 | CLI/报告 | 原 CLI 参数、profile 覆盖、sweep、Markdown/CSV/JSON 报告字段和文件产出保持兼容。 |
 
 ## 测试策略
@@ -88,7 +88,7 @@ rhein/
 - **Streamlit AppTest（Python）**：快速验证脚本启动、控件/Session State、回测结果数据和页面异常；适合在每个小型重构 commit 中运行。
 - **Cypress（真实浏览器 E2E）**：从用户角度点击和等待页面更新，能发现白屏、Streamlit rerun、下拉控件失效、表格选择失效及 Vega-Lite 图表未显示等问题；适合作为阶段验收与 CI 的关键路径测试。
 
-Cypress 将固化以下用户旅程：打开应用 → 选择分组 → 选择 v7 预设 → 验证参数回填与样本/测试双行汇总 → 手动切换 condition toggle → 运行当前组合 → 选 Top 100 标的 → 选交易段 → 断言 K 线、成交量、SMA5/10/20 与“基准点/入场点/出场点”文字存在 → 保存组合 → 切换到自定义 → 加载已保存组合并验证完整回填。
+Cypress 将固化以下用户旅程：打开应用 → 选择分组 → 选择 v7 预设 → 验证参数回填与样本/测试双行汇总 → 手动切换 condition toggle → 运行当前组合 → 选 Top 100 标的 → 选交易段 → 断言 K 线、成交量、MA5/10/20 与“基准点/入场点/出场点”文字存在 → 保存组合 → 切换到自定义 → 加载已保存组合并验证完整回填。
 
 对 K 线还保留 Vega-Lite spec 单元断言，作为 Cypress 视觉/DOM 断言之前的快速故障定位层。
 
@@ -146,7 +146,7 @@ Cypress 将固化以下用户旅程：打开应用 → 选择分组 → 选择 v
 
 **改动**：按 `controls → summaries → charts → group_views` 顺序抽取；`ui_app.py` 最终只保留页面编排与依赖注入。
 
-**验收**：每抽一个 UI 模块都跑 AppTest；完成一个 tab 跑对应 Cypress 路径。K 线模块须额外验证文字标记、SMA、成交量和紧凑 x 轴。
+**验收**：每抽一个 UI 模块都跑 AppTest；完成一个 tab 跑对应 Cypress 路径。K 线模块须额外验证文字标记、MA、成交量和紧凑 x 轴。
 
 **停止条件**：出现白屏、控件回填不完整、切组卡住、图表缺层或 session state 泄漏，先修复再继续。
 

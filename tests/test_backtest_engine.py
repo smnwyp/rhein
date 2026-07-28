@@ -23,6 +23,15 @@ def test_runner_accepts_the_t0_bullish_candle_toggle() -> None:
     assert stats["n_trades"] >= 0
 
 
+def test_runner_supports_t0_close_entry() -> None:
+    frame = load_ohlc(DATA_ROOT / "nvda.csv")
+    trades, stats = run_backtest(frame, entry_lag=0, hard_stop_days=(1, 2))
+
+    assert stats["n_trades"] == len(trades)
+    assert not trades.empty
+    assert (trades["entry"] == trades["signal"]).all()
+
+
 def test_group_directory_excludes_metadata_csvs() -> None:
     group = GROUP_ROOT / "03_高流动性_高波动"
     files = input_files(group)

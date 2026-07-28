@@ -16,7 +16,7 @@ def aggregate_scan(kpis: pd.DataFrame, params: dict) -> dict:
         "信号下限": params["band_lo"], "信号上限": params["band_hi"],
         "入场确认": f"t{params['entry_lag']}",
         "早期止损日": ",".join(f"t{day}" for day in params["hard_stop_days"]),
-        "止损": params["stop_pct"], "SMA": params["sma_n"],
+        "止损": params["stop_pct"], "MA": params["sma_n"],
         "交易数": total_trades, "有交易标的": len(active), "胜率_%": weighted_win_rate,
         "平均标的胜率_%": active["win_rate_pct"].mean() if len(active) else np.nan,
         "中位标的胜率_%": active["win_rate_pct"].median() if len(active) else np.nan,

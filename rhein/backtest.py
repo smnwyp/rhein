@@ -43,6 +43,7 @@ DEFAULT_STRATEGY = {
     "use_baseline_close_above_sma20": True,
     "use_baseline_volume_sma": True,
     "use_baseline_bullish_candle": True,
+    "use_baseline_sma20_rising": False,
     "use_entry_close_vs_t0": True,
     "use_early_stop": True,
     "use_exit_below_entry": True,
@@ -73,6 +74,7 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
                  use_baseline_fast_above_slow_sma=True,
                  use_baseline_close_above_sma20=True,
                  use_baseline_volume_sma=True, use_baseline_bullish_candle=True,
+                 use_baseline_sma20_rising=False,
                  use_entry_close_vs_t0=True,
                  use_entry_close_above_fast_sma=None, use_entry_fast_above_slow_sma=None,
                  use_entry_volume_sma=None,
@@ -119,7 +121,9 @@ def run_backtest(df: pd.DataFrame, band_lo=0.02, band_hi=0.025,
 
     trades, equity = [], capital
     i = 1
-    while i < n - entry_lag:
+    # t0 入场也至少需要一个后续交易日来执行出场逻辑；避免在样本最后一根
+    # K 线上生成无法真实持有的同日进出交易。
+    while i < n - max(entry_lag, 1):
         # 测试集保留训练期历史以计算指标，但不允许训练期 t0 产生任何交易。
         if signal_start is not None and df["Date"].iloc[i] < signal_start:
             i += 1
@@ -187,12 +191,12 @@ def markdown_report(results: list[dict], params: dict, generated_at: str) -> str
                   "实际策略参数：" + "；".join([
                       f"信号区间 {result['strategy']['band_lo']:.2%}–{result['strategy']['band_hi']:.2%}",
                       f"确认日 t{result['strategy']['entry_lag']}",
-                      (f"基准点：收盘>SMA{result['strategy'].get('entry_trend_fast_sma', 5)}；"
-                       f"SMA{result['strategy'].get('entry_trend_fast_sma', 5)}>SMA{result['strategy'].get('entry_trend_slow_sma', 10)}；"
-                       "收盘>SMA20；入场窗口 tN-1/tN：5日均量>20日均量"),
+                      (f"基准点：收盘>MA{result['strategy'].get('entry_trend_fast_sma', 5)}；"
+                       f"MA{result['strategy'].get('entry_trend_fast_sma', 5)}>MA{result['strategy'].get('entry_trend_slow_sma', 10)}；"
+                       "收盘>MA20；入场窗口 tN-1/tN：5日均量>20日均量"),
                       "早期止损日 " + ", ".join(f"t{d}" for d in result['strategy']['hard_stop_days']),
                       f"止损 {result['strategy']['stop_pct']:.2%}",
-                      f"SMA{result['strategy']['sma_n']}",
+                      f"MA{result['strategy']['sma_n']}",
                       "盘中止损" if result['strategy']['stop_intraday'] else "收盘止损",
                       f"单边手续费 {result['strategy']['cost_bps']} bps",
                   ]), "",
@@ -259,10 +263,10 @@ def resolve_strategy(symbol: str, profiles: dict, args) -> dict:
         strategy["stop_intraday"] = False
     if strategy["band_lo"] <= 0 or strategy["band_hi"] <= strategy["band_lo"]:
         raise ValueError(f"{symbol}：涨幅区间必须满足 0 < 下限 < 上限")
-    if strategy["entry_lag"] < 1:
-        raise ValueError(f"{symbol}：确认日 entry_lag 至少为 1")
+    if strategy["entry_lag"] < 0:
+        raise ValueError(f"{symbol}：入场日 entry_lag 不能小于 0")
     if strategy["entry_trend_fast_sma"] < 2 or strategy["entry_trend_slow_sma"] <= strategy["entry_trend_fast_sma"]:
-        raise ValueError(f"{symbol}：入场趋势 SMA 必须满足 2 ≤ 快线周期 < 慢线周期")
+        raise ValueError(f"{symbol}：入场趋势 MA 必须满足 2 ≤ 快线周期 < 慢线周期")
     if any(day <= strategy["entry_lag"] for day in strategy["hard_stop_days"]):
         raise ValueError(f"{symbol}：早期止损日必须晚于确认日 t{strategy['entry_lag']}")
     return strategy
@@ -277,7 +281,7 @@ def sweep_report(rows: list[dict], generated_at: str, mode: str, grid_path: str)
     lines = ["# 动量突破策略参数扫描报告", "", f"生成时间：{generated_at}",
              f"资金模式：{mode}（每个组合以 10,000 初始资金独立运行）", f"扫描范围：`{grid_path}`", "",
              "## 全部参数组合（按标的、盈利因子由高到低）", "",
-             "| 标的 | 信号区间 | 确认日 | 早期止损日 | 止损 | SMA | 交易数 | 胜率 | 平均收益 | 总盈亏 | 最终权益 | 盈亏比 | 盈利因子 | 最大回撤 |",
+             "| 标的 | 信号区间 | 确认日 | 早期止损日 | 止损 | MA | 交易数 | 胜率 | 平均收益 | 总盈亏 | 最终权益 | 盈亏比 | 盈利因子 | 最大回撤 |",
              "|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for row in rows:
         s = row["stats"]
@@ -351,10 +355,10 @@ def main():
     ap.add_argument("--band-lo", type=float, help="覆盖所有标的档案的信号涨幅下限")
     ap.add_argument("--band-hi", type=float, help="覆盖所有标的档案的信号涨幅上限")
     ap.add_argument("--stop-pct", type=float, help="覆盖所有标的档案的早期止损比例")
-    ap.add_argument("--sma", type=int, help="覆盖所有标的档案的 SMA 周期")
-    ap.add_argument("--entry-lag", type=int, help="信号后第几日确认入场：1=t1，2=t2，3=t3")
-    ap.add_argument("--entry-trend-fast-sma", type=int, help="入场趋势过滤的快线 SMA 周期")
-    ap.add_argument("--entry-trend-slow-sma", type=int, help="入场趋势过滤的慢线 SMA 周期")
+    ap.add_argument("--sma", type=int, help="覆盖所有标的档案的 MA 周期")
+    ap.add_argument("--entry-lag", type=int, help="相对 t0 的入场日：0=t0尾盘，1=t1，2=t2，3=t3")
+    ap.add_argument("--entry-trend-fast-sma", type=int, help="入场趋势过滤的快线 MA 周期")
+    ap.add_argument("--entry-trend-slow-sma", type=int, help="入场趋势过滤的慢线 MA 周期")
     ap.add_argument("--hard-stop-days", type=parse_days,
                     help="确认入场后、以信号日计的早期止损考察日，例如 3,4")
     ap.add_argument("--capital", type=float, default=10_000)

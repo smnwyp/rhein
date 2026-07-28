@@ -11,7 +11,8 @@ from rhein.ui.persistence import normalize_parameters
 
 def reset_group_session_state() -> None:
     group_keys = ("applied_preset_token", "single_kpis", "single_trades", "single_params",
-                  "single_mode", "chart_trade_index", "top_symbol_table", "saved_combo_name")
+                  "single_mode", "chart_trade_index", "chart_trade_id", "chart_trade_scope",
+                  "top_symbol_table", "saved_combo_name")
     parameter_keys = ("band_range", "entry_lag", "stop_days_text", "stop_pct", "close_stop", "sma_n",
                       "cost_bps", "entry_trend_fast_sma", "entry_trend_slow_sma",
                       "entry_volume_fast_window", "entry_volume_slow_window", "baseline_lookback",
@@ -56,7 +57,7 @@ def switch_to_custom_params() -> None:
 
 def initialize_parameter_controls() -> None:
     defaults = {
-        "band_range": (2.0, 2.5), "entry_lag": 2, "stop_days_text": "3,4", "stop_pct": 2.0,
+        "band_range": (2.0, 2.5), "entry_lag": 0, "stop_days_text": "1,2", "stop_pct": 2.0,
         "close_stop": False, "sma_n": 5, "cost_bps": 0.0, "entry_trend_fast_sma": 5,
         "entry_trend_slow_sma": 10, "entry_volume_fast_window": 5, "entry_volume_slow_window": 20,
         "baseline_lookback": 15, "baseline_max_rise_pct": 20.0, "baseline_rsi_period": 14,

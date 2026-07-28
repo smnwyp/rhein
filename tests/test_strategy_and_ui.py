@@ -6,6 +6,7 @@ from rhein.paths import GROUP_ROOT
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
 from rhein.ui.strategy_text import params_to_text, strategy_narrative
+from rhein.ui.trade_chart import trade_selector_options
 from rhein.engine.eligibility import baseline_is_eligible
 
 
@@ -13,7 +14,7 @@ def test_strategy_parsers_and_condition_ids() -> None:
     assert parse_ints("3, 4") == (3, 4)
     assert parse_percent_ranges("2-2.5") == [(0.02, 0.025)]
     assert active_condition_ids({"use_signal_band": True, "use_forced_exit": False}) == [
-        "T0-01", "T0-02", "T0-03", "T0-04", "T0-05", "T0-06", "T0-07", "T0-08", "T0-09", "EN-01",
+        "T0-01", "T0-02", "T0-03", "T0-04", "T0-05", "T0-06", "T0-07", "T0-08", "T0-09", "T0-10", "EN-01",
         "EX-01", "EX-02", "EX-03", "EX-05",
     ]
 
@@ -63,6 +64,31 @@ def test_t0_bullish_candle_condition_rejects_bearish_and_doji_candles() -> None:
     assert not baseline_is_eligible(1, close=[1, 1], open_=[1, 2], **common)
 
 
+def test_t0_ma20_must_be_at_least_point_zero_one_percent_above_two_days_earlier() -> None:
+    params = {key: False for key in conditions.ATOMIC_TOGGLE_KEYS}
+    params.update({"use_baseline_sma20_rising": True, "baseline_lookback": 1,
+                   "band_lo": .02, "band_hi": .025, "baseline_rsi_max": 90,
+                   "baseline_max_rise": .20})
+    common = dict(ret1=[0, 0, 0], rsi=[0, 0, 0], entry_fast_sma=[0, 0, 0],
+                  entry_slow_sma=[0, 0, 0], vol_fast_sma=[0, 0, 0],
+                  vol_slow_sma=[0, 0, 0], params=params)
+    assert baseline_is_eligible(2, close=[1, 1, 1], open_=[1, 1, 1],
+                                baseline_sma20=[10, 10, 10.001], **common)
+    assert not baseline_is_eligible(2, close=[1, 1, 1], open_=[1, 1, 1],
+                                    baseline_sma20=[10, 10, 10.0009], **common)
+
+
+def test_trade_chart_selector_uses_trade_identity_not_just_row_number() -> None:
+    trades = pd.DataFrame([
+        {"signal": "2022-12-02", "entry": "2022-12-02", "exit": "2022-12-12", "reason": "到期", "ret_pct": 1.16},
+        {"signal": "2022-12-15", "entry": "2022-12-15", "exit": "2022-12-21", "reason": "止损", "ret_pct": -2.00},
+    ])
+    option_ids, labels = trade_selector_options(trades)
+    assert option_ids[0] != option_ids[1]
+    assert "t0 2022-12-02" in labels[option_ids[0]]
+    assert "出场 2022-12-21" in labels[option_ids[1]]
+
+
 def test_current_settings_updates_when_t0_09_is_toggled() -> None:
     from streamlit.testing.v1 import AppTest
 
@@ -90,6 +116,10 @@ def test_streamlit_entrypoint_renders() -> None:
     assert len(app.tabs) == 5
     scope = next(widget for widget in app.selectbox if widget.label == "数据范围")
     assert len([item for item in scope.options if "流动性" in str(item)]) == 9
+    entry_day = next(widget for widget in app.selectbox if widget.label == "入场日（相对 t0）")
+    assert entry_day.options[0] == "t0"
+    entry_day.select(0).run(timeout=45)
+    assert not app.exception
 
 
 def test_group_selection_loads_a_preset_and_runs_current_combo() -> None:

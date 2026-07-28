@@ -24,6 +24,7 @@ from rhein.strategy import (
 import rhein.ui.strategy_text as _strategy_text
 import rhein.ui.result_runner as _result_runner
 import rhein.ui.gauges as _gauges
+from rhein.ui.trade_chart import trade_selector_options
 from rhein.ui.presets import (
     available_data_scopes,
     best_combo_for_record,
@@ -50,6 +51,7 @@ from rhein.ui.controls import (
 if (
     "use_baseline_close_above_fast_sma" not in _backtest.run_backtest.__code__.co_varnames
     or "use_baseline_bullish_candle" not in _backtest.run_backtest.__code__.co_varnames
+    or "use_baseline_sma20_rising" not in _backtest.run_backtest.__code__.co_varnames
 ):
     _backtest = importlib.reload(_backtest)
 # 当前设置文案是无状态的纯函数。每次 rerun 重载它，确保长时间运行的本地
@@ -68,6 +70,19 @@ st.set_page_config(page_title="Momentum Breakout 回测", layout="wide")
 # Streamlit Cloud 的工作目录不保证等于仓库根目录；数据路径由 rhein.paths
 # 统一从仓库根目录解析，以免分组选择器因相对路径失效而静默消失。
 DEFAULT_MAX_DRAWDOWN_PCT = 15.0
+RESULT_CACHE_VERSION = "trade-chart-identity-v1"
+
+# 浏览器会在代码热更新后保留 session_state。旧版把“交易序号”当作图表
+# 身份，因此已有缓存可能把旧收益记录和另一笔 K 线拼在一起。该版本标记只会
+# 清一次旧结果，之后每笔图表均由完整交易 ID 绑定。
+if st.session_state.get("single_results_version") != RESULT_CACHE_VERSION:
+    had_cached_results = any(key in st.session_state for key in ("single_kpis", "single_trades"))
+    for key in ("single_kpis", "single_trades", "single_params", "single_mode",
+                "chart_trade_index", "chart_trade_id", "chart_trade_scope"):
+        st.session_state.pop(key, None)
+    st.session_state["single_results_version"] = RESULT_CACHE_VERSION
+    if had_cached_results:
+        st.session_state["single_results_refresh_notice"] = True
 
 KPI_LABELS = {
     "标的": "标的", "n_trades": "交易次数", "win_rate_pct": "胜率 (%)",
@@ -113,7 +128,7 @@ def load_group_best_overview() -> pd.DataFrame:
             "信号区间 (%)": f"{params['band_lo'] * 100:.2f}–{params['band_hi'] * 100:.2f}",
             "入场确认日": f"t{params['entry_lag']}",
             "早期止损幅度 (%)": params["stop_pct"] * 100,
-            "趋势 SMA 周期": params["sma_n"],
+            "趋势 MA 周期": params["sma_n"],
             "交易数": metrics.get("trades"), "合并胜率 (%)": metrics.get("win_rate_pct"),
             "盈利因子": metrics.get("profit_factor"),
             "样本中位标的累计收益 (%)": metrics.get("median_symbol_cumulative_return_pct"),
@@ -131,10 +146,10 @@ def load_all_group_combinations() -> pd.DataFrame:
     column_names = {
         "signal_lo_pct": "信号下限 (%)", "signal_hi_pct": "信号上限 (%)",
         "entry_day": "入场确认日", "entry_trend_filter": "入场趋势过滤",
-        "entry_trend_fast_sma": "入场趋势快线 SMA", "entry_trend_slow_sma": "入场趋势慢线 SMA",
+        "entry_trend_fast_sma": "入场趋势快线 MA", "entry_trend_slow_sma": "入场趋势慢线 MA",
         "entry_volume_fast_window": "入场成交量短期均线", "entry_volume_slow_window": "入场成交量长期均线",
         "early_stop_days": "早期止损日", "stop_pct": "止损幅度 (%)",
-        "sma_n": "SMA 周期", "cost_bps": "单边费用 (bps)", "trades": "交易数",
+        "sma_n": "MA 周期", "cost_bps": "单边费用 (bps)", "trades": "交易数",
         "win_rate_pct": "合并胜率 (%)", "mean_symbol_win_rate_pct": "平均标的胜率 (%)",
         "median_symbol_win_rate_pct": "中位标的胜率 (%)", "avg_return_pct": "平均单笔收益 (%)",
         "avg_win_pct": "平均盈利 (%)", "avg_loss_pct": "平均亏损 (%)",
@@ -292,22 +307,22 @@ with st.sidebar:
                                        key="baseline_rsi_max", on_change=switch_to_custom_params,
                                        disabled=not use_baseline_rsi)
     use_baseline_close_above_fast_sma = st.toggle(
-        "【T0-05】启用：t0 收盘价高于快线 SMA", key="use_baseline_close_above_fast_sma",
+        "【T0-05】启用：t0 收盘价高于快线 MA", key="use_baseline_close_above_fast_sma",
         on_change=switch_to_custom_params,
     )
     use_baseline_fast_above_slow_sma = st.toggle(
-        "【T0-06】启用：t0 快线 SMA 高于慢线 SMA", key="use_baseline_fast_above_slow_sma",
+        "【T0-06】启用：t0 快线 MA 高于慢线 MA", key="use_baseline_fast_above_slow_sma",
         on_change=switch_to_custom_params,
     )
     st.caption("以下快线周期由上面两条基准点均线条件共用。")
-    entry_trend_fast_sma = st.number_input("基准点快线 SMA 周期", min_value=2, max_value=100,
+    entry_trend_fast_sma = st.number_input("基准点快线 MA 周期", min_value=2, max_value=100,
                                             key="entry_trend_fast_sma", on_change=switch_to_custom_params,
                                             disabled=not (use_baseline_close_above_fast_sma or use_baseline_fast_above_slow_sma))
-    entry_trend_slow_sma = st.number_input("基准点慢线 SMA 周期", min_value=3, max_value=200,
+    entry_trend_slow_sma = st.number_input("基准点慢线 MA 周期", min_value=3, max_value=200,
                                             key="entry_trend_slow_sma", on_change=switch_to_custom_params,
                                             disabled=not use_baseline_fast_above_slow_sma)
     use_baseline_close_above_sma20 = st.toggle(
-        "【T0-07】启用：t0 收盘价高于 SMA20", key="use_baseline_close_above_sma20",
+        "【T0-07】启用：t0 收盘价高于 MA20", key="use_baseline_close_above_sma20",
         on_change=switch_to_custom_params,
     )
     use_baseline_volume_sma = st.toggle(
@@ -325,10 +340,16 @@ with st.sidebar:
         key="use_baseline_bullish_candle", on_change=switch_to_custom_params,
         help="Close 必须严格大于 Open；十字星（收盘价等于开盘价）与阴线均不通过。",
     )
+    use_baseline_sma20_rising = st.toggle(
+        "【T0-10】启用：t0 MA20 较两天前至少高 0.01%",
+        key="use_baseline_sma20_rising", on_change=switch_to_custom_params,
+        help="要求 MA20[t0] ≥ MA20[t0-2] × 1.0001；前两根K线或任一 MA20 数据不足时不通过。",
+    )
     st.subheader("入场点（tN）")
-    entry_lag = st.selectbox("入场确认日", [1, 2, 3, 4, 5],
+    entry_lag = st.selectbox("入场日（相对 t0）", [0, 1, 2, 3, 4, 5],
                              format_func=lambda value: f"t{value}", key="entry_lag",
-                             on_change=switch_to_custom_params)
+                             on_change=switch_to_custom_params,
+                             help="t0 表示基准K当日尾盘按收盘价入场；t1–t5 为后续交易日收盘入场。")
     use_entry_close_vs_t0 = st.toggle("【EN-01】启用：tN 收盘价不低于 t0 收盘价", key="use_entry_close_vs_t0", on_change=switch_to_custom_params)
     st.subheader("出场点：早期止损")
     use_early_stop = st.toggle("【EX-01】启用：早期止损", key="use_early_stop", on_change=switch_to_custom_params)
@@ -342,8 +363,8 @@ with st.sidebar:
                              key="close_stop", on_change=switch_to_custom_params, disabled=not use_early_stop)
     st.subheader("出场点：后期趋势")
     use_exit_below_entry = st.toggle("【EX-02】启用：收盘价跌破入场价出场", key="use_exit_below_entry", on_change=switch_to_custom_params)
-    use_exit_below_sma = st.toggle("【EX-03】启用：收盘价跌破趋势 SMA 出场", key="use_exit_below_sma", on_change=switch_to_custom_params)
-    sma_n = st.number_input("趋势出场 SMA 周期（早期观察窗口结束后启用）", min_value=2, max_value=100,
+    use_exit_below_sma = st.toggle("【EX-03】启用：收盘价跌破趋势 MA 出场", key="use_exit_below_sma", on_change=switch_to_custom_params)
+    sma_n = st.number_input("趋势出场 MA 周期（早期观察窗口结束后启用）", min_value=2, max_value=100,
                             key="sma_n", on_change=switch_to_custom_params, disabled=not use_exit_below_sma)
     use_forced_exit = st.toggle("【EX-04】启用：入场后强制平仓（基准案例）", key="use_forced_exit", on_change=switch_to_custom_params)
     forced_exit_day = st.selectbox(
@@ -379,7 +400,7 @@ try:
         if use_signal_band and band_lo_pct >= band_hi_pct:
             raise ValueError("信号区间下限必须小于上限")
         if use_baseline_fast_above_slow_sma and entry_trend_fast_sma >= entry_trend_slow_sma:
-            raise ValueError("基准点快线 SMA 周期必须小于慢线 SMA 周期")
+            raise ValueError("基准点快线 MA 周期必须小于慢线 MA 周期")
         if use_baseline_volume_sma and entry_volume_fast_window >= entry_volume_slow_window:
             raise ValueError("基准点成交量短期均线周期必须小于长期均线周期")
         parameters = {
@@ -401,6 +422,7 @@ try:
             "use_baseline_close_above_sma20": use_baseline_close_above_sma20,
             "use_baseline_volume_sma": use_baseline_volume_sma,
             "use_baseline_bullish_candle": use_baseline_bullish_candle,
+            "use_baseline_sma20_rising": use_baseline_sma20_rising,
             "use_entry_close_vs_t0": use_entry_close_vs_t0,
             "use_early_stop": use_early_stop,
             "use_exit_below_entry": use_exit_below_entry,
@@ -437,6 +459,8 @@ tabs = st.tabs(["单组回测与 Top 100", "参数组合扫描", "全部分组�
 
 with tabs[0]:
     st.subheader("单组回测")
+    if st.session_state.pop("single_results_refresh_notice", False):
+        st.info("已清除旧版页面缓存：请点击“运行当前参数”，以当前日线数据重新生成交易与收益。")
     if selected_preset:
         selected_best_combo = best_combo_for_record(selected_preset)
         train_metrics = selected_best_combo.get("train_metrics", selected_best_combo["metrics"])
@@ -564,17 +588,23 @@ with tabs[0]:
                 st.info(f"{selected_symbol} 没有可展示的已平仓交易。")
             else:
                 st.subheader(f"{selected_symbol}：交易 K 线")
-                trade_labels = [
-                    f"第 {index + 1} 笔：t0 {row.signal}｜入场 {row.entry}｜出场 {row.exit}｜{row.ret_pct:+.2f}%"
-                    for index, row in symbol_trades.iterrows()
-                ]
-                trade_index = st.selectbox("选择交易段", range(len(symbol_trades)),
-                                           format_func=lambda value: trade_labels[value], key="chart_trade_index")
+                trade_option_ids, trade_labels = trade_selector_options(symbol_trades)
+                # 交易序号会随标的/结果集改变；按整套交易的稳定 ID 重置选项，
+                # 避免下拉框显示本次交易、Vega 图却复用上一笔的图层状态。
+                trade_scope = f"{selected_symbol}::{'||'.join(trade_option_ids)}"
+                if st.session_state.get("chart_trade_scope") != trade_scope:
+                    st.session_state["chart_trade_scope"] = trade_scope
+                    st.session_state["chart_trade_id"] = trade_option_ids[0]
+                elif st.session_state.get("chart_trade_id") not in trade_labels:
+                    st.session_state["chart_trade_id"] = trade_option_ids[0]
+                trade_id = st.selectbox("选择交易段", trade_option_ids,
+                                        format_func=trade_labels.__getitem__, key="chart_trade_id")
+                trade_index = trade_option_ids.index(trade_id)
                 trade = symbol_trades.iloc[trade_index]
                 source_path = kpis.loc[kpis["标的"] == selected_symbol, "源文件"].iloc[0]
                 ohlc = load_ohlc(Path(source_path))
                 for period in (5, 10, 20):
-                    ohlc[f"SMA{period}"] = ohlc["Close"].rolling(period).mean()
+                    ohlc[f"MA{period}"] = ohlc["Close"].rolling(period).mean()
                 signal_date, entry_date, exit_date = (pd.Timestamp(trade[column]) for column in ("signal", "entry", "exit"))
                 signal_position = ohlc.index[ohlc["Date"] == signal_date][0]
                 exit_position = ohlc.index[ohlc["Date"] == exit_date][0]
@@ -633,12 +663,12 @@ with tabs[0]:
                                         {"field": "Volume", "type": "quantitative", "title": "成交量", "format": ",.0f"},
                                     ],
                                 }},
-                                {"transform": [{"fold": ["SMA5", "SMA10", "SMA20"], "as": ["均线", "均线值"]}],
+                                {"transform": [{"fold": ["MA5", "MA10", "MA20"], "as": ["均线", "均线值"]}],
                                  "mark": {"type": "line", "strokeWidth": 2}, "encoding": {
                                      "x": chart_x,
                                      "y": {"field": "均线值", "type": "quantitative", "scale": {"zero": False, "nice": True}},
                                      "color": {"field": "均线", "type": "nominal", "title": "均线",
-                                               "scale": {"domain": ["SMA5", "SMA10", "SMA20"],
+                                               "scale": {"domain": ["MA5", "MA10", "MA20"],
                                                          "range": ["#2563eb", "#f59e0b", "#7c3aed"]}},
                                      "tooltip": [
                                          {"field": "Date", "type": "temporal", "title": "日期"},
@@ -669,8 +699,12 @@ with tabs[0]:
                     "resolve": {"scale": {"x": "shared"}},
                     "autosize": {"type": "fit-x", "contains": "padding"},
                 }
-                st.vega_lite_chart(candle_data, spec, width="stretch", key=f"trade_chart_{selected_symbol}_{trade_index}")
-                st.caption("K 线与成交量窗口：t0 前 15 个交易日至出场后 10 个交易日。SMA5 = 蓝色、SMA10 = 橙色、SMA20 = 紫色；“基准点”“入场点”“出场点”文字与圆点标注对应 K 线；t0、t1…标示基准点起的交易日；成交量颜色与当日 K 线涨跌一致。")
+                st.caption(
+                    f"当前图表交易核对：t0 {trade.signal}｜入场 {trade.entry}｜"
+                    f"出场 {trade.exit}｜{trade.ret_pct:+.2f}%"
+                )
+                st.vega_lite_chart(candle_data, spec, width="stretch", key=f"trade_chart_{selected_symbol}_{trade_id}")
+                st.caption("K 线与成交量窗口：t0 前 15 个交易日至出场后 10 个交易日。MA5 = 蓝色、MA10 = 橙色、MA20 = 紫色；“基准点”“入场点”“出场点”文字与圆点标注对应 K 线；t0、t1…标示基准点起的交易日；成交量颜色与当日 K 线涨跌一致。")
         with st.expander("指标定义：选择列名查看计算方式"):
             selected_kpi = st.selectbox("指标列", list(KPI_DEFINITIONS), key="top100_kpi_definition")
             st.markdown(f"**{selected_kpi}**：{KPI_DEFINITIONS[selected_kpi]}")
@@ -690,9 +724,9 @@ with tabs[1]:
     st.subheader("参数组合扫描")
     st.caption("扫描保持相同策略结构。每个确认日 tN 自动使用 t(N+1)、t(N+2) 作为早期止损日。全 Nasdaq × 多组合可能需要较长时间。")
     scan_ranges = st.text_input("扫描信号区间（百分比，逗号分隔）", "2-2.5, 2-3")
-    scan_entries = st.text_input("扫描入场确认日", "1,2,3")
+    scan_entries = st.text_input("扫描入场日（相对 t0）", "0,1,2,3")
     scan_stops = st.text_input("扫描早期止损幅度（百分比）", "2,3")
-    scan_smas = st.text_input("扫描 SMA 周期", "5")
+    scan_smas = st.text_input("扫描 MA 周期", "5")
     if st.button("运行参数扫描", width="stretch"):
         try:
             ranges = parse_percent_ranges(scan_ranges)
@@ -727,7 +761,7 @@ with tabs[1]:
         )
         st.dataframe(
             style_by_drawdown(scan_results, "回撤25分位数_%", -max_drawdown_limit,
-                               integer_columns=("交易数", "有交易标的", "SMA")),
+                               integer_columns=("交易数", "有交易标的", "MA")),
             hide_index=True, width="stretch",
         )
         st.download_button("下载参数扫描结果 CSV", scan_results.to_csv(index=False).encode("utf-8-sig"),
@@ -742,7 +776,7 @@ with tabs[2]:
         st.caption("每组仅展示 metadata 当前激活策略版本中、按该版本优化目标选出的最佳组合。v7 同时列出样本集与未参与选参的测试集表现。")
         st.dataframe(
             style_by_drawdown(best_overview, "样本回撤25分位数 (%)", -max_drawdown_limit,
-                               integer_columns=("趋势 SMA 周期", "交易数")),
+                               integer_columns=("趋势 MA 周期", "交易数")),
             hide_index=True, width="stretch",
         )
         st.download_button(
@@ -777,7 +811,7 @@ with tabs[2]:
         ].copy()
         filtered = filtered.sort_values(sort_column, ascending=ascending, na_position="last")
         integer_columns = (
-            "SMA 周期", "交易数", "有有效盈亏比标的数", "盈利标的数",
+            "MA 周期", "交易数", "有有效盈亏比标的数", "盈利标的数",
         )
         st.caption(
             f"共 {len(filtered):,} 个组合。绿色行：回撤25分位数不低于 -{max_drawdown_limit:.1f}%；"

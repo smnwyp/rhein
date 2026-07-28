@@ -27,5 +27,5 @@ def find_exit(*, close, open_, low, sma, sig, t0: int, entry_idx: int,
             if params["use_exit_below_entry"] and close[j] < entry_px:
                 return close[j], j, "收盘价低于入场价"
             if params["use_exit_below_sma"] and not np.isnan(sma[j]) and close[j] < sma[j]:
-                return close[j], j, f"收盘价低于 SMA{params['sma_n']}"
+                return close[j], j, f"收盘价低于 MA{params['sma_n']}"
     return close[-1], len(close) - 1, "数据结束强制平仓"
