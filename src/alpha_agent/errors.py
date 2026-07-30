@@ -1,21 +1,15 @@
-"""Explicit application errors."""
-
-
+"""Explicit errors with machine-readable codes and detail dictionaries."""
+from typing import Any
 class AlphaAgentError(Exception):
-    """Base error for the package."""
-
-
-class ModelClientError(AlphaAgentError):
-    """A model client failed to produce a usable response."""
-
-
-class ModelResponseError(ModelClientError):
-    """The provider response did not match the requested contract."""
-
-
-class StrategyValidationError(AlphaAgentError):
-    """A structurally valid strategy violates domain semantics."""
-
-    def __init__(self, issues: list[str]) -> None:
-        self.issues = issues
-        super().__init__("; ".join(issues))
+    code = "alpha_agent_error"
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None: self.message, self.details = message, details or {}; super().__init__(message)
+class ModelClientFailure(AlphaAgentError): code = "model_client_failure"
+class ModelResponseParsingFailure(AlphaAgentError): code = "model_response_parsing_failure"
+class InvalidDSLschema(AlphaAgentError): code = "invalid_dsl_schema"
+class SemanticStrategyValidationFailure(AlphaAgentError):
+    code = "semantic_strategy_validation_failure"
+    def __init__(self, issues: list[dict[str, Any]]) -> None: self.issues = issues; super().__init__("strategy violates semantic validation", details={"issues": issues})
+class UnsupportedStrategyFeature(AlphaAgentError): code = "unsupported_strategy_feature"
+ModelClientError = ModelClientFailure
+ModelResponseError = ModelResponseParsingFailure
+StrategyValidationError = SemanticStrategyValidationFailure

@@ -1,5 +1,20 @@
 # 协作约定
 
+## Project Rules
+
+- Use agents only where semantic ambiguity or evidence-based judgment requires them.
+- Strategy interpretation and clarification are one agent responsibility.
+- Research execution is a deterministic workflow.
+- Never let the LLM calculate financial KPIs.
+- Never generate arbitrary executable strategy code or use eval for strategy execution.
+- Preserve strategy semantics explicitly and treat ambiguity as a first-class result.
+- Separate schema validation from semantic validation.
+- Prefer deterministic workflows over unnecessary agent autonomy.
+- Add tests before expanding DSL functionality.
+- Do not introduce LangChain or LangGraph, or later sprints, before explicitly requested.
+- Do not silently invent trading parameters; assumptions must be explicit and machine-readable.
+- Backtest performance must never be described as guaranteed future performance.
+
 ## Git 提交与推送
 
 - 用户说出暗号 **“bibu”** 时，才执行 `git commit` 和 `git push`。

@@ -1,88 +1,51 @@
 import json
-
 import pytest
 from pydantic import TypeAdapter, ValidationError
-
-from alpha_agent.domain.conditions import ConditionGroup, Cross, IndicatorValue, MarketField, Scalar
-from alpha_agent.domain.indicators import RSI, SMA
-from alpha_agent.domain.results import ParserResult
+from alpha_agent.domain.interpretation import StrategyInterpretationResult
 from alpha_agent.domain.strategy import StrategyDefinition
-from alpha_agent.errors import StrategyValidationError
+from alpha_agent.errors import SemanticStrategyValidationFailure
 from alpha_agent.parser.validation import validate_strategy
 
+def field(name): return {"kind": "market_field", "field": name}
+def scalar(value): return {"kind": "scalar", "value": value}
+def indicator(kind, window, field_name="close"): return {"kind": "indicator", "indicator": {"indicator": kind, "field": "volume" if kind == "rolling_mean" else field_name, "window": window}}
+def comparison(left, right, op="greater_than"): return {"node_type": "comparison", "operator": op, "left": left, "right": right}
+def strategy(entry=None, exit=None):
+    base = comparison(field("close"), indicator("sma", 20))
+    return {"schema_version":"0.1", "symbol":"AAPL", "frequency":"1d", "direction":"long_only", "position_mode":"fully_invested_or_flat", "entry_condition":entry or base, "exit_condition":exit or base}
 
-def field(name: str) -> dict[str, object]:
-    return {"kind": "market_field", "field": name}
-
-
-def indicator(kind: str, window: int) -> dict[str, object]:
-    data: dict[str, object] = {"type": kind, "window": window}
-    if kind != "rolling_mean_volume":
-        data["source"] = "close"
-    return {"kind": "indicator", "indicator": data}
-
-
-def comparison(left: dict[str, object], right: dict[str, object]) -> dict[str, object]:
-    return {"kind": "comparison", "operator": "greater_than", "left": left, "right": right}
-
-
-def strategy(entry: dict[str, object] | None = None) -> dict[str, object]:
-    condition = entry or comparison(field("close"), indicator("sma", 20))
-    return {
-        "schema_version": "0.1", "asset": "AAPL", "frequency": "daily",
-        "direction": "long_only", "position_sizing": "fully_invested_or_flat",
-        "entry": condition, "exit": comparison(indicator("sma", 20), field("close")),
-    }
-
-
-def test_invalid_window_and_unsupported_indicator_are_rejected() -> None:
-    with pytest.raises(ValidationError):
-        SMA(type="sma", source="close", window=0)
-    with pytest.raises(ValidationError):
-        StrategyDefinition.model_validate(strategy(comparison(field("close"), indicator("macd", 12))))
-
-
-def test_invalid_cross_operands_are_rejected_by_schema() -> None:
-    with pytest.raises(ValidationError):
-        Cross.model_validate({"kind": "cross", "operator": "cross_above", "left": field("close"), "right": {"kind": "scalar", "value": 10.0}})
-
-
-def test_invalid_rsi_threshold_is_rejected_semantically() -> None:
-    model = StrategyDefinition.model_validate(strategy(comparison(indicator("rsi", 14), {"kind": "scalar", "value": 101.0})))
-    with pytest.raises(StrategyValidationError, match="RSI thresholds"):
-        validate_strategy(model)
-
-
-def test_malformed_and_empty_condition_trees_are_rejected() -> None:
-    with pytest.raises(ValidationError):
-        StrategyDefinition.model_validate(strategy({"kind": "group", "operator": "and", "conditions": []}))
-    one = StrategyDefinition.model_validate(strategy({"kind": "group", "operator": "and", "conditions": [comparison(field("close"), indicator("sma", 20))]}))
-    with pytest.raises(StrategyValidationError, match="at least two"):
-        validate_strategy(one)
-
-
-def test_nested_and_or_conditions_validate() -> None:
-    leaf = comparison(field("close"), indicator("sma", 20))
-    tree = {"kind": "group", "operator": "and", "conditions": [leaf, {"kind": "group", "operator": "or", "conditions": [leaf, leaf]}]}
-    model = StrategyDefinition.model_validate(strategy(tree))
-    validate_strategy(model)
-    assert isinstance(model.entry, ConditionGroup)
-
-
-def test_frequency_and_unknown_fields_are_rejected() -> None:
-    payload = strategy()
-    payload["frequency"] = "hourly"
-    with pytest.raises(ValidationError):
-        StrategyDefinition.model_validate(payload)
-    payload = strategy()
-    payload["arbitrary_python"] = "print('unsafe')"
-    with pytest.raises(ValidationError):
-        StrategyDefinition.model_validate(payload)
-
-
-def test_json_round_trip_preserves_schema_version() -> None:
-    result = {"status": "parsed", "strategy": strategy(), "assumptions": [], "warnings": []}
-    adapter = TypeAdapter(ParserResult)
-    parsed = adapter.validate_json(json.dumps(result))
-    restored = adapter.validate_json(adapter.dump_json(parsed))
-    assert restored.strategy.schema_version == "0.1"  # type: ignore[union-attr]
+@pytest.mark.parametrize("value", [0, -1])
+def test_invalid_indicator_window_is_rejected(value):
+    with pytest.raises(ValidationError): StrategyDefinition.model_validate(strategy(comparison(field("close"), indicator("sma", value))))
+def test_unsupported_indicator_and_cross_scalar_are_rejected():
+    with pytest.raises(ValidationError): StrategyDefinition.model_validate(strategy(comparison(field("close"), indicator("macd", 12))))
+    cross = {"node_type":"cross", "operator":"cross_above", "left":field("close"), "right":scalar(1)}
+    with pytest.raises(ValidationError): StrategyDefinition.model_validate(strategy(cross))
+@pytest.mark.parametrize("threshold", [-1, 101])
+def test_rsi_threshold_ranges_are_semantic_errors(threshold):
+    model = StrategyDefinition.model_validate(strategy(comparison(indicator("rsi", 14), scalar(threshold))))
+    with pytest.raises(SemanticStrategyValidationFailure, match="semantic"): validate_strategy(model)
+def test_empty_and_singleton_groups_and_invalid_volume_indicator_are_rejected():
+    with pytest.raises(ValidationError): StrategyDefinition.model_validate(strategy({"node_type":"group","operator":"and","conditions":[]}))
+    one = StrategyDefinition.model_validate(strategy({"node_type":"group","operator":"and","conditions":[comparison(field("close"), indicator("sma",20))]}))
+    with pytest.raises(SemanticStrategyValidationFailure): validate_strategy(one)
+    bad = {"kind":"indicator","indicator":{"indicator":"rolling_mean","field":"close","window":20}}
+    with pytest.raises(ValidationError): StrategyDefinition.model_validate(strategy(comparison(field("close"), bad)))
+def test_nested_and_or_and_comparison_operators_validate():
+    leaf = comparison(field("close"), indicator("sma", 20), "greater_than_or_equal")
+    tree = {"node_type":"group","operator":"and","conditions":[leaf,{"node_type":"group","operator":"or","conditions":[leaf,comparison(field("close"), indicator("ema", 10), "less_than_or_equal")]}]}
+    validate_strategy(StrategyDefinition.model_validate(strategy(tree)))
+def test_required_fixed_fields_and_schema_versions_are_rejected():
+    for key, value in (("frequency","daily"),("direction","short"),("schema_version","0.2")):
+        payload = strategy(); payload[key] = value
+        with pytest.raises(ValidationError): StrategyDefinition.model_validate(payload)
+    payload = strategy(); del payload["schema_version"]
+    with pytest.raises(ValidationError): StrategyDefinition.model_validate(payload)
+def test_json_round_trips_preserve_both_result_variants():
+    adapter = TypeAdapter(StrategyInterpretationResult)
+    parsed = {"status":"parsed","strategy":strategy(),"assumptions":[],"warnings":[]}
+    clarification = {"status":"clarification_required","partial_strategy":None,"questions":[{"question_id":"window","question":"Which window?","target_path":"entry_condition","suggested_answers":["20"],"answer_kind":"window"}],"ambiguous_terms":["moving average"]}
+    for payload in (parsed, clarification):
+        restored = adapter.validate_json(adapter.dump_json(adapter.validate_json(json.dumps(payload))))
+        assert restored.status == payload["status"]
+    assert adapter.validate_python(parsed).strategy.schema_version == "0.1"

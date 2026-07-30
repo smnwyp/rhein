@@ -1,66 +1,57 @@
 # Natural-Language Alpha Research Agent
 
-This repository is being extended incrementally as a hands-on agent-engineering project. Sprint 1 adds a provider-independent **Strategy Interpreter Agent** that turns natural language into a constrained Strategy DSL v0.1 or asks structured clarification questions. It does not generate or execute Python.
+This is an incremental, hands-on AI-agent-engineering project. Sprint 1 implements one user-facing **Strategy Interpreter Agent**: it turns a natural-language trading rule into a constrained Strategy DSL v0.1, or returns precise clarification questions. It does not execute trades, calculate KPIs, or generate executable strategy code.
 
-## Core architecture
+## Scope and architecture
 
-1. **Strategy Interpreter Agent** — interprets intent and ambiguity in one task, returning `ParsedStrategy` or `ClarificationRequired`.
-2. **Research Workflow** — will deterministically validate and execute strategies, backtests, KPIs, robustness checks, and reports.
-3. **Research Reviewer Agent** — will review standardized evidence and propose bounded experiments.
-4. **Experiment Workflow** — will apply only approved changes, version strategies, rerun research, and compare results.
+The interpreter agent owns semantic interpretation and clarification because both require language judgment. It returns exactly one structured variant: `parsed` (a validated DSL plus explicit assumptions/warnings) or `clarification_required` (questions, original ambiguous terms, and an optional partial DSL).
 
-Only item 1 is implemented in Sprint 1. Semantic validation is deterministic Python and is kept separate from both prompts and Pydantic's structural validation. Existing `rhein` backtest code is not connected to the interpreter.
+The future Research Workflow is deliberately deterministic Python: it will validate data, calculate indicators/KPIs, simulate execution, apply costs, retain reproducibility, and enforce state transitions. LLMs must not calculate those values. Arbitrary Python generation and `eval` are rejected: the strategy is data, with explicit operands and conditions, not executable text.
+
+The legacy `rhein/` application contains pre-existing backtesting code. It is intentionally not connected to `src/alpha_agent`, which is the isolated Sprint 1 learning module.
 
 ## DSL v0.1
 
-The immutable, strict Pydantic models support OHLCV fields; SMA, EMA, RSI, rolling return, and rolling mean volume; persistent `greater_than`/`less_than` comparisons; event-based `cross_above`/`cross_below`; and nested `and`/`or` groups. A narrowly scoped scaled-series operand represents rules such as `volume > 1.5 × rolling_mean_volume(20)` without introducing general arithmetic.
+`StrategyDefinition` pins `schema_version: "0.1"`, `frequency: "1d"`, `direction: "long_only"`, and `position_mode: "fully_invested_or_flat"`. It supports one symbol, one entry tree, and one exit tree.
 
-Every strategy explicitly records `schema_version: "0.1"`, daily frequency, one asset, long-only direction, and fully-invested-or-flat sizing. Crosses require two time series. The validator checks operand dimensions, recursive groups, and RSI threshold ranges.
+- Market fields: `open`, `high`, `low`, `close`, `volume`
+- Indicators: SMA, EMA, RSI, rolling return, rolling mean volume
+- Conditions: persistent comparisons (`greater_than`, `less_than`, `greater_than_or_equal`, `less_than_or_equal`), cross events (`cross_above`, `cross_below`), and nested `and` / `or` groups
+- Operands: current market fields, calculated indicators, finite scalars, and explicit scaled operands
 
-```json
-{
-  "status": "parsed",
-  "strategy": {
-    "schema_version": "0.1",
-    "asset": "AAPL",
-    "frequency": "daily",
-    "direction": "long_only",
-    "position_sizing": "fully_invested_or_flat",
-    "entry": {
-      "kind": "cross",
-      "operator": "cross_above",
-      "left": {"kind": "market_field", "field": "close"},
-      "right": {"kind": "indicator", "indicator": {"type": "sma", "source": "close", "window": 20}}
-    },
-    "exit": {
-      "kind": "cross",
-      "operator": "cross_below",
-      "left": {"kind": "market_field", "field": "close"},
-      "right": {"kind": "indicator", "indicator": {"type": "sma", "source": "close", "window": 20}}
-    }
-  },
-  "assumptions": [{"code": "ma_is_sma", "message": "Moving average interpreted as SMA."}],
-  "warnings": []
-}
-```
+For example, `volume > 1.5 × rolling_mean(volume, 20)` is a comparison whose right side is a `scaled_operand`; it is never flattened into text. A cross condition only permits two time-series operands, so it cannot be confused with `close > SMA(20)`.
 
-Ambiguous phrases are preserved verbatim. For example, “fallen significantly” and “volume is increasing” produce questions asking for measurable definitions rather than guessed windows or thresholds.
+Missing RSI windows are clarified by default. A future product policy can explicitly set `default_rsi_window`, at which point the interpreter must record that as an assumption.
 
-## Model boundary
+Unsupported concepts (shorts, leverage, options, stops, portfolio allocation, intraday execution) must be rejected or clarified; they are not silently translated.
 
-`ModelClient` is a small protocol that accepts system/user prompts and returns JSON-compatible structured data. `StrategyInterpreter` validates that data against the discriminated result union, then applies deterministic semantic validation. `FakeModelClient` supplies queued responses for network-free tests; a provider adapter can be added later without changing domain models or orchestration.
+## Model and validation boundary
+
+`StrategyInterpreterService` takes a typed `StrategyInterpretationRequest` and delegates to the provider-independent `StrategyModelClient` protocol. Provider adapters return JSON-compatible data only. The service then performs:
+
+1. Pydantic schema/discriminated-union parsing.
+2. Deterministic semantic validation, including operand compatibility, RSI ranges, group arity, cross operand types, and indicator field constraints.
+3. Typed errors for client failure, malformed model output, invalid schema, unsupported features, and semantic violations.
+
+`FakeModelClient` queues structured responses or exceptions, so tests require no real external model.
+
+## Monitoring the interpreter
+
+Pass `InMemoryInterpreterMonitor` to the service to record one privacy-preserving event per attempt: outcome, latency, clarification/warning counts, error code, symbol presence, and hashes—not raw strategy text. `summary()` reports parse/clarification/failure rates, latency, and failure-code distribution.
+
+Operational telemetry cannot prove interpretation quality. For that, attach reviewed examples through `record_evaluation(InterpretationEvaluation(...))`; the summary then reports reviewed-sample accuracy. This separates observed system health from evidence-backed quality evaluation and can later be replaced by a database or telemetry adapter without changing the interpreter.
 
 ## Development
 
-Python 3.12 or newer is required.
+Python 3.12+ is required.
 
 ```bash
 python -m pip install -e '.[dev]'
-python -m pytest
+python -m pytest tests/unit/test_dsl.py tests/integration/test_interpreter.py
 ```
 
-The tests cover all five required examples, nested logic, malformed DSL, unsupported indicators/frequencies, invalid windows/RSI thresholds/cross operands, result discrimination, JSON round trips, and schema-version preservation.
+For a live local test, copy `.env.example` to `.env`, set `AWS_BEARER_TOKEN_BEDROCK`, and start the existing app with `streamlit run app.py`. The interpreter page reads the Bedrock key only from `.env`; it never displays or persists it. Open **Strategy Interpreter** in the sidebar, choose a group/symbol, enter a natural-language rule, then inspect the validated DSL or clarification response. `BEDROCK_MODEL` and `AWS_REGION` optionally override the displayed defaults. The page uses session-local, hashed monitoring events.
 
-## Not in Sprint 1
+## Future sprints
 
-There is no model-provider adapter, LangChain/LangGraph integration, indicator calculation, signal execution, backtesting, KPI calculation, review agent, or experiment workflow in this sprint.
+Sprint 2 adds only the deterministic backtest workflow. Sprint 3 adds a hand-written research tool loop; Sprint 4 adds the evidence-based reviewer; Sprint 5 adds approval-gated immutable experiments; Sprint 6 adds state and memory; Sprint 7 may introduce LangGraph; Sprint 8 adds formal evaluation and production hardening.

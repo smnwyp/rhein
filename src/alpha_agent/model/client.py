@@ -1,9 +1,6 @@
-"""Structured model-client boundary."""
-
+"""Provider-independent boundary for the Strategy Interpreter Agent."""
+from collections.abc import Mapping
 from typing import Any, Protocol
-
-
-class ModelClient(Protocol):
-    def generate_structured(self, *, system_prompt: str, user_prompt: str) -> Any:
-        """Return a JSON-compatible structured response."""
-        ...
+from alpha_agent.domain.interpretation import StrategyInterpretationRequest
+class StrategyModelClient(Protocol):
+    def interpret_strategy(self, request: StrategyInterpretationRequest) -> Mapping[str, Any]: ...

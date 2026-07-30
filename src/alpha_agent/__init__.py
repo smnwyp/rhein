@@ -1,7 +1,7 @@
-"""Natural-language alpha research agent."""
+"""Natural-language alpha research agent, Sprint 1."""
 
-from alpha_agent.domain.results import ParserResult
+from alpha_agent.domain.interpretation import StrategyInterpretationResult
 from alpha_agent.domain.strategy import StrategyDefinition
-from alpha_agent.parser.service import StrategyInterpreter
+from alpha_agent.parser.service import StrategyInterpreterService
 
-__all__ = ["ParserResult", "StrategyDefinition", "StrategyInterpreter"]
+__all__ = ["StrategyDefinition", "StrategyInterpretationResult", "StrategyInterpreterService"]

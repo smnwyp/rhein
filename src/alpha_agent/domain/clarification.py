@@ -1,23 +1,14 @@
-"""Structured clarification requests."""
-
+"""Precise unresolved inputs returned by the interpreter agent."""
 from typing import Literal
-
 from pydantic import Field, model_validator
-
 from alpha_agent.domain.indicators import DSLModel
-
-
 class ClarificationQuestion(DSLModel):
-    id: str = Field(min_length=1)
-    ambiguous_term: str = Field(min_length=1)
+    question_id: str = Field(min_length=1)
     question: str = Field(min_length=1)
-    expected_answer_type: Literal["number", "percentage", "window", "choice", "free_text"]
-    choices: list[str] | None = None
-
+    target_path: str = Field(min_length=1)
+    suggested_answers: list[str] = Field(default_factory=list)
+    answer_kind: Literal["number", "percentage", "window", "choice", "free_text"] = "free_text"
     @model_validator(mode="after")
-    def choices_match_type(self) -> "ClarificationQuestion":
-        if self.expected_answer_type == "choice" and not self.choices:
-            raise ValueError("choice questions require choices")
-        if self.expected_answer_type != "choice" and self.choices is not None:
-            raise ValueError("choices are only valid for choice questions")
+    def validate_choices(self) -> "ClarificationQuestion":
+        if self.answer_kind == "choice" and not self.suggested_answers: raise ValueError("choice questions require suggested_answers")
         return self
