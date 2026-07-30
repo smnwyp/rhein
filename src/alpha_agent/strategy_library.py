@@ -11,7 +11,7 @@ from pydantic import Field
 
 from alpha_agent.domain.interpretation import InterpretationNote
 from alpha_agent.domain.indicators import DSLModel
-from alpha_agent.domain.strategy import StrategyDefinition
+from alpha_agent.domain.strategy import AnyStrategyDefinition
 from alpha_agent.errors import AlphaAgentError
 
 
@@ -20,7 +20,7 @@ class SavedStrategy(DSLModel):
     strategy_name: str = Field(min_length=1)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     original_language: str = Field(min_length=1)
-    strategy: StrategyDefinition | None = None
+    strategy: AnyStrategyDefinition | None = None
     assumptions: list[InterpretationNote] = Field(default_factory=list)
     warnings: list[InterpretationNote] = Field(default_factory=list)
 

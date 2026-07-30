@@ -34,6 +34,8 @@ def test_empty_provider_transport_fields_are_normalized_but_populated_ones_are_r
     assert isinstance(StrategyInterpreterService(FakeModelClient([response])).interpret(StrategyInterpretationRequest(strategy_text="test")), ParsedStrategy)
     response["questions"] = [{"question_id":"unexpected","question":"Unexpected","target_path":"entry_condition","suggested_answers":[],"answer_kind":"choice"}]
     with pytest.raises(ModelResponseParsingFailure): StrategyInterpreterService(FakeModelClient([response])).interpret(StrategyInterpretationRequest(strategy_text="test"))
+
+
 def test_malformed_and_client_failures_are_typed_and_monitored():
     monitor = InMemoryInterpreterMonitor(); request = StrategyInterpretationRequest(strategy_text="x")
     with pytest.raises(ModelResponseParsingFailure): StrategyInterpreterService(FakeModelClient([{"status":"parsed"}]), monitor=monitor).interpret(request)

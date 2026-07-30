@@ -3,8 +3,10 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 from alpha_agent.domain.interpretation import StrategyInterpretationResult
 from alpha_agent.domain.strategy import StrategyDefinition
+from alpha_agent.domain.sequence import TimedStrategyDefinition
 from alpha_agent.errors import SemanticStrategyValidationFailure
 from alpha_agent.parser.validation import validate_strategy
+from alpha_agent.parser.review import build_review_items
 
 def field(name): return {"kind": "market_field", "field": name}
 def scalar(value): return {"kind": "scalar", "value": value}
@@ -25,10 +27,10 @@ def test_unsupported_indicator_and_cross_scalar_are_rejected():
 def test_rsi_threshold_ranges_are_semantic_errors(threshold):
     model = StrategyDefinition.model_validate(strategy(comparison(indicator("rsi", 14), scalar(threshold))))
     with pytest.raises(SemanticStrategyValidationFailure, match="semantic"): validate_strategy(model)
-def test_empty_and_singleton_groups_and_invalid_volume_indicator_are_rejected():
+def test_empty_groups_and_invalid_volume_indicator_are_rejected_but_singletons_are_valid():
     with pytest.raises(ValidationError): StrategyDefinition.model_validate(strategy({"node_type":"group","operator":"and","conditions":[]}))
     one = StrategyDefinition.model_validate(strategy({"node_type":"group","operator":"and","conditions":[comparison(field("close"), indicator("sma",20))]}))
-    with pytest.raises(SemanticStrategyValidationFailure): validate_strategy(one)
+    validate_strategy(one)
     bad = {"kind":"indicator","indicator":{"indicator":"rolling_mean","field":"close","window":20}}
     with pytest.raises(ValidationError): StrategyDefinition.model_validate(strategy(comparison(field("close"), bad)))
 def test_nested_and_or_and_comparison_operators_validate():
@@ -49,3 +51,56 @@ def test_json_round_trips_preserve_both_result_variants():
         restored = adapter.validate_json(adapter.dump_json(adapter.validate_json(json.dumps(payload))))
         assert restored.status == payload["status"]
     assert adapter.validate_python(parsed).strategy.schema_version == "0.1"
+
+
+def test_timed_strategy_v02_represents_generic_relative_days_and_intraday_requirements():
+    timed = {
+        "schema_version": "0.2", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "intraday_ohlcv",
+        "anchor": {
+            "name": "t0",
+            "condition": {"node_type": "group", "operator": "and", "conditions": [
+                comparison(indicator("rolling_return", 1), scalar(.05), "greater_than_or_equal"),
+                comparison(field("close"), indicator("sma", 5)),
+            ]},
+            "constraints": [
+                {"kind": "rolling_low_anchor_constraint", "lookback_days": 15, "low_must_precede_anchor": True, "maximum_anchor_close_gain": .2},
+                {"kind": "anchor_indicator_change_constraint", "indicator": {"indicator": "sma", "field": "close", "window": 20}, "comparison_offset_days": -2, "minimum_relative_change": .0001},
+            ],
+        },
+        "entry": {"active_day": {"anchor": "t0", "start_offset_days": 1, "end_offset_days": 1}, "condition": {"node_type": "comparison", "operator": "greater_than_or_equal", "left": field("close"), "right": {"kind": "anchor_market_field", "anchor": "t0", "field": "close"}}, "execution": "close"},
+        "exit_rules": [
+            {"rule_id": "early_stop", "priority": 10, "active_days": {"start_offset_days": 3, "end_offset_days": 4}, "kind": "intraday_price_trigger", "price_trigger": {"base": "entry_price", "multiplier": .93, "operator": "less_than_or_equal"}, "execution": "intraday"},
+            {"rule_id": "technical", "priority": 20, "active_days": {"start_offset_days": 4, "end_offset_days": 6}, "kind": "close_condition", "condition": {"node_type": "comparison", "operator": "less_than", "left": field("close"), "right": {"kind": "entry_price"}}, "execution": "close"},
+            {"rule_id": "t6_protection", "priority": 5, "active_days": {"start_offset_days": 6, "end_offset_days": 6}, "kind": "intraday_price_trigger", "price_trigger": {"base": "entry_price", "multiplier": .99, "operator": "less_than_or_equal"}, "execution": "intraday"},
+            {"rule_id": "t6_close", "priority": 30, "active_days": {"start_offset_days": 6, "end_offset_days": 6}, "kind": "forced_close", "execution": "close"},
+        ],
+    }
+    model = TimedStrategyDefinition.model_validate(timed)
+    assert model.entry.active_day.start_offset_days == 1
+    assert TimedStrategyDefinition.model_validate_json(model.model_dump_json()) == model
+    parsed_result = TypeAdapter(StrategyInterpretationResult).validate_python({"status": "parsed", "strategy": timed, "assumptions": [], "warnings": []})
+    assert parsed_result.strategy.schema_version == "0.2"
+    timed["data_requirement"] = "daily_ohlcv"
+    with pytest.raises(ValidationError, match="intraday_ohlcv"):
+        TimedStrategyDefinition.model_validate(timed)
+
+
+def test_open_ended_technical_exit_does_not_require_or_create_a_forced_close():
+    strategy_without_expiry = {
+        "schema_version": "0.2", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": comparison(field("close"), indicator("sma", 20))},
+        "entry": {"active_day": {"start_offset_days": 1, "end_offset_days": 1}, "condition": {"node_type": "comparison", "operator": "greater_than_or_equal", "left": field("close"), "right": {"kind": "anchor_market_field", "anchor": "t0", "field": "close"}}, "execution": "close"},
+        "exit_rules": [{"rule_id": "technical_from_t4", "priority": 1, "active_days": {"start_offset_days": 4}, "kind": "close_condition", "condition": {"node_type": "comparison", "operator": "less_than", "left": field("close"), "right": {"kind": "entry_price"}}, "execution": "close"}],
+    }
+    model = TimedStrategyDefinition.model_validate(strategy_without_expiry)
+    assert model.exit_rules[0].active_days.end_offset_days is None
+    assert all(rule.kind != "forced_close" for rule in model.exit_rules)
+
+
+def test_review_items_are_deterministically_derived_from_validated_dsl():
+    model = StrategyDefinition.model_validate(strategy())
+    items = build_review_items(model)
+    assert [(item.title, item.dsl_path) for item in items] == [("入场条件", "entry_condition"), ("出场条件", "exit_condition")]
+    assert "SMA(20)" in items[0].explanation

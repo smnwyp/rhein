@@ -23,14 +23,14 @@ For example, `volume > 1.5 × rolling_mean(volume, 20)` is a comparison whose ri
 
 Missing RSI windows are clarified by default. A future product policy can explicitly set `default_rsi_window`, at which point the interpreter must record that as an assumption.
 
-Unsupported concepts (shorts, leverage, options, stops, portfolio allocation, intraday execution) must be rejected or clarified; they are not silently translated.
+DSL v0.2 additionally represents anchored, relative-day strategies: `t0` is an anchor day and `t1`, `t2`, and so on are explicit integer offsets. It supports anchor/entry-price references, date-ranged exits, and forced closes. Intraday triggers are represented only with an explicit `intraday_ohlcv` data requirement; a future daily-only backtest must reject them rather than fabricate an intraday path. Shorts, leverage, options, and portfolio allocation remain unsupported and must be rejected or clarified.
 
 ## Model and validation boundary
 
 `StrategyInterpreterService` takes a typed `StrategyInterpretationRequest` and delegates to the provider-independent `StrategyModelClient` protocol. Provider adapters return JSON-compatible data only. The service then performs:
 
 1. Pydantic schema/discriminated-union parsing.
-2. Deterministic semantic validation, including operand compatibility, RSI ranges, group arity, cross operand types, and indicator field constraints.
+2. Deterministic semantic validation, including operand compatibility, RSI ranges, non-empty groups, cross operand types, and indicator field constraints.
 3. Typed errors for client failure, malformed model output, invalid schema, unsupported features, and semantic violations.
 
 `FakeModelClient` queues structured responses or exceptions, so tests require no real external model.
