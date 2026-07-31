@@ -5,11 +5,12 @@ from dataclasses import dataclass
 
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition
 from alpha_agent.domain.indicators import EMA, RSI, RollingMeanVolume, RollingReturn, SMA
-from alpha_agent.domain.operands import IndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
+from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
-    AnchorIndicatorOperand, AnchorMarketOperand, CurrentIndicatorOperand, CurrentMarketOperand,
-    EntryPriceOperand, ExitRule, TemporalComparisonCondition, TemporalCondition, TemporalConditionGroup,
-    TemporalCrossCondition, TemporalOperand, TemporalScalarOperand, TimedStrategyDefinition,
+    AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, CandlestickPatternCondition,
+    CurrentIndicatorOperand, CurrentMarketOperand, EntryPriceOperand, ExitRule, OrderedExtremaDrawdownConstraint, ScaledEntryPriceOperand,
+    TemporalComparisonCondition, TemporalCondition, TemporalConditionGroup, TemporalCrossCondition, TemporalOperand,
+    TemporalScalarOperand, TimedStrategyDefinition,
 )
 from alpha_agent.domain.strategy import AnyStrategyDefinition, StrategyDefinition
 
@@ -33,6 +34,7 @@ def _indicator(indicator: object) -> str:
 def _operand(operand: Operand) -> str:
     if isinstance(operand, MarketFieldOperand): return {"open": "开盘价", "high": "最高价", "low": "最低价", "close": "收盘价", "volume": "成交量"}[operand.field]
     if isinstance(operand, IndicatorOperand): return _indicator(operand.indicator)
+    if isinstance(operand, LaggedIndicatorOperand): return f"{_indicator(operand.indicator)}（当日{operand.offset_days:+d}）"
     if isinstance(operand, ScalarOperand): return f"{operand.value:g}"
     if isinstance(operand, ScaledOperand): return f"{_operand(operand.operand)} × {operand.multiplier:g}"
     raise TypeError(f"unknown operand: {type(operand).__name__}")
@@ -44,11 +46,13 @@ def _temporal_operand(operand: TemporalOperand) -> str:
     if isinstance(operand, TemporalScalarOperand): return f"{operand.value:g}"
     if isinstance(operand, AnchorMarketOperand): return f"{operand.anchor} 日{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}"
     if isinstance(operand, EntryPriceOperand): return "入场价"
+    if isinstance(operand, ScaledEntryPriceOperand): return f"入场价 × {operand.multiplier:g}"
     if isinstance(operand, AnchorIndicatorOperand): return f"{operand.anchor}{operand.offset_days:+d} 日{_indicator(operand.indicator)}"
+    if isinstance(operand, AnchorRunningMaximumOperand): return f"自 t0 起至当日的最大{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}（并列取最早）"
     raise TypeError(f"unknown temporal operand: {type(operand).__name__}")
 
 
-_OPERATOR = {"greater_than": ">", "less_than": "<", "greater_than_or_equal": "≥", "less_than_or_equal": "≤", "cross_above": "上穿", "cross_below": "下穿"}
+_OPERATOR = {"greater_than": ">", "less_than": "<", "greater_than_or_equal": "≥", "less_than_or_equal": "≤", "equal": "=", "cross_above": "上穿", "cross_below": "下穿"}
 
 
 def _condition(condition: Condition) -> str:
@@ -63,6 +67,9 @@ def _condition(condition: Condition) -> str:
 def _temporal_condition(condition: TemporalCondition) -> str:
     if isinstance(condition, TemporalComparisonCondition): return f"{_temporal_operand(condition.left)} {_OPERATOR[condition.operator]} {_temporal_operand(condition.right)}"
     if isinstance(condition, TemporalCrossCondition): return f"{_temporal_operand(condition.left)} {_OPERATOR[condition.operator]} {_temporal_operand(condition.right)}"
+    if isinstance(condition, CandlestickPatternCondition):
+        if condition.pattern == "doji": return f"十字星：|收盘价 - 开盘价| / 开盘价 ≤ {condition.body_to_open_threshold:.2%}"
+        return f"大阴线：收盘价 < 开盘价，且 (开盘价 - 收盘价) / 开盘价 > {condition.body_to_open_threshold:.2%}"
     if isinstance(condition, TemporalConditionGroup):
         joiner = " 且 " if condition.operator == "and" else " 或 "
         return "(" + joiner.join(_temporal_condition(item) for item in condition.conditions) + ")"
@@ -101,10 +108,19 @@ def build_review_items(strategy: AnyStrategyDefinition) -> list[ReviewItem]:
         if constraint.kind == "rolling_low_anchor_constraint":
             field = "最低价（Low）" if constraint.reference_field == "low" else "最低收盘价（Close）"
             explanation = f"t0 前 {constraint.lookback_days} 日至 t0 的{field}必须早于 t0；t0 收盘相对该低点涨幅 ≤ {constraint.maximum_anchor_close_gain:.2%}。"
+        elif constraint.kind == "anchor_indicator_change_constraint":
+            comparator = "大于" if constraint.operator == "greater_than" else "不低于"
+            explanation = f"t0 的 {_indicator(constraint.indicator)} 相对 t0{constraint.comparison_offset_days:+d} 的变化{comparator} {constraint.minimum_relative_change:.2%}。"
         else:
-            explanation = f"t0 的 {_indicator(constraint.indicator)} 相对 t0{constraint.comparison_offset_days:+d} 至少变化 {constraint.minimum_relative_change:.2%}。"
+            assert isinstance(constraint, OrderedExtremaDrawdownConstraint)
+            explanation = f"在截至 t0 的 {constraint.lookback_days} 日收盘价窗口中，A 为最早最高收盘价，B 为 A 后最早最低收盘价；A→B 回撤 ≥ {constraint.minimum_peak_to_trough_drawdown:.2%}，且 t0 相对 B 的反弹 ≤ {constraint.maximum_anchor_recovery_from_trough:.2%}。"
         items.append(ReviewItem("t0 附加约束", f"anchor.constraints[{index}]", explanation))
     items.append(ReviewItem("入场", "entry", f"{_range(strategy.entry.active_day.start_offset_days, strategy.entry.active_day.end_offset_days)}：若{_temporal_condition(strategy.entry.condition)}，按收盘价入场。"))
     for index, rule in sorted(enumerate(strategy.exit_rules), key=lambda item: item[1].priority):
         items.append(ReviewItem(f"出场规则（优先级 {rule.priority}）", f"exit_rules[{index}]", _exit(rule)))
+    if strategy.lifecycle_policy is not None:
+        policy = strategy.lifecycle_policy
+        sample_end = "样本最后一个交易日按收盘价强制平仓" if policy.sample_end_open_position == "force_close" else "样本结束未平仓头寸不计入已平仓交易"
+        reentry = "卖出后允许继续寻找下一次 t0" if policy.allow_reentry_after_exit else "卖出后不再寻找下一次 t0"
+        items.append(ReviewItem("完整样本执行政策", "lifecycle_policy", f"{sample_end}；{reentry}。"))
     return items

@@ -15,8 +15,38 @@ from alpha_agent.domain.interpretation import (
 from alpha_agent.errors import ModelResponseParsingFailure
 
 
+_NUMBERED_SECTION = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+\S")
+_DEFINITION_SECTION = re.compile(r"^\s*(?:定义|术语|数据口径)\s*[:：]\s*$")
+
+
+def _numbered_strategy_sections(strategy_text: str) -> list[str] | None:
+    """Keep a specification's meaningful numbered blocks together.
+
+    A formal strategy often has one formula per line. Treating every formula,
+    heading, and explanatory sentence as a separate coverage item makes the
+    contract noisy and can exhaust a provider's structured-output budget. A
+    numbered subsection is the smallest reliable deterministic unit here.
+    """
+    lines = [line.strip() for line in strategy_text.splitlines() if line.strip()]
+    if sum(bool(_NUMBERED_SECTION.match(line)) for line in lines) < 2:
+        return None
+    sections: list[str] = []
+    current: list[str] = []
+    for line in lines:
+        if (_NUMBERED_SECTION.match(line) or _DEFINITION_SECTION.match(line)) and current:
+            sections.append("\n".join(current))
+            current = []
+        current.append(line)
+    if current:
+        sections.append("\n".join(current))
+    return sections
+
+
 def segment_source_clauses(strategy_text: str) -> list[SourceClause]:
-    """Create stable review IDs; quoted Chinese condition lists split by item."""
+    """Create stable review IDs at a useful semantic granularity."""
+    numbered_sections = _numbered_strategy_sections(strategy_text)
+    if numbered_sections is not None:
+        return [SourceClause(clause_id=f"C{index:02d}", text=text) for index, text in enumerate(numbered_sections, start=1)]
     texts: list[str] = []
     for sentence in (part.strip() for part in re.split(r"[。；;\n]+", strategy_text)):
         if not sentence:
@@ -51,7 +81,7 @@ def preflight_clarifications(request: StrategyInterpretationRequest) -> Clarific
     text = request.strategy_text
     questions: list[ClarificationQuestion] = []
     ambiguous: list[str] = []
-    if "低点" in text and not _answered(request, "anchor_low_reference_field"):
+    if re.search(r"(?:t0\s*-\s*\d+[^。；;]*低点|低点[^。；;]*t0)", text, flags=re.IGNORECASE) and not _answered(request, "anchor_low_reference_field"):
         questions.append(ClarificationQuestion(
             question_id="anchor_low_reference_field",
             question="“t0-15 至 t0 的低点”应按哪一个字段定义？",
@@ -78,6 +108,24 @@ def preflight_clarifications(request: StrategyInterpretationRequest) -> Clarific
             answer_kind="choice",
         ))
         ambiguous.append("较 t0-2 至少高 0.01%")
+    if re.search(r"样本结束.*未平仓", text) and not _answered(request, "sample_end_open_position"):
+        questions.append(ClarificationQuestion(
+            question_id="sample_end_open_position",
+            question="样本结束时仍未平仓的头寸如何处理？",
+            target_path="lifecycle_policy.sample_end_open_position",
+            suggested_answers=["样本最后一个交易日按收盘价强制平仓", "保留未平仓头寸，并从已平仓 KPI 中排除"],
+            answer_kind="choice",
+        ))
+        ambiguous.append("样本结束未平仓头寸的处理")
+    if re.search(r"卖出后.*重新寻找.*C\s*点", text, flags=re.IGNORECASE) and not _answered(request, "allow_reentry_after_exit"):
+        questions.append(ClarificationQuestion(
+            question_id="allow_reentry_after_exit",
+            question="一笔交易卖出后，是否允许继续寻找下一次 C 点并再次入场？",
+            target_path="lifecycle_policy.allow_reentry_after_exit",
+            suggested_answers=["允许继续寻找下一次 C 点", "不允许；每个标的只执行第一笔交易"],
+            answer_kind="choice",
+        ))
+        ambiguous.append("卖出后是否重新寻找 C 点")
     if not questions:
         return None
     coverage = [

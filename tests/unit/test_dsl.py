@@ -99,6 +99,60 @@ def test_open_ended_technical_exit_does_not_require_or_create_a_forced_close():
     assert all(rule.kind != "forced_close" for rule in model.exit_rules)
 
 
+def test_same_exit_priority_is_allowed_only_for_non_overlapping_relative_day_ranges():
+    timed = {
+        "schema_version": "0.3", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": comparison(field("close"), indicator("sma", 5)), "constraints": []},
+        "entry": {"active_day": {"start_offset_days": 0, "end_offset_days": 0}, "condition": comparison(field("close"), indicator("sma", 5)), "execution": "close"},
+        "exit_rules": [
+            {"rule_id": "early", "priority": 1, "active_days": {"start_offset_days": 1, "end_offset_days": 10}, "kind": "close_condition", "condition": comparison(field("close"), indicator("sma", 20), "less_than"), "execution": "close"},
+            {"rule_id": "late", "priority": 1, "active_days": {"start_offset_days": 11}, "kind": "close_condition", "condition": comparison(field("close"), indicator("sma", 10), "less_than"), "execution": "close"},
+        ],
+        "lifecycle_policy": {"sample_end_open_position": "force_close", "allow_reentry_after_exit": True},
+    }
+    assert TimedStrategyDefinition.model_validate(timed).exit_rules[1].priority == 1
+    timed["exit_rules"][1]["active_days"]["start_offset_days"] = 10
+    with pytest.raises(ValidationError, match="simultaneously active"):
+        TimedStrategyDefinition.model_validate(timed)
+
+
+def test_v03_supports_ordered_drawdown_running_volume_and_candlestick_exit():
+    timed = {
+        "schema_version": "0.3", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": {"node_type": "group", "operator": "and", "conditions": [
+            comparison(field("close"), indicator("sma", 5)),
+            comparison(indicator("sma", 5), indicator("sma", 10)),
+            comparison(indicator("sma", 10), indicator("sma", 20)),
+            comparison(indicator("sma", 20), {"kind": "lagged_indicator", "offset_days": -1, "indicator": {"indicator": "sma", "field": "close", "window": 20}}),
+        ]}, "constraints": [{"kind": "ordered_extrema_drawdown_constraint", "lookback_days": 50, "field": "close", "peak_tie_break": "earliest", "trough_tie_break": "earliest", "minimum_peak_to_trough_drawdown": .25, "maximum_anchor_recovery_from_trough": .15}]},
+        "entry": {"active_day": {"start_offset_days": 0, "end_offset_days": 0}, "condition": comparison(field("close"), indicator("sma", 5)), "execution": "close"},
+        "exit_rules": [
+            {"rule_id": "protect_ma20", "priority": 1, "active_days": {"start_offset_days": 1, "end_offset_days": 10}, "kind": "close_condition", "condition": comparison(field("close"), indicator("sma", 20), "less_than"), "execution": "close"},
+            {"rule_id": "manage", "priority": 2, "active_days": {"start_offset_days": 11}, "kind": "close_condition", "condition": {"node_type": "group", "operator": "or", "conditions": [
+                comparison(field("close"), indicator("sma", 10), "less_than"),
+                {"node_type": "group", "operator": "and", "conditions": [
+                    comparison(field("close"), {"kind": "scaled_entry_price", "multiplier": 1.1}, "greater_than"),
+                    comparison(field("volume"), {"kind": "anchor_running_maximum", "anchor": "t0", "field": "volume", "tie_break": "earliest"}, "equal"),
+                    {"node_type": "group", "operator": "or", "conditions": [
+                        {"node_type": "candlestick_pattern", "pattern": "doji", "body_to_open_threshold": .01},
+                        {"node_type": "candlestick_pattern", "pattern": "large_bearish", "body_to_open_threshold": .02},
+                    ]},
+                ]},
+            ]}, "execution": "close"},
+        ],
+        "lifecycle_policy": {"sample_end_open_position": "force_close", "allow_reentry_after_exit": False},
+    }
+    model = TimedStrategyDefinition.model_validate(timed)
+    assert model.anchor.constraints[0].peak_tie_break == "earliest"
+    assert model.exit_rules[1].condition.node_type == "group"
+    assert "成交量 = 自 t0 起至当日的最大成交量" in "\n".join(item.explanation for item in build_review_items(model))
+    without_policy = dict(timed); without_policy.pop("lifecycle_policy")
+    with pytest.raises(ValidationError, match="lifecycle_policy"):
+        TimedStrategyDefinition.model_validate(without_policy)
+
+
 def test_review_items_are_deterministically_derived_from_validated_dsl():
     model = StrategyDefinition.model_validate(strategy())
     items = build_review_items(model)

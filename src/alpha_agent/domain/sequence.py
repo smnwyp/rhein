@@ -1,4 +1,4 @@
-"""Explicit stateful, relative-day strategy semantics for DSL v0.2.
+"""Explicit stateful, relative-day strategy semantics for DSL v0.2/v0.3.
 
 This remains a strategy *definition* only.  It deliberately does not simulate
 orders or approximate intraday paths from daily candles.
@@ -13,7 +13,7 @@ from alpha_agent.domain.conditions import Condition
 from alpha_agent.domain.indicators import DSLModel, IndicatorDefinition, MarketFieldName
 
 
-ComparisonOperator = Literal["greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal"]
+ComparisonOperator = Literal["greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal", "equal"]
 
 
 class RelativeDayRange(DSLModel):
@@ -55,6 +55,13 @@ class EntryPriceOperand(DSLModel):
     kind: Literal["entry_price"]
 
 
+class ScaledEntryPriceOperand(DSLModel):
+    """A fixed multiple of the entry close, e.g. entry price × 1.10."""
+
+    kind: Literal["scaled_entry_price"]
+    multiplier: Annotated[FiniteFloat, Field(gt=0)]
+
+
 class AnchorIndicatorOperand(DSLModel):
     kind: Literal["anchor_indicator"]
     anchor: Literal["t0"]
@@ -62,12 +69,21 @@ class AnchorIndicatorOperand(DSLModel):
     indicator: IndicatorDefinition
 
 
+class AnchorRunningMaximumOperand(DSLModel):
+    """Maximum value from the anchor day through the current relative day."""
+
+    kind: Literal["anchor_running_maximum"]
+    anchor: Literal["t0"]
+    field: Literal["volume"]
+    tie_break: Literal["earliest", "latest"] = "earliest"
+
+
 TemporalOperand = Annotated[
-    CurrentMarketOperand | CurrentIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | AnchorIndicatorOperand,
+    CurrentMarketOperand | CurrentIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand,
     Field(discriminator="kind"),
 ]
 TemporalSeriesOperand = Annotated[
-    CurrentMarketOperand | CurrentIndicatorOperand | AnchorMarketOperand | AnchorIndicatorOperand,
+    CurrentMarketOperand | CurrentIndicatorOperand | AnchorMarketOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand,
     Field(discriminator="kind"),
 ]
 
@@ -86,6 +102,21 @@ class TemporalCrossCondition(DSLModel):
     right: TemporalSeriesOperand
 
 
+class CandlestickPatternCondition(DSLModel):
+    """A daily pattern whose formula is explicit instead of generated code."""
+
+    node_type: Literal["candlestick_pattern"]
+    pattern: Literal["doji", "large_bearish"]
+    body_to_open_threshold: Annotated[FiniteFloat, Field(gt=0)]
+
+    @model_validator(mode="after")
+    def threshold_matches_pattern(self) -> "CandlestickPatternCondition":
+        expected = 0.01 if self.pattern == "doji" else 0.02
+        if self.body_to_open_threshold != expected:
+            raise ValueError(f"{self.pattern} requires body_to_open_threshold={expected}")
+        return self
+
+
 class TemporalConditionGroup(DSLModel):
     node_type: Literal["group"]
     operator: Literal["and", "or"]
@@ -93,7 +124,7 @@ class TemporalConditionGroup(DSLModel):
 
 
 TemporalCondition = Annotated[
-    TemporalComparisonCondition | TemporalCrossCondition | TemporalConditionGroup,
+    TemporalComparisonCondition | TemporalCrossCondition | CandlestickPatternCondition | TemporalConditionGroup,
     Field(discriminator="node_type"),
 ]
 TemporalConditionGroup.model_rebuild()
@@ -116,10 +147,23 @@ class AnchorIndicatorChangeConstraint(DSLModel):
     indicator: IndicatorDefinition
     comparison_offset_days: int = Field(lt=0)
     minimum_relative_change: Annotated[FiniteFloat, Field(ge=0)]
+    operator: Literal["greater_than", "greater_than_or_equal"] = "greater_than_or_equal"
+
+
+class OrderedExtremaDrawdownConstraint(DSLModel):
+    """Close-high A followed by close-low B in a lookback ending on t0."""
+
+    kind: Literal["ordered_extrema_drawdown_constraint"]
+    lookback_days: int = Field(gt=1)
+    field: Literal["close"]
+    peak_tie_break: Literal["earliest", "latest"]
+    trough_tie_break: Literal["earliest", "latest"]
+    minimum_peak_to_trough_drawdown: Annotated[FiniteFloat, Field(gt=0, lt=1)]
+    maximum_anchor_recovery_from_trough: Annotated[FiniteFloat, Field(ge=0, lt=1)]
 
 
 AnchorConstraint = Annotated[
-    RollingLowAnchorConstraint | AnchorIndicatorChangeConstraint,
+    RollingLowAnchorConstraint | AnchorIndicatorChangeConstraint | OrderedExtremaDrawdownConstraint,
     Field(discriminator="kind"),
 ]
 
@@ -168,8 +212,15 @@ class ExitRule(DSLModel):
         return self
 
 
+class StrategyLifecyclePolicy(DSLModel):
+    """Explicit choices required for deterministic full-sample execution."""
+
+    sample_end_open_position: Literal["force_close", "leave_open_excluded"]
+    allow_reentry_after_exit: bool
+
+
 class TimedStrategyDefinition(DSLModel):
-    schema_version: Literal["0.2"]
+    schema_version: Literal["0.2", "0.3"]
     strategy_name: str | None = Field(default=None, min_length=1)
     symbol: str = Field(min_length=1)
     frequency: Literal["1d"]
@@ -179,13 +230,28 @@ class TimedStrategyDefinition(DSLModel):
     anchor: AnchorDefinition
     entry: EntryRule
     exit_rules: list[ExitRule] = Field(min_length=1)
+    lifecycle_policy: StrategyLifecyclePolicy | None = None
 
     @model_validator(mode="after")
     def validate_exit_rules(self) -> "TimedStrategyDefinition":
         if len({rule.rule_id for rule in self.exit_rules}) != len(self.exit_rules):
             raise ValueError("exit rule IDs must be unique")
-        if len({rule.priority for rule in self.exit_rules}) != len(self.exit_rules):
-            raise ValueError("exit rule priorities must be unique")
+        for left_index, left_rule in enumerate(self.exit_rules):
+            for right_rule in self.exit_rules[left_index + 1:]:
+                if left_rule.priority != right_rule.priority:
+                    continue
+                left_end = left_rule.active_days.end_offset_days
+                right_end = right_rule.active_days.end_offset_days
+                left_ends_before_right = left_end is not None and left_end < right_rule.active_days.start_offset_days
+                right_ends_before_left = right_end is not None and right_end < left_rule.active_days.start_offset_days
+                if not left_ends_before_right and not right_ends_before_left:
+                    raise ValueError("simultaneously active exit rules must have unique priorities")
         if any(rule.execution == "intraday" for rule in self.exit_rules) and self.data_requirement != "intraday_ohlcv":
             raise ValueError("intraday exit rules require intraday_ohlcv data")
+        if self.schema_version == "0.3" and self.lifecycle_policy is None:
+            raise ValueError("v0.3 strategies require an explicit lifecycle_policy")
+        if self.schema_version == "0.3" and self.data_requirement != "daily_ohlcv":
+            raise ValueError("v0.3 currently defines daily-close execution only")
+        if self.schema_version == "0.3" and any(rule.kind == "intraday_price_trigger" for rule in self.exit_rules):
+            raise ValueError("v0.3 does not permit intraday price triggers")
         return self

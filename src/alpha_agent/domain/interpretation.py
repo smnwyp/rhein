@@ -34,6 +34,7 @@ class StrategyInterpretationRequest(DSLModel):
     policy: InterpretationPolicy = Field(default_factory=InterpretationPolicy)
     clarification_answers: list[ClarificationAnswer] = Field(default_factory=list)
     source_clauses: list[SourceClause] = Field(default_factory=list)
+    repair_instruction: str | None = Field(default=None, exclude=True)
 class InterpretationNote(DSLModel): code: str = Field(min_length=1); message: str = Field(min_length=1)
 class ParsedStrategy(DSLModel):
     status: Literal["parsed"]; strategy: AnyStrategyDefinition
