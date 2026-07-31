@@ -88,14 +88,19 @@ def build_review_items(strategy: AnyStrategyDefinition) -> list[ReviewItem]:
     if payload.get("schema_version") == "0.1":
         strategy = StrategyDefinition.model_validate(payload)
         return [
+            ReviewItem("执行频率", "frequency", "日线（1d）：每个条件以一个交易日的 OHLCV 数据计算。"),
             ReviewItem("入场条件", "entry_condition", _condition(strategy.entry_condition)),
             ReviewItem("出场条件", "exit_condition", _condition(strategy.exit_condition)),
         ]
     strategy = TimedStrategyDefinition.model_validate(payload)
-    items = [ReviewItem("基准点 t0", "anchor.condition", _condition(strategy.anchor.condition))]
+    items = [
+        ReviewItem("执行频率", "frequency", "日线（1d）：t0、t1、t2… 均为相对 t0 的交易日。"),
+        ReviewItem("基准点 t0", "anchor.condition", _condition(strategy.anchor.condition)),
+    ]
     for index, constraint in enumerate(strategy.anchor.constraints):
         if constraint.kind == "rolling_low_anchor_constraint":
-            explanation = f"t0 前 {constraint.lookback_days} 日至 t0 的最低价必须早于 t0；t0 收盘相对该低点涨幅 ≤ {constraint.maximum_anchor_close_gain:.2%}。"
+            field = "最低价（Low）" if constraint.reference_field == "low" else "最低收盘价（Close）"
+            explanation = f"t0 前 {constraint.lookback_days} 日至 t0 的{field}必须早于 t0；t0 收盘相对该低点涨幅 ≤ {constraint.maximum_anchor_close_gain:.2%}。"
         else:
             explanation = f"t0 的 {_indicator(constraint.indicator)} 相对 t0{constraint.comparison_offset_days:+d} 至少变化 {constraint.minimum_relative_change:.2%}。"
         items.append(ReviewItem("t0 附加约束", f"anchor.constraints[{index}]", explanation))

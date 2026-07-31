@@ -102,5 +102,5 @@ def test_open_ended_technical_exit_does_not_require_or_create_a_forced_close():
 def test_review_items_are_deterministically_derived_from_validated_dsl():
     model = StrategyDefinition.model_validate(strategy())
     items = build_review_items(model)
-    assert [(item.title, item.dsl_path) for item in items] == [("入场条件", "entry_condition"), ("出场条件", "exit_condition")]
-    assert "SMA(20)" in items[0].explanation
+    assert [(item.title, item.dsl_path) for item in items] == [("执行频率", "frequency"), ("入场条件", "entry_condition"), ("出场条件", "exit_condition")]
+    assert "SMA(20)" in items[1].explanation

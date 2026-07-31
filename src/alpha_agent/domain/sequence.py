@@ -104,6 +104,7 @@ class RollingLowAnchorConstraint(DSLModel):
 
     kind: Literal["rolling_low_anchor_constraint"]
     lookback_days: int = Field(gt=0)
+    reference_field: Literal["low", "close"] = "low"
     low_must_precede_anchor: bool = True
     maximum_anchor_close_gain: Annotated[FiniteFloat, Field(ge=0)]
 

@@ -19,8 +19,10 @@ from alpha_agent.domain.interpretation import ClarificationAnswer, StrategyInter
 from alpha_agent.domain.interpretation import ParsedStrategy
 from alpha_agent.errors import AlphaAgentError
 from alpha_agent.model.bedrock_client import BedrockStrategyModelClient
-from alpha_agent.monitoring import InMemoryInterpreterMonitor, InterpretationEvaluation
+from alpha_agent.monitoring import InMemoryInterpreterMonitor
 from alpha_agent.parser.review import build_review_items
+from alpha_agent.parser.completeness import segment_source_clauses
+from alpha_agent.parser.mock_timeline import build_mock_candle_timeline
 from alpha_agent.parser.service import StrategyInterpreterService
 from alpha_agent.strategy_library import JsonStrategyLibrary, SavedStrategy, StrategyLibraryError
 from alpha_agent.domain.sequence import TimedStrategyDefinition
@@ -35,7 +37,7 @@ load_dotenv(ROOT / ".env", override=True)
 
 st.set_page_config(page_title="自然语言策略解释器", layout="wide")
 st.title("自然语言策略解释器")
-st.caption("Sprint 1：将策略描述转换为 DSL v0.1，或提出精准澄清问题；本页面不会执行回测。")
+st.caption("策略解释、逐条审阅与当前分组的确定性回测。解释覆盖关系与合成 K 线仅用于核对，不是市场数据。")
 
 if "interpreter_monitor" not in st.session_state: st.session_state.interpreter_monitor = InMemoryInterpreterMonitor()
 if "interpreter_strategy_text" not in st.session_state:
@@ -47,8 +49,8 @@ def load_strategy_text(text: str) -> None:
     st.session_state.strategy_source = "新建策略"
 
 
-def activate_saved_strategy(strategy: object, text: str, assumptions: object, warnings: object) -> None:
-    st.session_state["last_parsed_strategy"] = ParsedStrategy(status="parsed", strategy=strategy, assumptions=assumptions, warnings=warnings)
+def activate_saved_strategy(strategy: object, text: str, assumptions: object, warnings: object, source_clauses: object = (), coverage: object = ()) -> None:
+    st.session_state["last_parsed_strategy"] = ParsedStrategy(status="parsed", strategy=strategy, assumptions=assumptions, warnings=warnings, source_clauses=source_clauses, coverage=coverage)
     st.session_state["last_strategy_text"] = text
     st.session_state.interpreter_strategy_text = text
 
@@ -62,7 +64,7 @@ def load_selected_saved_strategy() -> None:
     if saved is None:
         return
     if saved.strategy is not None:
-        activate_saved_strategy(saved.strategy, saved.original_language, saved.assumptions, saved.warnings)
+        activate_saved_strategy(saved.strategy, saved.original_language, saved.assumptions, saved.warnings, saved.source_clauses, saved.coverage)
     else:
         load_strategy_text(saved.original_language)
     st.session_state["loaded_saved_strategy_id"] = selected_id
@@ -153,7 +155,7 @@ else:
                 load_selected_saved_strategy()
             st.sidebar.text_area("策略全文", value=source_saved.original_language, height=180, disabled=True, key="saved_strategy_full_text")
             if source_saved.strategy is not None:
-                st.sidebar.button("载入并使用", key="load_source_saved", on_click=activate_saved_strategy, args=(source_saved.strategy, source_saved.original_language, source_saved.assumptions, source_saved.warnings), width="stretch")
+                st.sidebar.button("载入并使用", key="load_source_saved", on_click=activate_saved_strategy, args=(source_saved.strategy, source_saved.original_language, source_saved.assumptions, source_saved.warnings, source_saved.source_clauses, source_saved.coverage), width="stretch")
             else:
                 st.sidebar.button("载入后继续解释", key="load_source_draft", on_click=load_strategy_text, args=(source_saved.original_language,), width="stretch")
             with st.sidebar.expander("管理此策略"):
@@ -187,8 +189,7 @@ def interpret_and_render(request: StrategyInterpretationRequest, source_text: st
         with st.spinner("正在解释策略…"):
             result = service.interpret(request)
         if result.status == "parsed":
-            st.success("策略已解析并通过语义验证。")
-            st.json(result.model_dump(mode="json"))
+            st.success("策略已解释完成。请在“解释审阅”中逐条核对原文与 DSL 映射。")
             st.session_state["last_parsed_strategy"] = result
             st.session_state["last_strategy_text"] = source_text
             st.session_state["last_review_request_id"] = st.session_state.interpreter_monitor.events[-1].request_id
@@ -196,7 +197,7 @@ def interpret_and_render(request: StrategyInterpretationRequest, source_text: st
             st.session_state.pop("pending_clarification_text", None)
         else:
             st.warning("需要补充澄清信息。请在下方逐项回答后重新解释。")
-            st.json(result.model_dump(mode="json"))
+            st.caption("尚未确认的表达：" + "、".join(result.ambiguous_terms))
             st.session_state["pending_clarification"] = result
             st.session_state["pending_clarification_text"] = source_text
     except AlphaAgentError as error:
@@ -247,48 +248,60 @@ matching_result = last_result if st.session_state.get("last_strategy_text") == s
 if matching_result is not None:
     backtest_tab, review_tab = st.tabs(["回测结果", "解释审阅"])
     review_tab.__enter__()
-    st.subheader("解释审阅")
-    st.caption("这是基于已验证 DSL 的确定性中文展开，用于你逐项比对原文；它不等同于模型解释已经被自动证明正确。")
-    source_column, dsl_column, evidence_column = st.columns([1.1, 1.45, 1])
-    with source_column:
-        st.markdown("#### 原始策略")
-        st.code(strategy_text, language=None)
-    with dsl_column:
-        st.markdown("#### DSL 规则展开")
+    st.subheader("策略解释映射")
+    st.caption("请先核对每一段原文 C01…Cn 是否被正确落实到 DSL 路径与中文规则中；这比查看底层 JSON 更直接。")
+    st.markdown("#### 原始策略")
+    st.text_area("策略原文", value=strategy_text, height=150, disabled=True, label_visibility="collapsed", key="review_source_text")
+    st.markdown("#### 条件逐条映射")
+    st.caption("每个 C 编号都必须有落点。若某项无法安全映射，解释器应先提问，而不是遗漏或猜测。")
+    coverage_by_id = {item.clause_id: item for item in matching_result.coverage}
+    source_clauses = matching_result.source_clauses or segment_source_clauses(strategy_text)
+    coverage_rows = []
+    for clause in source_clauses:
+        item = coverage_by_id.get(clause.clause_id)
+        coverage_rows.append({
+            "条件": clause.clause_id,
+            "原文": clause.text,
+            "处理": {"mapped": "已映射", "assumption": "明确假设", "clarification_required": "需要澄清", "unsupported": "当前不支持"}.get(item.disposition, "缺少覆盖记录") if item else "缺少覆盖记录",
+            "DSL 路径": "；".join(item.dsl_paths) if item else "—",
+            "说明": item.explanation if item else "此为旧版已保存策略；请重新解释以生成覆盖记录。",
+        })
+    st.dataframe(pd.DataFrame(coverage_rows), hide_index=True, width="stretch")
+    with st.expander("查看 DSL 规则的中文展开", expanded=True):
         for item in build_review_items(matching_result.strategy):
             st.markdown(f"**{item.title}** · `{item.dsl_path}`  ")
             st.write(item.explanation)
-    with evidence_column:
-        st.markdown("#### 校验与人工结论")
-        st.success(f"DSL v{matching_result.strategy.schema_version} 已通过 schema 与语义校验")
         if matching_result.assumptions:
-            st.warning("存在解释假设")
+            st.caption("明确假设")
             for note in matching_result.assumptions:
                 st.write(f"- {note.message}")
         if matching_result.warnings:
-            st.warning("存在非阻断警告")
+            st.caption("提示")
             for note in matching_result.warnings:
                 st.write(f"- {note.message}")
-        judgment = st.radio("人工核对结论", ["待审核", "正确", "不正确"], horizontal=True, key="review_judgment")
-        feedback_note = st.text_input("核对备注（可选）", key="review_note")
-        if st.button("记录审阅结论", key="record_review"):
-            if judgment == "待审核":
-                st.info("请选择“正确”或“不正确”后再记录。")
-            else:
-                request_id = st.session_state.get("last_review_request_id")
-                if request_id is None:
-                    st.error("此结果缺少本会话请求标识，无法写入监控。请重新解释一次。")
-                else:
-                    st.session_state.interpreter_monitor.record_evaluation(InterpretationEvaluation(
-                        request_id=request_id,
-                        is_correct=judgment == "正确",
-                        category="parse",
-                        note=feedback_note or None,
-                    ))
-                    st.success("已记录到解释器监控。")
-        with st.expander("解释器监控（当前浏览器会话）"):
-            st.json(st.session_state.interpreter_monitor.summary())
-            st.caption("运行成功率不等于解释准确率；准确率只来自上方记录的人工审阅结论。")
+    st.markdown("#### 条件时序示意（合成 K 线）")
+    st.caption("这是一段不用于回测的示意价格路径。图上每一个 C 标签与上表一一对应，帮助核对 t0 / t1 / t2… 的条件落点。")
+    candles, markers = build_mock_candle_timeline(source_clauses, matching_result.coverage)
+    candle_x = {"field": "day", "type": "quantitative", "axis": {"title": "相对基准日（t0 = 0）", "tickMinStep": 1}}
+    mock_spec = {
+        "height": 350,
+        "layer": [
+            {"mark": "rule", "encoding": {"x": candle_x, "y": {"field": "low", "type": "quantitative", "scale": {"zero": False}}, "y2": {"field": "high"}}},
+            {"mark": {"type": "bar", "size": 10}, "encoding": {"x": candle_x, "y": {"field": "open", "type": "quantitative", "scale": {"zero": False}}, "y2": {"field": "close"}, "color": {"condition": {"test": "datum.close >= datum.open", "value": "#198754"}, "value": "#d62728"}}},
+            {"transform": [{"fold": ["ma5", "ma10"], "as": ["均线", "价格"]}], "mark": {"type": "line", "strokeWidth": 2}, "encoding": {"x": candle_x, "y": {"field": "价格", "type": "quantitative", "scale": {"zero": False}}, "color": {"field": "均线", "type": "nominal", "scale": {"range": ["#2563eb", "#f59e0b"]}}}},
+            {"data": {"values": markers.to_dict(orient="records")}, "mark": {"type": "point", "filled": True, "size": 70}, "encoding": {"x": candle_x, "y": {"field": "price", "type": "quantitative"}, "color": {"field": "disposition", "type": "nominal", "scale": {"domain": ["mapped", "assumption", "clarification_required", "unsupported"], "range": ["#2563eb", "#f59e0b", "#dc2626", "#6b7280"]}, "legend": {"title": "处理状态"}}, "tooltip": [{"field": "label", "title": "条件"}, {"field": "day", "title": "相对日"}, {"field": "disposition", "title": "处理"}]}},
+            {"data": {"values": markers.to_dict(orient="records")}, "mark": {"type": "text", "dy": -10, "fontWeight": "bold"}, "encoding": {"x": candle_x, "y": {"field": "price", "type": "quantitative"}, "text": {"field": "label"}}},
+        ],
+    }
+    st.vega_lite_chart(candles, mock_spec, width="stretch", key="interpretation_mock_timeline")
+    with st.expander("解释器监控（当前浏览器会话）"):
+        summary = st.session_state.interpreter_monitor.summary()
+        metrics = st.columns(4)
+        metrics[0].metric("请求数", summary["total_requests"])
+        metrics[1].metric("已解析率", f"{summary['parsed_rate']:.0%}")
+        metrics[2].metric("澄清率", f"{summary['clarification_rate']:.0%}")
+        metrics[3].metric("失败率", f"{summary['failure_rate']:.0%}")
+        st.caption("该监控只反映本浏览器会话的运行状况；它不替代上方逐条映射核对。")
     review_tab.__exit__(None, None, None)
 
     st.sidebar.divider()
@@ -382,7 +395,15 @@ if strategy_source == "新建策略":
         st.info("当前文本尚未成功解析；可以保存为待解释策略草稿。")
     if st.button("保存策略", type="secondary"):
         try:
-            saved = library.save(SavedStrategy(strategy_name=strategy_name, original_language=strategy_text, strategy=matching_result.strategy if matching_result is not None else None, assumptions=matching_result.assumptions if matching_result is not None else [], warnings=matching_result.warnings if matching_result is not None else []))
+            saved = library.save(SavedStrategy(
+                strategy_name=strategy_name,
+                original_language=strategy_text,
+                strategy=matching_result.strategy if matching_result is not None else None,
+                assumptions=matching_result.assumptions if matching_result is not None else [],
+                warnings=matching_result.warnings if matching_result is not None else [],
+                source_clauses=matching_result.source_clauses if matching_result is not None else [],
+                coverage=matching_result.coverage if matching_result is not None else [],
+            ))
             st.success(f"已保存跨组策略：{saved.strategy_name}")
         except StrategyLibraryError as error:
             st.error(f"{error.code}: {error.message}")

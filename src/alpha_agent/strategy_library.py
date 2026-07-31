@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 from pydantic import Field
 
-from alpha_agent.domain.interpretation import InterpretationNote
+from alpha_agent.domain.interpretation import ClauseCoverage, InterpretationNote, SourceClause
 from alpha_agent.domain.indicators import DSLModel
 from alpha_agent.domain.strategy import AnyStrategyDefinition
 from alpha_agent.errors import AlphaAgentError
@@ -23,6 +23,8 @@ class SavedStrategy(DSLModel):
     strategy: AnyStrategyDefinition | None = None
     assumptions: list[InterpretationNote] = Field(default_factory=list)
     warnings: list[InterpretationNote] = Field(default_factory=list)
+    source_clauses: list[SourceClause] = Field(default_factory=list)
+    coverage: list[ClauseCoverage] = Field(default_factory=list)
 
 
 class StrategyLibraryError(AlphaAgentError):

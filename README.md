@@ -35,6 +35,12 @@ DSL v0.2 additionally represents anchored, relative-day strategies: `t0` is an a
 
 `FakeModelClient` queues structured responses or exceptions, so tests require no real external model.
 
+### Source coverage guardrail
+
+Before calling the model, the interpreter deterministically assigns the original strategy's reviewable clauses stable IDs (`C01`, `C02`, …). The model must return one coverage record per ID, stating whether that clause is mapped, an explicit assumption, requires clarification, or is unsupported, along with real DSL paths for mapped clauses. The service rejects a `parsed` response if any clause is absent, unresolved, or points to a non-existent DSL path. This is deliberately an auditability control, not an assertion that natural-language equivalence has been formally proved.
+
+The local **解释审阅** tab displays the source-to-DSL ledger and a labelled, synthetic t0-relative candle timeline. It is a reading aid only: it never uses market data and never feeds the backtest.
+
 ## Monitoring the interpreter
 
 Pass `InMemoryInterpreterMonitor` to the service to record one privacy-preserving event per attempt: outcome, latency, clarification/warning counts, error code, symbol presence, and hashes—not raw strategy text. `summary()` reports parse/clarification/failure rates, latency, and failure-code distribution.

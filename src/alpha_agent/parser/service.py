@@ -8,6 +8,7 @@ from alpha_agent.errors import AlphaAgentError, ModelClientFailure, ModelRespons
 from alpha_agent.model.client import StrategyModelClient
 from alpha_agent.monitoring import InterpretationMonitoringEvent, InterpreterMonitor, fingerprint
 from alpha_agent.parser.validation import validate_strategy
+from alpha_agent.parser.completeness import enrich_request, preflight_clarifications, validate_coverage
 _RESULT_ADAPTER = TypeAdapter(StrategyInterpretationResult)
 
 
@@ -35,11 +36,23 @@ class StrategyInterpreterService:
     def interpret(self, request: StrategyInterpretationRequest) -> StrategyInterpretationResult:
         request_id, start = uuid4(), perf_counter()
         try:
+            request = enrich_request(request)
+            preflight = preflight_clarifications(request)
+            if preflight is not None:
+                self._record(request_id, request, preflight, perf_counter() - start)
+                return preflight
             raw = self._client.interpret_strategy(request)
             try: result = _RESULT_ADAPTER.validate_python(_normalize_provider_result(raw))
             except ValidationError as error: raise ModelResponseParsingFailure("model response does not match the interpretation contract", details={"validation_errors": error.errors(include_url=False)}) from error
+            result = result.model_copy(update={"source_clauses": request.source_clauses})
             strategy = result.strategy if isinstance(result, ParsedStrategy) else result.partial_strategy
             if strategy is not None: validate_strategy(strategy)
+            validate_coverage(
+                request.source_clauses,
+                result.coverage,
+                strategy_payload=strategy.model_dump(mode="json") if strategy is not None else None,
+                parsed=isinstance(result, ParsedStrategy),
+            )
             self._record(request_id, request, result, perf_counter() - start)
             return result
         except AlphaAgentError as error:

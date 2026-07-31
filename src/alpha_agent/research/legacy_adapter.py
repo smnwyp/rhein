@@ -55,6 +55,8 @@ def compile_timed_strategy(strategy: TimedStrategyDefinition, *, approximate_int
             raise UnsupportedStrategyFeature("anchor condition cannot yet be compiled to the deterministic daily engine", details={"condition": leaf.model_dump(mode="json")})
     for constraint in strategy.anchor.constraints:
         if constraint.kind == "rolling_low_anchor_constraint":
+            if constraint.reference_field != "low":
+                raise UnsupportedStrategyFeature("the current daily backtest only supports rolling-low constraints based on Low", details={"reference_field": constraint.reference_field})
             params.update(use_baseline_prior_low=constraint.low_must_precede_anchor, use_baseline_max_rise=True, baseline_lookback=constraint.lookback_days, baseline_max_rise=constraint.maximum_anchor_close_gain)
         elif constraint.kind == "anchor_indicator_change_constraint":
             if not isinstance(constraint.indicator, SMA) or constraint.indicator.window != 20 or constraint.comparison_offset_days != -2:
