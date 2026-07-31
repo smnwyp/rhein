@@ -47,6 +47,27 @@ class JsonStrategyLibrary:
     def save(self, strategy: SavedStrategy) -> SavedStrategy:
         entries = self.list()
         entries.append(strategy)
+        self._write(entries)
+        return strategy
+
+    def rename(self, strategy_id: UUID, strategy_name: str) -> SavedStrategy:
+        entries = self.list()
+        for index, entry in enumerate(entries):
+            if entry.strategy_id == strategy_id:
+                renamed = entry.model_copy(update={"strategy_name": strategy_name})
+                entries[index] = renamed
+                self._write(entries)
+                return renamed
+        raise StrategyLibraryError("saved strategy was not found", details={"strategy_id": str(strategy_id)})
+
+    def delete(self, strategy_id: UUID) -> None:
+        entries = self.list()
+        remaining = [entry for entry in entries if entry.strategy_id != strategy_id]
+        if len(remaining) == len(entries):
+            raise StrategyLibraryError("saved strategy was not found", details={"strategy_id": str(strategy_id)})
+        self._write(remaining)
+
+    def _write(self, entries: list[SavedStrategy]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         serialized = json.dumps([entry.model_dump(mode="json") for entry in entries], ensure_ascii=False, indent=2)
         try:
@@ -56,4 +77,3 @@ class JsonStrategyLibrary:
             temporary_path.replace(self._path)
         except OSError as error:
             raise StrategyLibraryError("saved strategy library cannot be written", details={"path": str(self._path)}) from error
-        return strategy

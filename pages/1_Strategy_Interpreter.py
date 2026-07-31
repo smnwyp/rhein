@@ -44,12 +44,28 @@ if "interpreter_strategy_text" not in st.session_state:
 
 def load_strategy_text(text: str) -> None:
     st.session_state.interpreter_strategy_text = text
+    st.session_state.strategy_source = "新建策略"
 
 
 def activate_saved_strategy(strategy: object, text: str, assumptions: object, warnings: object) -> None:
     st.session_state["last_parsed_strategy"] = ParsedStrategy(status="parsed", strategy=strategy, assumptions=assumptions, warnings=warnings)
     st.session_state["last_strategy_text"] = text
     st.session_state.interpreter_strategy_text = text
+
+
+def load_selected_saved_strategy() -> None:
+    """Selecting a library item is an explicit load action, not merely a preview."""
+    selected_id = st.session_state.get("strategy_source_saved")
+    if not selected_id:
+        return
+    saved = next((item for item in library.list() if str(item.strategy_id) == selected_id), None)
+    if saved is None:
+        return
+    if saved.strategy is not None:
+        activate_saved_strategy(saved.strategy, saved.original_language, saved.assumptions, saved.warnings)
+    else:
+        load_strategy_text(saved.original_language)
+    st.session_state["loaded_saved_strategy_id"] = selected_id
 
 
 def render_error_details(details: dict[str, object]) -> None:
@@ -85,17 +101,15 @@ def render_error_details(details: dict[str, object]) -> None:
 
 
 library = JsonStrategyLibrary(ROOT / "config" / "saved_strategies.json")
-with st.sidebar:
-    st.subheader("模型配置")
-    model = st.text_input("Bedrock 模型", value=os.getenv("BEDROCK_MODEL", "us.anthropic.claude-sonnet-4-6"))
-    region = st.text_input("AWS 区域", value=os.getenv("AWS_REGION", "us-east-1"))
-    st.caption("API 密钥仅从项目根目录 `.env` 的 `AWS_BEARER_TOKEN_BEDROCK` 读取，不在页面显示或保存。")
+# Provider configuration is infrastructure, not a research-user control.
+model = os.getenv("BEDROCK_MODEL", "us.anthropic.claude-sonnet-4-6")
+region = os.getenv("AWS_REGION", "us-east-1")
 
 scope_options = available_data_scopes()
 scope_labels = list(scope_options)
 main_scope = st.session_state.get("data_scope")
 default_scope_index = scope_labels.index(main_scope) if main_scope in scope_options else 0
-selected_scope = st.selectbox(
+selected_scope = st.sidebar.selectbox(
     "标的分组",
     scope_labels,
     index=default_scope_index,
@@ -103,17 +117,17 @@ selected_scope = st.selectbox(
     help="与主回测页面共享同一个数据范围和 Nasdaq 分组选择。",
 )
 if selected_scope == "自定义路径":
-    data_path = st.text_input("自定义数据目录或 CSV", value="data", key="interpreter_custom_path")
+    data_path = st.sidebar.text_input("自定义数据目录或 CSV", value="data", key="interpreter_custom_path")
 else:
     data_path = scope_options[selected_scope]
-    st.caption(f"当前数据范围：`{data_path}`")
+    st.sidebar.caption(f"当前数据范围：`{data_path}`")
 try:
     group_symbols = [path.stem.upper() for path in input_files(Path(data_path))]
 except ValueError as error:
-    st.error(f"无法加载此分组的标的：{error}")
+    st.sidebar.error(f"无法加载此分组的标的：{error}")
     group_symbols = []
 if group_symbols:
-    symbol = st.selectbox(
+    symbol = st.sidebar.selectbox(
         "标的",
         group_symbols,
         index=group_symbols.index("AAPL") if "AAPL" in group_symbols else 0,
@@ -122,7 +136,46 @@ if group_symbols:
     )
 else:
     symbol = None
-strategy_text = st.text_area("用自然语言描述日频、仅做多策略", height=150, key="interpreter_strategy_text")
+st.sidebar.divider()
+st.sidebar.subheader("策略")
+strategy_source = st.sidebar.radio("策略来源", ["新建策略", "已保存策略"], horizontal=True, key="strategy_source")
+if strategy_source == "新建策略":
+    strategy_text = st.sidebar.text_area("自然语言策略", height=180, key="interpreter_strategy_text")
+else:
+    strategy_text = st.session_state.interpreter_strategy_text
+    try:
+        source_strategies = library.list()
+        saved_by_id = {str(item.strategy_id): item for item in source_strategies}
+        if saved_by_id:
+            source_id = st.sidebar.selectbox("选择已保存策略", list(saved_by_id), format_func=lambda item: f"{saved_by_id[item].strategy_name} · {'已验证' if saved_by_id[item].strategy else '草稿'}", key="strategy_source_saved", on_change=load_selected_saved_strategy)
+            source_saved = saved_by_id[source_id]
+            if st.session_state.get("loaded_saved_strategy_id") != source_id:
+                load_selected_saved_strategy()
+            st.sidebar.text_area("策略全文", value=source_saved.original_language, height=180, disabled=True, key="saved_strategy_full_text")
+            if source_saved.strategy is not None:
+                st.sidebar.button("载入并使用", key="load_source_saved", on_click=activate_saved_strategy, args=(source_saved.strategy, source_saved.original_language, source_saved.assumptions, source_saved.warnings), width="stretch")
+            else:
+                st.sidebar.button("载入后继续解释", key="load_source_draft", on_click=load_strategy_text, args=(source_saved.original_language,), width="stretch")
+            with st.sidebar.expander("管理此策略"):
+                renamed = st.text_input("新名称", value=source_saved.strategy_name, key="rename_saved_strategy")
+                if st.button("重命名", key="rename_saved_strategy_button"):
+                    try:
+                        library.rename(source_saved.strategy_id, renamed)
+                        st.rerun()
+                    except StrategyLibraryError as error:
+                        st.error(error.message)
+                confirm_delete = st.checkbox("我确认删除此策略", key="confirm_delete_saved_strategy")
+                if st.button("删除此策略", key="delete_saved_strategy", disabled=not confirm_delete):
+                    try:
+                        library.delete(source_saved.strategy_id)
+                        st.session_state.strategy_source = "新建策略"
+                        st.rerun()
+                    except StrategyLibraryError as error:
+                        st.error(error.message)
+        else:
+            st.sidebar.info("还没有已保存策略。")
+    except StrategyLibraryError as error:
+        st.sidebar.error(f"无法读取策略库：{error.message}")
 
 
 def interpret_and_render(request: StrategyInterpretationRequest, source_text: str) -> None:
@@ -154,7 +207,7 @@ def interpret_and_render(request: StrategyInterpretationRequest, source_text: st
             render_error_details(error.details)
 
 
-if st.button("解释策略", type="primary"):
+if strategy_source == "新建策略" and st.sidebar.button("解释策略", type="primary", width="stretch"):
     if not symbol:
         st.error("先选择一个包含有效 OHLC 数据的标的分组。")
     elif not os.getenv("AWS_BEARER_TOKEN_BEDROCK"):
@@ -192,6 +245,8 @@ if pending_clarification is not None and pending_text is not None:
 last_result = st.session_state.get("last_parsed_strategy")
 matching_result = last_result if st.session_state.get("last_strategy_text") == strategy_text else None
 if matching_result is not None:
+    backtest_tab, review_tab = st.tabs(["回测结果", "解释审阅"])
+    review_tab.__enter__()
     st.subheader("解释审阅")
     st.caption("这是基于已验证 DSL 的确定性中文展开，用于你逐项比对原文；它不等同于模型解释已经被自动证明正确。")
     source_column, dsl_column, evidence_column = st.columns([1.1, 1.45, 1])
@@ -231,15 +286,24 @@ if matching_result is not None:
                         note=feedback_note or None,
                     ))
                     st.success("已记录到解释器监控。")
+        with st.expander("解释器监控（当前浏览器会话）"):
+            st.json(st.session_state.interpreter_monitor.summary())
+            st.caption("运行成功率不等于解释准确率；准确率只来自上方记录的人工审阅结论。")
+    review_tab.__exit__(None, None, None)
 
     st.sidebar.divider()
-    st.sidebar.subheader("已确认策略回测")
-    st.sidebar.caption("日内触发采用当日 Low 触及的保守近似，不是分时精确撮合。")
-    initial_capital = st.sidebar.number_input("初始资金", min_value=1_000.0, value=10_000.0, step=1_000.0, key="dsl_initial_capital")
-    cost_bps = st.sidebar.number_input("单边费用（bps）", min_value=0.0, value=0.0, step=0.5, key="dsl_cost_bps")
-    if st.sidebar.button("运行当前组回测", type="primary", key="run_dsl_backtest"):
+    st.sidebar.subheader("当前已确认策略")
+    st.sidebar.success(f"已验证 · DSL v{matching_result.strategy.schema_version}")
+    if strategy_source == "新建策略":
+        st.sidebar.text_area("策略全文", value=strategy_text, height=180, disabled=True, key="confirmed_strategy_full_text")
+    backtest_tab.__enter__()
+    st.subheader("研究设置")
+    st.caption("日内触发采用当日 Low 触及的保守近似，不是分时精确撮合。")
+    initial_capital = st.number_input("初始资金", min_value=1_000.0, value=10_000.0, step=1_000.0, key="dsl_initial_capital")
+    cost_bps = st.number_input("单边费用（bps）", min_value=0.0, value=0.0, step=0.5, key="dsl_cost_bps")
+    if st.button("运行当前组回测", type="primary", key="run_dsl_backtest"):
         if matching_result.strategy.schema_version != "0.2":
-            st.sidebar.error("当前仅可回测 v0.2 时序策略；静态 v0.1 通用执行器将在下一步接入。")
+            st.error("当前仅可回测 v0.2 时序策略；静态 v0.1 通用执行器将在下一步接入。")
         else:
             try:
                 timed_strategy = TimedStrategyDefinition.model_validate(matching_result.strategy.model_dump(mode="json"))
@@ -251,9 +315,9 @@ if matching_result is not None:
                 st.session_state["dsl_backtest_trades"] = trades
                 st.session_state["dsl_backtest_strategy_text"] = strategy_text
             except AlphaAgentError as error:
-                st.sidebar.error(f"{error.code}: {error.message}")
+                st.error(f"{error.code}: {error.message}")
             except Exception as error:
-                st.sidebar.error(f"回测失败：{error}")
+                st.error(f"回测失败：{error}")
 
     if st.session_state.get("dsl_backtest_strategy_text") == strategy_text:
         st.subheader("回测结果（日线 Low 近似）")
@@ -304,47 +368,23 @@ if matching_result is not None:
                     st.vega_lite_chart(chart, spec, width="stretch", key=f"dsl_chart_{selected_symbol}_{trade_index}")
         else:
             st.warning("该分组没有生成已平仓交易。")
-
-st.subheader("保存为跨组策略")
-st.caption("始终保存原始用户语言；当前文本若已成功解析，则同时保存已验证 DSL。策略不绑定当前分组。")
-strategy_name = st.text_input("策略名称", value=(matching_result.strategy.strategy_name if matching_result is not None and matching_result.strategy.strategy_name else "未命名策略"), key="saved_strategy_name")
-if matching_result is None:
-    st.info("当前文本尚未成功解析；可以保存为待解释策略草稿。")
-if st.button("保存策略", type="secondary"):
-    try:
-        saved = library.save(SavedStrategy(
-            strategy_name=strategy_name,
-            original_language=strategy_text,
-            strategy=matching_result.strategy if matching_result is not None else None,
-            assumptions=matching_result.assumptions if matching_result is not None else [],
-            warnings=matching_result.warnings if matching_result is not None else [],
-        ))
-        suffix = "（已附带验证过的 DSL）" if saved.strategy is not None else "（待解释草稿，尚无 DSL）"
-        st.success(f"已保存跨组策略：{saved.strategy_name}{suffix}")
-    except StrategyLibraryError as error:
-        st.error(f"{error.code}: {error.message}")
-
-st.subheader("已保存的跨组策略")
-try:
-    saved_strategies = library.list()
-    if saved_strategies:
-        saved_ids = {str(item.strategy_id): item for item in saved_strategies}
-        selected_saved_id = st.selectbox("选择策略", list(saved_ids), format_func=lambda item: f"{saved_ids[item].strategy_name} · {saved_ids[item].created_at:%Y-%m-%d %H:%M}")
-        selected_saved = saved_ids[selected_saved_id]
-        st.caption("原始描述：" + selected_saved.original_language)
-        st.button("加载原始策略到输入框", key="load_saved_strategy", on_click=load_strategy_text, args=(selected_saved.original_language,))
-        if selected_saved.strategy is None:
-            st.info("此策略保存时尚未形成 DSL，属于待解释草稿。")
-        else:
-            with st.expander("查看已保存 DSL"):
-                st.json(selected_saved.strategy.model_dump(mode="json"))
-            st.button("使用此 DSL 作为当前已确认策略", key="use_saved_dsl", on_click=activate_saved_strategy,
-                      args=(selected_saved.strategy, selected_saved.original_language, selected_saved.assumptions, selected_saved.warnings))
     else:
-        st.caption("还没有已保存的跨组策略。")
-except StrategyLibraryError as error:
-    st.error(f"无法读取策略库：{error.message}")
+        st.info("在左侧点击“运行当前组回测”后，这里会显示 KPI 概览、Top 100 和交易 K 线。")
+    backtest_tab.__exit__(None, None, None)
+else:
+    st.info("在左侧选择或输入策略，完成解释后即可查看策略与 DSL，并运行当前分组回测。")
 
-st.subheader("解释器监控（当前浏览器会话）")
-st.json(st.session_state.interpreter_monitor.summary())
-st.caption("监控仅保存输入哈希，不保存策略原文。完成人工或离线评估后才会显示质量准确率；运行指标本身不等于解释准确率。")
+st.sidebar.__enter__()
+if strategy_source == "新建策略":
+    st.subheader("保存当前策略")
+    strategy_name = st.text_input("策略名称", value=(matching_result.strategy.strategy_name if matching_result is not None and matching_result.strategy.strategy_name else "未命名策略"), key="saved_strategy_name")
+    if matching_result is None:
+        st.info("当前文本尚未成功解析；可以保存为待解释策略草稿。")
+    if st.button("保存策略", type="secondary"):
+        try:
+            saved = library.save(SavedStrategy(strategy_name=strategy_name, original_language=strategy_text, strategy=matching_result.strategy if matching_result is not None else None, assumptions=matching_result.assumptions if matching_result is not None else [], warnings=matching_result.warnings if matching_result is not None else []))
+            st.success(f"已保存跨组策略：{saved.strategy_name}")
+        except StrategyLibraryError as error:
+            st.error(f"{error.code}: {error.message}")
+
+st.sidebar.__exit__(None, None, None)
