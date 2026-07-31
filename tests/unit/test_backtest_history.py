@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import pandas as pd
 
-from alpha_agent.backtest_history import JsonBacktestHistory, SavedBacktestRun, dataframe_records, strategy_fingerprint
+from alpha_agent.backtest_history import JsonBacktestHistory, SavedBacktestRun, dataframe_records, recalculated_trade_level_kpis, strategy_fingerprint
 
 
 def run(strategy_id, group_label: str = "组 A") -> SavedBacktestRun:
@@ -32,3 +32,17 @@ def test_backtest_history_persists_results_by_strategy_identity(tmp_path):
     history.delete_for_strategy(strategy_a)
     assert history.list_for_strategy(strategy_a) == []
     assert history.list_for_strategy(strategy_b) == [run_b]
+
+
+def test_historical_view_recalculates_trade_kpis_without_mutating_saved_records() -> None:
+    stored_kpis = [{"标的": "LGND", "max_drawdown_pct": 0.0, "annualized_return_pct": 2.0}]
+    stored_trades = [
+        {"symbol": "LGND", "signal": "2020-01-01", "entry": "2020-01-01", "exit": "2020-01-02", "ret_pct": -5.0, "pnl_eur": -500.0, "days_held": 1},
+        {"symbol": "LGND", "signal": "2020-01-03", "entry": "2020-01-03", "exit": "2020-01-04", "ret_pct": 10.0, "pnl_eur": 950.0, "days_held": 1},
+    ]
+
+    refreshed = recalculated_trade_level_kpis(stored_kpis, stored_trades, {"initial_capital": 10_000.0, "compound": True})
+
+    assert refreshed.loc[0, "max_drawdown_pct"] == -5.0
+    assert refreshed.loc[0, "annualized_return_pct"] == 2.0
+    assert stored_kpis[0]["max_drawdown_pct"] == 0.0

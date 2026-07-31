@@ -13,7 +13,11 @@ def calculate_kpis(trades: pd.DataFrame, capital: float, compound: bool) -> dict
     winners, losers = returns > 0, returns <= 0
     equity = (capital * (1 + returns).cumprod() if compound
               else capital + pnl.cumsum())
-    drawdown = equity / equity.cummax() - 1
+    # The starting capital is a real high-water mark.  Omitting it makes a
+    # first losing trade appear to have zero drawdown because its post-trade
+    # equity becomes the first value of ``cummax``.
+    equity_with_start = pd.concat([pd.Series([capital]), equity.reset_index(drop=True)], ignore_index=True)
+    drawdown = equity_with_start / equity_with_start.cummax() - 1
     gross_profit = float(pnl[pnl > 0].sum())
     gross_loss = float(-pnl[pnl <= 0].sum())
     avg_win = float(returns[winners].mean()) if winners.any() else None

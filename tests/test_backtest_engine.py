@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from argparse import Namespace
 
+import pandas as pd
+
 from rhein.backtest import input_files, load_ohlc, load_profiles, resolve_strategy, run_backtest
+from rhein.engine.kpis import calculate_kpis
 from rhein.paths import CONFIG_ROOT, DATA_ROOT, GROUP_ROOT
 
 
@@ -21,6 +24,18 @@ def test_runner_accepts_the_t0_bullish_candle_toggle() -> None:
     frame = load_ohlc(DATA_ROOT / "nvda.csv")
     _, stats = run_backtest(frame, use_baseline_bullish_candle=False)
     assert stats["n_trades"] >= 0
+
+
+def test_max_drawdown_includes_initial_capital_before_a_first_losing_trade() -> None:
+    trades = pd.DataFrame({
+        "ret_pct": [-5.0, 6.0, 15.0, 4.0],
+        "pnl_eur": [-500.0, 570.0, 1500.0, 400.0],
+        "days_held": [1, 1, 1, 1],
+    })
+
+    stats = calculate_kpis(trades, capital=10_000.0, compound=True)
+
+    assert stats["max_drawdown_pct"] == -5.0
 
 
 def test_runner_supports_t0_close_entry() -> None:

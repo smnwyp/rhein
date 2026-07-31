@@ -25,7 +25,7 @@ from alpha_agent.parser.completeness import segment_source_clauses
 from alpha_agent.parser.mock_timeline import build_mock_candle_timeline
 from alpha_agent.parser.service import StrategyInterpreterService
 from alpha_agent.strategy_library import JsonStrategyLibrary, SavedStrategy, StrategyLibraryError
-from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHistory, SavedBacktestRun, dataframe_records, strategy_fingerprint
+from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHistory, SavedBacktestRun, dataframe_records, recalculated_trade_level_kpis, strategy_fingerprint
 from alpha_agent.domain.sequence import TimedStrategyDefinition
 from alpha_agent.research.legacy_adapter import compile_timed_strategy
 from alpha_agent.research.v03_engine import run_v03_backtest
@@ -34,6 +34,7 @@ from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.summaries import style_by_drawdown
 from rhein.ui.trade_chart import trade_selector_options
+from rhein.ui.chart_theme import event_annotation_style
 
 # The project-local file is the explicit source of truth for this local app.
 load_dotenv(ROOT / ".env", override=True)
@@ -95,6 +96,40 @@ def delete_saved_strategy(strategy_id: object) -> None:
         st.session_state.pop(key, None)
     st.session_state.strategy_source = "新建策略"
     st.session_state["strategy_library_notice"] = ("success", "策略草稿已删除。")
+
+
+def replace_backtest_view(
+    *,
+    kpis: pd.DataFrame,
+    trades: pd.DataFrame,
+    strategy_text: str,
+    view_scope: str,
+    loaded_run: object | None,
+) -> None:
+    """Install one result set and reset only state scoped to its chart view.
+
+    Loading a historical run must be equivalent to having just run it.  The
+    selected Top-100 row and trade dropdown belong to a particular result set,
+    so retaining those controls across a result change can point them at the
+    wrong dataframe.  They are deliberately reset here; switching a trade
+    *within* the same result set never calls this function.
+    """
+    st.session_state["dsl_backtest_kpis"] = kpis
+    st.session_state["dsl_backtest_trades"] = trades
+    st.session_state["dsl_backtest_strategy_text"] = strategy_text
+    st.session_state["dsl_backtest_view_scope"] = view_scope
+    if loaded_run is None:
+        st.session_state.pop("dsl_backtest_loaded_run", None)
+    else:
+        st.session_state["dsl_backtest_loaded_run"] = loaded_run
+    for key in (
+        "dsl_top100_table",
+        "dsl_chart_result_scope",
+        "dsl_chart_selected_symbol",
+        "dsl_chart_trade_scope",
+        "dsl_chart_trade_id",
+    ):
+        st.session_state.pop(key, None)
 
 
 def render_error_details(details: dict[str, object]) -> None:
@@ -225,6 +260,11 @@ else:
             source_saved = saved_by_id[source_id]
             if st.session_state.get("loaded_saved_strategy_id") != source_id:
                 load_selected_saved_strategy()
+            # ``load_selected_saved_strategy`` runs during this same rerun.
+            # Refresh the local value as well, otherwise the remainder of the
+            # page compares the just-loaded DSL with the previous strategy's
+            # text and incorrectly considers it unavailable.
+            strategy_text = st.session_state.interpreter_strategy_text
             st.sidebar.text_area("策略全文", value=source_saved.original_language, height=180, disabled=True, key="saved_strategy_full_text")
             if source_saved.strategy is not None:
                 st.sidebar.button("载入并使用", key="load_source_saved", on_click=activate_saved_strategy, args=(source_saved.strategy, source_saved.original_language, source_saved.assumptions, source_saved.warnings, source_saved.source_clauses, source_saved.coverage, source_saved.strategy_id), width="stretch")
@@ -248,8 +288,12 @@ else:
 last_result = st.session_state.get("last_parsed_strategy")
 matching_result = last_result if st.session_state.get("last_strategy_text") == strategy_text else None
 saved_backtest_strategy_id = None
+current_strategy_fingerprint = None
+current_backtest_view_scope = None
 if matching_result is not None:
     current_fingerprint = strategy_fingerprint(matching_result.strategy.model_dump_json())
+    current_strategy_fingerprint = current_fingerprint
+    current_backtest_view_scope = f"{current_fingerprint}|{Path(data_path).resolve()}"
     if (
         st.session_state.get("active_saved_strategy_text") == strategy_text
         and st.session_state.get("active_saved_strategy_fingerprint") == current_fingerprint
@@ -438,10 +482,14 @@ if matching_result is not None:
             )
             if st.button("载入这次已保存回测", key="load_saved_backtest", width="stretch"):
                 selected_run = run_by_id[run_id]
-                st.session_state["dsl_backtest_kpis"] = pd.DataFrame(selected_run.kpis)
-                st.session_state["dsl_backtest_trades"] = pd.DataFrame(selected_run.trades)
-                st.session_state["dsl_backtest_strategy_text"] = strategy_text
-                st.session_state["dsl_backtest_loaded_run"] = selected_run
+                assert current_backtest_view_scope is not None
+                replace_backtest_view(
+                    kpis=recalculated_trade_level_kpis(selected_run.kpis, selected_run.trades, selected_run.settings),
+                    trades=pd.DataFrame(selected_run.trades),
+                    strategy_text=strategy_text,
+                    view_scope=current_backtest_view_scope,
+                    loaded_run=selected_run,
+                )
                 st.rerun()
         else:
             st.caption("此已保存策略尚未在当前数据组保存过回测。运行后会自动建立第一条记录。")
@@ -464,10 +512,14 @@ if matching_result is not None:
                     params["cost_bps"] = cost_bps
                 paths = backtest_input_files(Path(data_path))
                 kpis, trades = collect_results(paths, params, initial_capital, True, load_ohlc=backtest_load_ohlc, run_backtest=runner, progress_label=label)
-                st.session_state["dsl_backtest_kpis"] = kpis
-                st.session_state["dsl_backtest_trades"] = trades
-                st.session_state["dsl_backtest_strategy_text"] = strategy_text
-                st.session_state.pop("dsl_backtest_loaded_run", None)
+                assert current_backtest_view_scope is not None
+                replace_backtest_view(
+                    kpis=kpis,
+                    trades=trades,
+                    strategy_text=strategy_text,
+                    view_scope=current_backtest_view_scope,
+                    loaded_run=None,
+                )
                 if saved_backtest_strategy_id is not None:
                     saved_run = SavedBacktestRun(
                         strategy_id=saved_backtest_strategy_id,
@@ -489,7 +541,7 @@ if matching_result is not None:
             except Exception as error:
                 st.error(f"回测失败：{error}")
 
-    if st.session_state.get("dsl_backtest_strategy_text") == strategy_text:
+    if st.session_state.get("dsl_backtest_view_scope") == current_backtest_view_scope:
         st.subheader("回测结果")
         loaded_run = st.session_state.get("dsl_backtest_loaded_run")
         if loaded_run is not None:
@@ -524,12 +576,25 @@ if matching_result is not None:
             min_trades = st.number_input("最少交易次数", min_value=0, value=1, step=1, key="dsl_min_trades")
             metric = options[rank_label]
             ranked = kpis[(kpis["n_trades"] >= min_trades) & kpis[metric].notna()].sort_values(metric, ascending=metric == "max_drawdown_pct").head(100)
-            display = ranked[["标的", "n_trades", "sharpe_ratio", "annualized_return_pct", "max_drawdown_pct", "win_rate_pct", "cumulative_return_pct", "payoff_ratio", "profit_factor", "avg_return_pct", "avg_days_held"]].rename(columns={"n_trades":"交易次数", "sharpe_ratio":"夏普比率", "annualized_return_pct":"年化收益率 (%)", "max_drawdown_pct":"最大回撤 (%)", "win_rate_pct":"胜率 (%)", "cumulative_return_pct":"累计收益率 (%)", "payoff_ratio":"盈亏比", "profit_factor":"盈利因子", "avg_return_pct":"平均单笔收益 (%)", "avg_days_held":"平均持仓天数"})
+            display = ranked[["标的", "n_trades", "sharpe_ratio", "annualized_return_pct", "max_drawdown_pct", "win_rate_pct", "cumulative_return_pct", "payoff_ratio", "profit_factor", "avg_return_pct", "avg_days_held"]].rename(columns={"n_trades":"交易次数", "sharpe_ratio":"夏普比率", "annualized_return_pct":"全样本年化收益率 (%)", "max_drawdown_pct":"最大回撤 (%)", "win_rate_pct":"胜率 (%)", "cumulative_return_pct":"累计收益率 (%)", "payoff_ratio":"盈亏比", "profit_factor":"盈利因子", "avg_return_pct":"平均单笔收益 (%)", "avg_days_held":"平均持仓天数"})
             st.caption("绿色行符合回撤阈值；红色行超过阈值。选择行后可查看该标的交易。")
             selection = st.dataframe(style_by_drawdown(display, "最大回撤 (%)", -limit, integer_columns=("交易次数",)), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key="dsl_top100_table")
             rows = selection.selection.rows if selection else []
+            selected_symbol = None
             if rows:
-                selected_symbol = display.iloc[rows[0]]["标的"]
+                selected_symbol = str(display.iloc[rows[0]]["标的"])
+                st.session_state["dsl_chart_result_scope"] = current_backtest_view_scope
+                st.session_state["dsl_chart_selected_symbol"] = selected_symbol
+            elif (
+                st.session_state.get("dsl_chart_result_scope") == current_backtest_view_scope
+                and st.session_state.get("dsl_chart_selected_symbol") in set(display["标的"].astype(str))
+            ):
+                # Selectbox interactions rerun the page but do not necessarily
+                # preserve a dataframe's transient row-selection payload.
+                # Keep showing the chart for the symbol chosen in this exact
+                # result set instead of making the user reload the strategy.
+                selected_symbol = str(st.session_state["dsl_chart_selected_symbol"])
+            if selected_symbol is not None:
                 symbol_trades = st.session_state.get("dsl_backtest_trades", pd.DataFrame())
                 symbol_trades = symbol_trades[symbol_trades["symbol"] == selected_symbol].reset_index(drop=True)
                 if symbol_trades.empty:
@@ -633,7 +698,12 @@ if matching_result is not None:
                             ]
                             chart["Date"] = pd.to_datetime(chart["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
                             x = {"field":"Index","type":"quantitative","scale":{"domain":[0, max(len(chart) - 1, 1)], "nice":False},"axis":{"title":"连续交易日（日期见悬停）"}}
-                            candle_size = max(3, min(8, round(700 / max(len(chart), 1))))
+                            # The x axis is deliberately continuous so event
+                            # arrows retain their exact candle index.  Make the
+                            # bodies wider instead of changing that scale: it
+                            # reduces the distracting white gap between daily
+                            # candles without shifting any annotation.
+                            candle_size = max(7, min(15, round(1_500 / max(len(chart), 1))))
                             ohlc_tooltip = [
                                 {"field":"Date","type":"nominal","title":"日期"},
                                 {"field":"Open","type":"quantitative","title":"开盘","format":".4f"},
@@ -649,14 +719,16 @@ if matching_result is not None:
                                 {"field":"EventPrice","type":"quantitative","title":"事件价格","format":".4f"},
                                 {"field":"Index","type":"quantitative","title":"图内零基索引","format":"d"},
                             ]
-                            spec = {"vconcat":[{"height":360,"layer":[{"mark":"rule","encoding":{"x":x,"y":{"field":"Low","type":"quantitative","scale":{"zero":False}},"y2":{"field":"High"},"tooltip":ohlc_tooltip}},{"mark":{"type":"bar","size":candle_size},"encoding":{"x":x,"y":{"field":"Open","type":"quantitative","scale":{"zero":False}},"y2":{"field":"Close"},"color":{"condition":{"test":"datum.Close >= datum.Open","value":"#198754"},"value":"#d62728"},"tooltip":ohlc_tooltip}},{"transform":[{"fold":["MA5","MA10","MA20"],"as":["MA","Value"]}],"mark":{"type":"line"},"encoding":{"x":x,"y":{"field":"Value","type":"quantitative","scale":{"zero":False}},"color":{"field":"MA","type":"nominal"}}},{"data":{"values":markers},"mark":{"type":"rule","color":"#111827","strokeWidth":1.2},"encoding":{"x":{"field":"Index","type":"quantitative"},"y":{"field":"EventPrice","type":"quantitative"},"y2":{"field":"LabelPrice"},"tooltip":event_tooltip}},{"data":{"values":markers},"mark":{"type":"point","filled":True,"size":90,"color":"#111827"},"encoding":{"x":{"field":"Index","type":"quantitative"},"y":{"field":"EventPrice","type":"quantitative"},"tooltip":event_tooltip}},{"data":{"values":markers},"mark":{"type":"text","fontWeight":"bold","color":"#111827"},"encoding":{"x":{"field":"Index","type":"quantitative"},"y":{"field":"LabelPrice","type":"quantitative"},"text":{"field":"ShortLabel"},"tooltip":event_tooltip}}]},{"height":100,"mark":{"type":"bar","size":candle_size},"encoding":{"x":x,"y":{"field":"Volume","type":"quantitative"},"color":{"condition":{"test":"datum.Close >= datum.Open","value":"#198754"},"value":"#d62728"},"tooltip":ohlc_tooltip}}]}
+                            annotation_style = event_annotation_style(st.context.theme.type)
+                            event_color = annotation_style["color"]
+                            spec = {"vconcat":[{"height":360,"layer":[{"mark":"rule","encoding":{"x":x,"y":{"field":"Low","type":"quantitative","scale":{"zero":False}},"y2":{"field":"High"},"tooltip":ohlc_tooltip}},{"mark":{"type":"bar","size":candle_size},"encoding":{"x":x,"y":{"field":"Open","type":"quantitative","scale":{"zero":False}},"y2":{"field":"Close"},"color":{"condition":{"test":"datum.Close >= datum.Open","value":"#198754"},"value":"#d62728"},"tooltip":ohlc_tooltip}},{"transform":[{"fold":["MA5","MA10","MA20"],"as":["MA","Value"]}],"mark":{"type":"line"},"encoding":{"x":x,"y":{"field":"Value","type":"quantitative","scale":{"zero":False}},"color":{"field":"MA","type":"nominal"}}},{"data":{"values":markers},"mark":{"type":"rule","color":event_color,"strokeWidth":1.2},"encoding":{"x":{"field":"Index","type":"quantitative"},"y":{"field":"EventPrice","type":"quantitative"},"y2":{"field":"LabelPrice"},"tooltip":event_tooltip}},{"data":{"values":markers},"mark":{"type":"point","filled":True,"size":90,"color":event_color},"encoding":{"x":{"field":"Index","type":"quantitative"},"y":{"field":"EventPrice","type":"quantitative"},"tooltip":event_tooltip}},{"data":{"values":markers},"mark":{"type":"text","fontWeight":"bold","color":event_color},"encoding":{"x":{"field":"Index","type":"quantitative"},"y":{"field":"LabelPrice","type":"quantitative"},"text":{"field":"ShortLabel"},"tooltip":event_tooltip}}]},{"height":100,"mark":{"type":"bar","size":candle_size},"encoding":{"x":x,"y":{"field":"Volume","type":"quantitative"},"color":{"condition":{"test":"datum.Close >= datum.Open","value":"#198754"},"value":"#d62728"},"tooltip":ohlc_tooltip}}]}
                             price_layers = spec["vconcat"][0]["layer"]
                             for layer in price_layers:
                                 y_encoding = layer["encoding"].get("y")
                                 if isinstance(y_encoding, dict):
                                     y_encoding["scale"] = price_scale
                             text_mark = price_layers[-1]["mark"]
-                            text_mark.update({"fontSize": 13, "stroke": "white", "strokeWidth": 3, "align": "left", "dx": 4, "baseline": "bottom"})
+                            text_mark.update({"fontSize": 13, "stroke": annotation_style["halo_color"], "strokeWidth": annotation_style["halo_width"], "align": "left", "dx": 4, "baseline": "bottom"})
                             price_layers[-1]["encoding"]["text"]["type"] = "nominal"
                             st.vega_lite_chart(chart, spec, width="stretch", key=f"dsl_chart_{selected_symbol}_{trade_id}")
                             checks = anchor_check_rows(trade)

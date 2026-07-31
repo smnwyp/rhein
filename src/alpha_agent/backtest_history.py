@@ -13,6 +13,7 @@ from pydantic import Field, JsonValue
 
 from alpha_agent.domain.indicators import DSLModel
 from alpha_agent.errors import AlphaAgentError
+from rhein.engine.kpis import calculate_kpis
 
 
 class SavedBacktestRun(DSLModel):
@@ -85,6 +86,42 @@ class JsonBacktestHistory:
 def dataframe_records(frame: pd.DataFrame) -> list[dict[str, JsonValue]]:
     """Produce finite JSON values only; pandas turns NaN/NaT into JSON null."""
     return json.loads(frame.to_json(orient="records", date_format="iso"))
+
+
+def recalculated_trade_level_kpis(
+    stored_kpis: list[dict[str, JsonValue]],
+    stored_trades: list[dict[str, JsonValue]],
+    settings: dict[str, JsonValue],
+) -> pd.DataFrame:
+    """Rebuild trade-derived KPIs from an immutable historical trade ledger.
+
+    Historical runs retain their original payload.  This view-level migration
+    fixes calculation defects such as a missing initial-equity drawdown point
+    using the authoritative, saved trades.  It intentionally leaves metrics
+    requiring OHLC data (annualized return and Sharpe) untouched.
+    """
+    kpis = pd.DataFrame(stored_kpis)
+    trades = pd.DataFrame(stored_trades)
+    required_trade_columns = {"symbol", "ret_pct", "pnl_eur", "days_held"}
+    if kpis.empty or "标的" not in kpis or not required_trade_columns.issubset(trades.columns):
+        return kpis
+    try:
+        capital = float(settings.get("initial_capital", 10_000.0))
+    except (TypeError, ValueError):
+        capital = 10_000.0
+    compound = settings.get("compound", True) is not False
+    for row_index, symbol in kpis["标的"].items():
+        symbol_trades = trades[trades["symbol"] == symbol].copy()
+        if symbol_trades.empty:
+            continue
+        sort_columns = [column for column in ("exit", "entry", "signal") if column in symbol_trades]
+        if sort_columns:
+            symbol_trades = symbol_trades.sort_values(sort_columns, kind="stable")
+        refreshed = calculate_kpis(symbol_trades, capital=capital, compound=compound)
+        for key, value in refreshed.items():
+            kpis.at[row_index, key] = value
+        kpis.at[row_index, "cumulative_return_pct"] = (refreshed["final_equity"] / capital - 1) * 100
+    return kpis
 
 
 def strategy_fingerprint(strategy_json: str) -> str:

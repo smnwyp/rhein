@@ -18,7 +18,7 @@ def test_nvda_default_trade_and_kpi_snapshot() -> None:
     ]
     assert {key: stats[key] for key in ("n_trades", "final_equity", "win_rate_pct", "payoff_ratio", "max_drawdown_pct")} == {
         "n_trades": 15, "final_equity": 11584.49, "win_rate_pct": 40.0,
-        "payoff_ratio": 3.126, "max_drawdown_pct": -4.21,
+        "payoff_ratio": 3.126, "max_drawdown_pct": -5.79,
     }
 
 
