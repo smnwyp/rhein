@@ -36,6 +36,21 @@ For schema v0.3, encode confirmed lifecycle answers in `lifecycle_policy`: use
 `force_close` for a last-close liquidation, `leave_open_excluded` when an open
 position is excluded from closed-trade KPIs, and set `allow_reentry_after_exit`
 exactly as the user chose.
+When an ordered A→B drawdown is required but the user explicitly removes the
+t0/C-to-B recovery cap, omit `maximum_anchor_recovery_from_trough`; never use
+1.0 as a fake unlimited threshold. For a prior-window low such as
+min(Close[S-15], ..., Close[S-1]), use `rolling_low_anchor_constraint` with
+`reference_field: "close"`, `include_anchor: false`, and the user's tie-break.
+The `doji` `body_to_open_threshold` is user-configurable: preserve 0.5% as
+0.005 rather than changing it to 1%.
+Use `entry.mode: "conditional"` with explicit one-day `entry.branches` when
+the actual entry day is conditional (for example, direct entry on S when its
+return is <=3%, otherwise a pullback entry on S+1). Each branch condition is
+evaluated on that branch's actual entry day, while `anchor_indicator` retains
+the S/t0 return. If no branch matches, the candidate anchor is skipped. When
+the user states that holding rules, entry price, or running volume maxima start
+at actual entry E, set each exit rule's `relative_to: "entry"` and use
+`entry_running_maximum`, not an anchor/t0 running maximum.
 For an anchor-day comparison such as `MA20[t0] > MA20[t0-1]`, encode the prior
 value as `{\"kind\": \"lagged_indicator\", \"offset_days\": -1, \"indicator\": ...}`
 inside `anchor.condition`. Never put `anchor_indicator` in `anchor.condition`:

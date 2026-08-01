@@ -12,7 +12,8 @@ from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorChangeConstraint, AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand,
     CandlestickPatternCondition, CurrentIndicatorOperand, CurrentMarketOperand, EntryPriceOperand,
-    ExitRule, OrderedExtremaDrawdownConstraint, ScaledEntryPriceOperand, TemporalComparisonCondition,
+    EntryRunningMaximumOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingLowAnchorConstraint,
+    ScaledEntryPriceOperand, TemporalComparisonCondition,
     TemporalCrossCondition,
     TemporalCondition, TemporalConditionGroup, TemporalOperand, TemporalScalarOperand, TimedStrategyDefinition,
 )
@@ -128,7 +129,7 @@ def _anchor_condition_checks(df: pd.DataFrame, condition: Condition, index: int,
     raise UnsupportedStrategyFeature("v0.3 daily engine cannot materialize this anchor condition")
 
 
-def _temporal_operand(df: pd.DataFrame, operand: TemporalOperand, *, index: int, anchor_index: int, entry_price: float) -> float:
+def _temporal_operand(df: pd.DataFrame, operand: TemporalOperand, *, index: int, anchor_index: int, entry_price: float, entry_index: int | None = None) -> float:
     if isinstance(operand, CurrentMarketOperand): return float(df[operand.field.capitalize()].iloc[index])
     if isinstance(operand, CurrentIndicatorOperand): return float(_indicator_values(df, operand.indicator)[index])
     if isinstance(operand, TemporalScalarOperand): return float(operand.value)
@@ -139,14 +140,17 @@ def _temporal_operand(df: pd.DataFrame, operand: TemporalOperand, *, index: int,
     if isinstance(operand, EntryPriceOperand): return entry_price
     if isinstance(operand, ScaledEntryPriceOperand): return entry_price * operand.multiplier
     if isinstance(operand, AnchorRunningMaximumOperand): return float(df["Volume"].iloc[anchor_index:index + 1].max())
+    if isinstance(operand, EntryRunningMaximumOperand):
+        start = anchor_index if entry_index is None else entry_index
+        return float(df["Volume"].iloc[start:index + 1].max())
     raise UnsupportedStrategyFeature("v0.3 daily engine cannot evaluate this temporal operand")
 
 
-def _temporal_condition(df: pd.DataFrame, condition: TemporalCondition, *, index: int, anchor_index: int, entry_price: float) -> bool:
+def _temporal_condition(df: pd.DataFrame, condition: TemporalCondition, *, index: int, anchor_index: int, entry_price: float, entry_index: int | None = None) -> bool:
     if isinstance(condition, TemporalComparisonCondition):
         return _compare(
-            _temporal_operand(df, condition.left, index=index, anchor_index=anchor_index, entry_price=entry_price),
-            _temporal_operand(df, condition.right, index=index, anchor_index=anchor_index, entry_price=entry_price),
+            _temporal_operand(df, condition.left, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price),
+            _temporal_operand(df, condition.right, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price),
             condition.operator,
         )
     if isinstance(condition, CandlestickPatternCondition):
@@ -158,17 +162,17 @@ def _temporal_condition(df: pd.DataFrame, condition: TemporalCondition, *, index
     if isinstance(condition, TemporalCrossCondition):
         if index < 1:
             return False
-        left = _temporal_operand(df, condition.left, index=index, anchor_index=anchor_index, entry_price=entry_price)
-        right = _temporal_operand(df, condition.right, index=index, anchor_index=anchor_index, entry_price=entry_price)
-        prior_left = _temporal_operand(df, condition.left, index=index - 1, anchor_index=anchor_index, entry_price=entry_price)
-        prior_right = _temporal_operand(df, condition.right, index=index - 1, anchor_index=anchor_index, entry_price=entry_price)
+        left = _temporal_operand(df, condition.left, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price)
+        right = _temporal_operand(df, condition.right, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price)
+        prior_left = _temporal_operand(df, condition.left, index=index - 1, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price)
+        prior_right = _temporal_operand(df, condition.right, index=index - 1, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price)
         if not all(np.isfinite(value) for value in (left, right, prior_left, prior_right)):
             return False
         if condition.operator == "cross_above":
             return left > right and prior_left <= prior_right
         return left < right and prior_left >= prior_right
     if isinstance(condition, TemporalConditionGroup):
-        outcomes = [_temporal_condition(df, child, index=index, anchor_index=anchor_index, entry_price=entry_price) for child in condition.conditions]
+        outcomes = [_temporal_condition(df, child, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price) for child in condition.conditions]
         return all(outcomes) if condition.operator == "and" else any(outcomes)
     raise UnsupportedStrategyFeature("v0.3 daily engine cannot evaluate this temporal condition")
 
@@ -194,7 +198,9 @@ def _anchor_constraints_hold(df: pd.DataFrame, strategy: TimedStrategyDefinition
             if peak <= 0 or trough <= 0: return False, []
             drawdown = (peak - trough) / peak
             recovery = (anchor_close - trough) / trough
-            if drawdown < constraint.minimum_peak_to_trough_drawdown or recovery > constraint.maximum_anchor_recovery_from_trough:
+            if drawdown < constraint.minimum_peak_to_trough_drawdown:
+                return False, []
+            if constraint.maximum_anchor_recovery_from_trough is not None and recovery > constraint.maximum_anchor_recovery_from_trough:
                 return False, []
             ordered_constraint_count += 1
             suffix = "" if ordered_constraint_count == 1 else str(ordered_constraint_count)
@@ -202,6 +208,23 @@ def _anchor_constraints_hold(df: pd.DataFrame, strategy: TimedStrategyDefinition
                 {"event_id": f"ordered_extrema_{ordered_constraint_count}_peak", "label": f"A{suffix}：窗口最高收盘", "date": str(pd.Timestamp(df["Date"].iloc[start + peak_relative]).date()), "price": round(float(peak), 4)},
                 {"event_id": f"ordered_extrema_{ordered_constraint_count}_trough", "label": f"B{suffix}：A 后最低收盘", "date": str(pd.Timestamp(df["Date"].iloc[start + trough_relative]).date()), "price": round(float(trough), 4)},
             ])
+        elif isinstance(constraint, RollingLowAnchorConstraint):
+            start = index - constraint.lookback_days
+            end = index + 1 if constraint.include_anchor else index
+            if start < 0 or end <= start:
+                return False, []
+            column = constraint.reference_field.capitalize()
+            values = df[column].iloc[start:end].to_numpy(dtype=float)
+            if not np.isfinite(values).all():
+                return False, []
+            low_relative = _extremum_index(values, kind="minimum", tie_break=constraint.tie_break)
+            low_index = start + low_relative
+            if constraint.low_must_precede_anchor and low_index >= index:
+                return False, []
+            low, anchor_close = values[low_relative], float(df["Close"].iloc[index])
+            if low <= 0 or (anchor_close - low) / low > constraint.maximum_anchor_close_gain:
+                return False, []
+            event_points.append({"event_id": "rolling_low", "label": f"L{constraint.lookback_days}：窗口最低{constraint.reference_field}", "date": str(pd.Timestamp(df["Date"].iloc[low_index]).date()), "price": round(float(low), 4)})
         elif isinstance(constraint, AnchorIndicatorChangeConstraint):
             prior = index + constraint.comparison_offset_days
             if prior < 0: return False, []
@@ -220,6 +243,24 @@ def _anchor_constraints_hold(df: pd.DataFrame, strategy: TimedStrategyDefinition
 
 def _rule_active(rule: ExitRule, relative_day: int) -> bool:
     return relative_day >= rule.active_days.start_offset_days and (rule.active_days.end_offset_days is None or relative_day <= rule.active_days.end_offset_days)
+
+
+def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_index: int) -> tuple[int, float] | None:
+    """Resolve fixed or conditional E-day entry without guessing a branch."""
+    if strategy.entry.mode == "fixed":
+        assert strategy.entry.active_day is not None and strategy.entry.condition is not None
+        candidates = [(strategy.entry.active_day.start_offset_days, strategy.entry.condition)]
+    else:
+        assert strategy.entry.branches is not None
+        candidates = [(branch.active_day.start_offset_days, branch.condition) for branch in strategy.entry.branches]
+    for offset, condition in sorted(candidates, key=lambda item: item[0]):
+        entry_index = anchor_index + offset
+        if entry_index >= len(df):
+            continue
+        entry_price = float(df["Close"].iloc[entry_index])
+        if _temporal_condition(df, condition, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price):
+            return entry_index, entry_price
+    return None
 
 
 def run_v03_backtest(df: pd.DataFrame, *, strategy: TimedStrategyDefinition, capital: float, compound: bool, cost_bps: float = 0.0) -> tuple[pd.DataFrame, dict]:
@@ -241,15 +282,20 @@ def run_v03_backtest(df: pd.DataFrame, *, strategy: TimedStrategyDefinition, cap
         if not constraints_hold:
             index += 1
             continue
-        entry_index = index + strategy.entry.active_day.start_offset_days
-        if entry_index >= n: break
-        entry_price = float(df["Close"].iloc[entry_index])
-        if not _temporal_condition(df, strategy.entry.condition, index=entry_index, anchor_index=index, entry_price=entry_price):
+        resolved_entry = _resolve_entry(df, strategy, index)
+        if resolved_entry is None:
             index += 1
             continue
+        entry_index, entry_price = resolved_entry
         exit_index, reason = None, None
         for day in range(entry_index + 1, n):
-            matching = [rule for rule in strategy.exit_rules if _rule_active(rule, day - index) and rule.condition is not None and _temporal_condition(df, rule.condition, index=day, anchor_index=index, entry_price=entry_price)]
+            matching = [
+                rule
+                for rule in strategy.exit_rules
+                if _rule_active(rule, day - (entry_index if rule.relative_to == "entry" else index))
+                and rule.condition is not None
+                and _temporal_condition(df, rule.condition, index=day, anchor_index=index, entry_index=entry_index, entry_price=entry_price)
+            ]
             if matching:
                 winner = min(matching, key=lambda rule: rule.priority)
                 exit_index, reason = day, f"v03:{winner.rule_id}"

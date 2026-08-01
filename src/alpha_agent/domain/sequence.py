@@ -78,12 +78,20 @@ class AnchorRunningMaximumOperand(DSLModel):
     tie_break: Literal["earliest", "latest"] = "earliest"
 
 
+class EntryRunningMaximumOperand(DSLModel):
+    """Maximum value from the actual entry day through the current day."""
+
+    kind: Literal["entry_running_maximum"]
+    field: Literal["volume"]
+    tie_break: Literal["earliest", "latest"] = "earliest"
+
+
 TemporalOperand = Annotated[
-    CurrentMarketOperand | CurrentIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand,
+    CurrentMarketOperand | CurrentIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand,
     Field(discriminator="kind"),
 ]
 TemporalSeriesOperand = Annotated[
-    CurrentMarketOperand | CurrentIndicatorOperand | AnchorMarketOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand,
+    CurrentMarketOperand | CurrentIndicatorOperand | AnchorMarketOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand,
     Field(discriminator="kind"),
 ]
 
@@ -107,14 +115,7 @@ class CandlestickPatternCondition(DSLModel):
 
     node_type: Literal["candlestick_pattern"]
     pattern: Literal["doji", "large_bearish"]
-    body_to_open_threshold: Annotated[FiniteFloat, Field(gt=0)]
-
-    @model_validator(mode="after")
-    def threshold_matches_pattern(self) -> "CandlestickPatternCondition":
-        expected = 0.01 if self.pattern == "doji" else 0.02
-        if self.body_to_open_threshold != expected:
-            raise ValueError(f"{self.pattern} requires body_to_open_threshold={expected}")
-        return self
+    body_to_open_threshold: Annotated[FiniteFloat, Field(gt=0, lt=1)]
 
 
 class TemporalConditionGroup(DSLModel):
@@ -138,6 +139,8 @@ class RollingLowAnchorConstraint(DSLModel):
     reference_field: Literal["low", "close"] = "low"
     low_must_precede_anchor: bool = True
     maximum_anchor_close_gain: Annotated[FiniteFloat, Field(ge=0)]
+    include_anchor: bool = True
+    tie_break: Literal["earliest", "latest"] = "earliest"
 
 
 class AnchorIndicatorChangeConstraint(DSLModel):
@@ -159,7 +162,7 @@ class OrderedExtremaDrawdownConstraint(DSLModel):
     peak_tie_break: Literal["earliest", "latest"]
     trough_tie_break: Literal["earliest", "latest"]
     minimum_peak_to_trough_drawdown: Annotated[FiniteFloat, Field(gt=0, lt=1)]
-    maximum_anchor_recovery_from_trough: Annotated[FiniteFloat, Field(ge=0, lt=1)]
+    maximum_anchor_recovery_from_trough: Annotated[FiniteFloat, Field(ge=0, lt=1)] | None = None
 
 
 AnchorConstraint = Annotated[
@@ -174,15 +177,42 @@ class AnchorDefinition(DSLModel):
     constraints: list[AnchorConstraint] = Field(default_factory=list)
 
 
-class EntryRule(DSLModel):
+class EntryBranch(DSLModel):
+    """One deterministic candidate for an actual entry day."""
+
+    branch_id: str = Field(min_length=1)
     active_day: RelativeDayRange
     condition: TemporalCondition
+
+    @model_validator(mode="after")
+    def branch_must_be_one_day(self) -> "EntryBranch":
+        if self.active_day.end_offset_days != self.active_day.start_offset_days:
+            raise ValueError("entry branch active_day must name exactly one relative day")
+        return self
+
+
+class EntryRule(DSLModel):
+    """Either one fixed entry or explicit conditional entry-day branches."""
+
+    mode: Literal["fixed", "conditional"] = "fixed"
+    active_day: RelativeDayRange | None = None
+    condition: TemporalCondition | None = None
     execution: Literal["close"]
+    branches: list[EntryBranch] | None = None
 
     @model_validator(mode="after")
     def entry_must_be_one_day(self) -> "EntryRule":
-        if self.active_day.end_offset_days != self.active_day.start_offset_days:
-            raise ValueError("entry active_day must name exactly one relative day")
+        if self.mode == "fixed":
+            if self.active_day is None or self.condition is None or self.branches is not None:
+                raise ValueError("fixed entry requires active_day and condition only")
+            if self.active_day.end_offset_days != self.active_day.start_offset_days:
+                raise ValueError("entry active_day must name exactly one relative day")
+        else:
+            if self.active_day is not None or self.condition is not None or not self.branches:
+                raise ValueError("conditional entry requires one or more branches only")
+            offsets = [branch.active_day.start_offset_days for branch in self.branches]
+            if len(offsets) != len(set(offsets)):
+                raise ValueError("conditional entry branches must use distinct relative days")
         return self
 
 
@@ -196,6 +226,7 @@ class ExitRule(DSLModel):
     rule_id: str = Field(min_length=1)
     priority: int = Field(gt=0)
     active_days: RelativeDayRange
+    relative_to: Literal["anchor", "entry"] = "anchor"
     kind: Literal["close_condition", "intraday_price_trigger", "forced_close"]
     condition: TemporalCondition | None = None
     price_trigger: EntryPriceTrigger | None = None

@@ -53,12 +53,23 @@ def _walk_timed_condition(condition: TemporalCondition, path: str, issues: list[
 def validate_strategy(strategy: AnyStrategyDefinition) -> None:
     if isinstance(strategy, TimedStrategyDefinition):
         issues: list[dict[str, str]] = []
-        _walk_timed_condition(
-            strategy.entry.condition,
-            "entry.condition",
-            issues,
-            evaluated_on_anchor_day=strategy.entry.active_day.start_offset_days == 0,
-        )
+        if strategy.entry.mode == "fixed":
+            assert strategy.entry.condition is not None and strategy.entry.active_day is not None
+            _walk_timed_condition(
+                strategy.entry.condition,
+                "entry.condition",
+                issues,
+                evaluated_on_anchor_day=strategy.entry.active_day.start_offset_days == 0,
+            )
+        else:
+            assert strategy.entry.branches is not None
+            for index, branch in enumerate(strategy.entry.branches):
+                _walk_timed_condition(
+                    branch.condition,
+                    f"entry.branches[{index}].condition",
+                    issues,
+                    evaluated_on_anchor_day=branch.active_day.start_offset_days == 0,
+                )
         if issues:
             raise SemanticStrategyValidationFailure(issues)
         return

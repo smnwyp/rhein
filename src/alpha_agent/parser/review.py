@@ -9,6 +9,7 @@ from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, CandlestickPatternCondition,
     CurrentIndicatorOperand, CurrentMarketOperand, EntryPriceOperand, ExitRule, OrderedExtremaDrawdownConstraint, ScaledEntryPriceOperand,
+    EntryRunningMaximumOperand,
     TemporalComparisonCondition, TemporalCondition, TemporalConditionGroup, TemporalCrossCondition, TemporalOperand,
     TemporalScalarOperand, TimedStrategyDefinition,
 )
@@ -49,6 +50,7 @@ def _temporal_operand(operand: TemporalOperand) -> str:
     if isinstance(operand, ScaledEntryPriceOperand): return f"入场价 × {operand.multiplier:g}"
     if isinstance(operand, AnchorIndicatorOperand): return f"{operand.anchor}{operand.offset_days:+d} 日{_indicator(operand.indicator)}"
     if isinstance(operand, AnchorRunningMaximumOperand): return f"自 t0 起至当日的最大{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}（并列取最早）"
+    if isinstance(operand, EntryRunningMaximumOperand): return f"自实际入场日起至当日的最大{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}（并列取{('最晚' if operand.tie_break == 'latest' else '最早')}）"
     raise TypeError(f"unknown temporal operand: {type(operand).__name__}")
 
 
@@ -81,7 +83,9 @@ def _range(start: int, end: int | None) -> str:
 
 
 def _exit(rule: ExitRule) -> str:
-    window = _range(rule.active_days.start_offset_days, rule.active_days.end_offset_days)
+    prefix = "实际入场日 E" if rule.relative_to == "entry" else "t0"
+    start, end = rule.active_days.start_offset_days, rule.active_days.end_offset_days
+    window = f"{prefix}+{start}" if end == start else (f"{prefix}+{start} 起" if end is None else f"{prefix}+{start} 至 {prefix}+{end}")
     if rule.kind == "close_condition": return f"{window}：若{_temporal_condition(rule.condition)}，按收盘价退出。"  # type: ignore[arg-type]
     if rule.kind == "intraday_price_trigger":
         trigger = rule.price_trigger
@@ -107,15 +111,23 @@ def build_review_items(strategy: AnyStrategyDefinition) -> list[ReviewItem]:
     for index, constraint in enumerate(strategy.anchor.constraints):
         if constraint.kind == "rolling_low_anchor_constraint":
             field = "最低价（Low）" if constraint.reference_field == "low" else "最低收盘价（Close）"
-            explanation = f"t0 前 {constraint.lookback_days} 日至 t0 的{field}必须早于 t0；t0 收盘相对该低点涨幅 ≤ {constraint.maximum_anchor_close_gain:.2%}。"
+            window = f"t0 前 {constraint.lookback_days} 日至 t0" if constraint.include_anchor else f"t0 前 {constraint.lookback_days} 日（不含 t0）"
+            explanation = f"{window}的{field}（并列取{('最晚' if constraint.tie_break == 'latest' else '最早')}）必须早于 t0；t0 收盘相对该低点涨幅 ≤ {constraint.maximum_anchor_close_gain:.2%}。"
         elif constraint.kind == "anchor_indicator_change_constraint":
             comparator = "大于" if constraint.operator == "greater_than" else "不低于"
             explanation = f"t0 的 {_indicator(constraint.indicator)} 相对 t0{constraint.comparison_offset_days:+d} 的变化{comparator} {constraint.minimum_relative_change:.2%}。"
         else:
             assert isinstance(constraint, OrderedExtremaDrawdownConstraint)
-            explanation = f"在截至 t0 的 {constraint.lookback_days} 日收盘价窗口中，A 为最早最高收盘价，B 为 A 后最早最低收盘价；A→B 回撤 ≥ {constraint.minimum_peak_to_trough_drawdown:.2%}，且 t0 相对 B 的反弹 ≤ {constraint.maximum_anchor_recovery_from_trough:.2%}。"
+            recovery = "" if constraint.maximum_anchor_recovery_from_trough is None else f"，且 t0 相对 B 的反弹 ≤ {constraint.maximum_anchor_recovery_from_trough:.2%}"
+            explanation = f"在截至 t0 的 {constraint.lookback_days} 日收盘价窗口中，A 为{('最晚' if constraint.peak_tie_break == 'latest' else '最早')}最高收盘价，B 为 A 后{('最晚' if constraint.trough_tie_break == 'latest' else '最早')}最低收盘价；A→B 回撤 ≥ {constraint.minimum_peak_to_trough_drawdown:.2%}{recovery}。"
         items.append(ReviewItem("t0 附加约束", f"anchor.constraints[{index}]", explanation))
-    items.append(ReviewItem("入场", "entry", f"{_range(strategy.entry.active_day.start_offset_days, strategy.entry.active_day.end_offset_days)}：若{_temporal_condition(strategy.entry.condition)}，按收盘价入场。"))
+    if strategy.entry.mode == "fixed":
+        assert strategy.entry.active_day is not None and strategy.entry.condition is not None
+        items.append(ReviewItem("入场", "entry", f"{_range(strategy.entry.active_day.start_offset_days, strategy.entry.active_day.end_offset_days)}：若{_temporal_condition(strategy.entry.condition)}，按收盘价入场。"))
+    else:
+        assert strategy.entry.branches is not None
+        branches = "；".join(f"t0+{branch.active_day.start_offset_days}（{branch.branch_id}）：若{_temporal_condition(branch.condition)}，按收盘价入场" for branch in strategy.entry.branches)
+        items.append(ReviewItem("条件入场", "entry.branches", branches + "。未命中任何分支则放弃该候选点。"))
     for index, rule in sorted(enumerate(strategy.exit_rules), key=lambda item: item[1].priority):
         items.append(ReviewItem(f"出场规则（优先级 {rule.priority}）", f"exit_rules[{index}]", _exit(rule)))
     if strategy.lifecycle_policy is not None:

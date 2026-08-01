@@ -19,6 +19,8 @@ def _leaves(condition: Condition) -> list[ComparisonCondition]:
 
 def compile_timed_strategy(strategy: TimedStrategyDefinition, *, approximate_intraday_with_daily_low: bool) -> dict:
     """Return engine parameters or a typed error; never drop an unrecognised rule."""
+    if strategy.entry.mode != "fixed":
+        raise UnsupportedStrategyFeature("v0.2 adapter does not support conditional entry branches")
     params = dict(DEFAULT_STRATEGY)
     params.update({
         "use_signal_band": False, "use_baseline_rsi": False,
@@ -62,6 +64,7 @@ def compile_timed_strategy(strategy: TimedStrategyDefinition, *, approximate_int
             if not isinstance(constraint.indicator, SMA) or constraint.indicator.window != 20 or constraint.comparison_offset_days != -2:
                 raise UnsupportedStrategyFeature("only the MA20(t0) versus MA20(t0-2) anchor slope is currently executable")
             params["use_baseline_sma20_rising"] = True
+    assert strategy.entry.active_day is not None
     if strategy.entry.active_day.start_offset_days != strategy.entry.active_day.end_offset_days:
         raise UnsupportedStrategyFeature("entry must occur on one explicit relative day")
     params["entry_lag"] = strategy.entry.active_day.start_offset_days

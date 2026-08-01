@@ -114,6 +114,40 @@ def test_v03_ordered_extrema_honors_latest_tie_break():
     assert points[1]["date"] == "2020-01-06"  # Latest tied 70 close after A.
 
 
+def test_v03_conditional_entry_uses_actual_entry_day_for_exit_window_and_volume_peak():
+    payload = {
+        "schema_version": "0.3", "symbol": "TEST", "frequency": "1d", "direction": "long_only", "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": _cmp(_field("close"), _sma(2)), "constraints": []},
+        "entry": {"mode": "conditional", "execution": "close", "branches": [
+            {"branch_id": "direct", "active_day": {"start_offset_days": 0, "end_offset_days": 0}, "condition": _cmp({"kind": "anchor_indicator", "anchor": "t0", "offset_days": 0, "indicator": {"indicator": "rolling_return", "field": "close", "window": 1}}, {"kind": "scalar", "value": .03}, "less_than_or_equal")},
+            {"branch_id": "next_day_pullback", "active_day": {"start_offset_days": 1, "end_offset_days": 1}, "condition": {"node_type": "group", "operator": "and", "conditions": [
+                _cmp({"kind": "anchor_indicator", "anchor": "t0", "offset_days": 0, "indicator": {"indicator": "rolling_return", "field": "close", "window": 1}}, {"kind": "scalar", "value": .03}, "greater_than"),
+                _cmp(_field("close"), {"kind": "anchor_market_field", "anchor": "t0", "field": "close"}, "less_than"),
+            ]}},
+        ]},
+        "exit_rules": [{"rule_id": "below_entry", "priority": 1, "relative_to": "entry", "active_days": {"start_offset_days": 1}, "kind": "close_condition", "condition": _cmp(_field("close"), {"kind": "entry_price"}, "less_than"), "execution": "close"}],
+        "lifecycle_policy": {"sample_end_open_position": "force_close", "allow_reentry_after_exit": False},
+    }
+    strategy = TimedStrategyDefinition.model_validate(payload)
+    close = np.array([10.0, 10.0, 11.0, 10.0, 9.0])
+    frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=len(close), freq="B"), "Open": close, "High": close, "Low": close, "Close": close, "Volume": [1, 1, 1, 5, 7]})
+
+    trades, _ = run_v03_backtest(frame, strategy=strategy, capital=10_000, compound=False)
+
+    assert trades.iloc[0].entry == "2020-01-06"  # S+1, not the 10% S candle.
+    assert trades.iloc[0].exit == "2020-01-07"  # E+1 exit window.
+
+
+def test_v03_allows_user_defined_doji_threshold_and_omitted_recovery_cap():
+    payload = _strategy().model_dump(mode="json")
+    payload["anchor"]["constraints"][0].pop("maximum_anchor_recovery_from_trough")
+    payload["exit_rules"][1]["condition"]["conditions"][2]["conditions"][0]["body_to_open_threshold"] = .005
+
+    strategy = TimedStrategyDefinition.model_validate(payload)
+
+    assert strategy.anchor.constraints[0].maximum_anchor_recovery_from_trough is None
+
+
 def test_v03_leaves_sample_end_position_out_of_closed_trade_kpis_and_reports_it():
     payload = _strategy().model_dump(mode="json")
     payload["anchor"]["constraints"] = []
