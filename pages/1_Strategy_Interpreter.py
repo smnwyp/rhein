@@ -560,8 +560,18 @@ if matching_result is not None:
             gauges[1].html(kpi_gauge_html("annualized_return", active["annualized_return_pct"].median() if len(active) else None, max_drawdown_limit=limit))
             gauges[2].html(kpi_gauge_html("drawdown", active["max_drawdown_pct"].median() if len(active) else None, max_drawdown_limit=limit))
             gross_profit, gross_loss = active["gross_profit"].fillna(0).sum(), active["gross_loss"].fillna(0).sum()
-            metrics = st.columns(7)
-            for column, label, value in zip(metrics, ["标的数", "总交易数", "有交易标的", "平均标的胜率", "合并盈利因子", "中位标的累计收益", "回撤阈值"], [len(kpis), int(kpis["n_trades"].sum()), len(active), f"{active['win_rate_pct'].mean():.2f}%" if len(active) else "不适用", f"{gross_profit / gross_loss:.3f}" if gross_loss else "不适用", f"{active['cumulative_return_pct'].median():.2f}%" if len(active) else "不适用", "-15.00%"]): column.metric(label, value)
+            overview_metrics = [
+                ("标的数", len(kpis)),
+                ("总交易数", int(kpis["n_trades"].sum())),
+                ("有交易标的", len(active)),
+                ("平均标的胜率", f"{active['win_rate_pct'].mean():.2f}%" if len(active) else "不适用"),
+                ("合并盈利因子", f"{gross_profit / gross_loss:.3f}" if gross_loss else "不适用"),
+                ("中位标的累计收益", f"{active['cumulative_return_pct'].median():.2f}%" if len(active) else "不适用"),
+            ]
+            for metric_row in (overview_metrics[:3], overview_metrics[3:]):
+                columns = st.columns(3)
+                for column, (label, value) in zip(columns, metric_row):
+                    column.metric(label, value)
             open_position_rows: list[dict[str, object]] = []
             if "open_positions" in kpis:
                 for _, kpi_row in kpis.iterrows():
@@ -712,16 +722,22 @@ if matching_result is not None:
                                 for position, labels in marker_labels.items()
                             ]
                             chart["Date"] = pd.to_datetime(chart["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
-                            # A tightly packed ordinal band gives each trading
-                            # day its own slot while removing the large visual
-                            # gaps of a quantitative x scale. Every layer
-                            # shares this band, so event arrows keep pointing
-                            # to their exact candle.
+                            # A tightly packed ordinal date band gives each
+                            # trading day its own slot while showing readable
+                            # calendar labels and removing weekend/holiday gaps.
+                            # Every layer shares this band, so event arrows
+                            # keep pointing to their exact candle.
                             x = {
-                                "field": "Index",
+                                "field": "Date",
                                 "type": "ordinal",
                                 "scale": {"paddingInner": 0.06, "paddingOuter": 0.01},
-                                "axis": {"title": "连续交易日（日期见悬停）", "labels": False, "ticks": False},
+                                "axis": {
+                                    "title": "交易日期",
+                                    "tickCount": 12,
+                                    "labelAngle": -40,
+                                    "labelOverlap": "greedy",
+                                    "labelLimit": 90,
+                                },
                             }
                             ohlc_tooltip = [
                                 {"field":"Date","type":"nominal","title":"日期"},
