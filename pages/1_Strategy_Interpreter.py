@@ -251,7 +251,12 @@ strategy_source = st.sidebar.radio("策略来源", ["新建策略", "已保存�
 if strategy_source == "新建策略":
     strategy_text = st.sidebar.text_area("自然语言策略", height=180, key="interpreter_strategy_text")
 else:
-    strategy_text = st.session_state.interpreter_strategy_text
+    # Do not use ``interpreter_strategy_text`` as the selected strategy's
+    # identity here.  That key belongs to the new-strategy text widget, which
+    # Streamlit removes when the user switches to this saved-strategy branch.
+    # On the next button/selectbox rerun it would be recreated with the sample
+    # text, making a perfectly valid saved DSL look unavailable.
+    strategy_text = ""
     try:
         source_strategies = library.list()
         saved_by_id = {str(item.strategy_id): item for item in source_strategies}
@@ -260,11 +265,10 @@ else:
             source_saved = saved_by_id[source_id]
             if st.session_state.get("loaded_saved_strategy_id") != source_id:
                 load_selected_saved_strategy()
-            # ``load_selected_saved_strategy`` runs during this same rerun.
-            # Refresh the local value as well, otherwise the remainder of the
-            # page compares the just-loaded DSL with the previous strategy's
-            # text and incorrectly considers it unavailable.
-            strategy_text = st.session_state.interpreter_strategy_text
+            # The persisted library text, rather than a conditionally-rendered
+            # textarea widget, is the stable identity across every rerun
+            # caused by loading a backtest or changing a chart dropdown.
+            strategy_text = source_saved.original_language
             st.sidebar.text_area("策略全文", value=source_saved.original_language, height=180, disabled=True, key="saved_strategy_full_text")
             if source_saved.strategy is not None:
                 st.sidebar.button("载入并使用", key="load_source_saved", on_click=activate_saved_strategy, args=(source_saved.strategy, source_saved.original_language, source_saved.assumptions, source_saved.warnings, source_saved.source_clauses, source_saved.coverage, source_saved.strategy_id), width="stretch")
