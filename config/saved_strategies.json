@@ -1,0 +1,3196 @@
+[
+  {
+    "strategy_id": "f4c7097b-d08b-47d3-bfc9-f3a8fd0e414c",
+    "strategy_name": "趋势突破v0",
+    "created_at": "2026-07-30T17:08:01.845280Z",
+    "original_language": "基准点：t0 需满足“单日涨幅在 5.0%–6.5%、t0-15 至t0低点不在t0、相对该低点涨幅不超过20%、RSI(14)不高于90、收盘>MA5、MA5>MA10、收盘>MA20、量MA5>量MA20、阳线（收盘>开盘）、MA20(t0)较t0-2至少高0.01%”。\n\n入场点：在 t2，需满足“tN收盘不低于t0”后按收盘价入场。\n\n早期出场：在 t3、t4，盘中任意即时价格触及 7.0% 止损幅度即出场。\n\n后期技术出场：从 t5 至 t5，收盘跌破入场价或跌破MA5时出场。\n\n强制平仓：t6 当天，若盘中任意即时价格触及入场价下1.0%，立即按保护规则出场；否则以 t6 收盘价强制平仓。",
+    "strategy": null,
+    "assumptions": [],
+    "warnings": [],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "e2c63d68-421e-4372-8a0d-355755f54c0f",
+    "strategy_name": "趋势突破v0",
+    "created_at": "2026-07-30T17:11:00.647371Z",
+    "original_language": "基准点：t0 需满足“单日涨幅在 5.0%–6.5%、t0-15 至t0低点不在t0、相对该低点涨幅不超过20%、RSI(14)不高于90、收盘>MA5、MA5>MA10、收盘>MA20、量MA5>量MA20、阳线（收盘>开盘）、MA20(t0)较t0-2至少高0.01%”。\n\n入场点：在 t2，需满足“t2收盘不低于t0”后按收盘价入场。\n\n早期出场：在 t3、t4，盘中任意即时价格触及 7.0% 止损幅度即出场。\n\n后期技术出场：从 t5 开始，收盘跌破入场价或跌破MA5时出场。\n",
+    "strategy": null,
+    "assumptions": [],
+    "warnings": [],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "5e77a3e6-71f2-404d-bac7-e05d4d1c7058",
+    "strategy_name": "趋势突破v0",
+    "created_at": "2026-07-30T17:12:51.804770Z",
+    "original_language": "当收盘价向上穿越 20 日均线时买入；当它向下穿越该均线时卖出。",
+    "strategy": null,
+    "assumptions": [],
+    "warnings": [],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "72d43bb5-6446-434d-81fa-3971121a5b6d",
+    "strategy_name": "趋势突破v1",
+    "created_at": "2026-07-30T17:15:21.600473Z",
+    "original_language": "基准点：t0 需满足“单日涨幅在 5.0%–6.5%、t0-15 至t0低点不在t0、相对该低点涨幅不超过20%、RSI(14)不高于90、收盘>MA5、MA5>MA10、收盘>MA20、量MA5>量MA20、阳线（收盘>开盘）、MA20(t0)较t0-2至少高0.01%”。\n\n入场点：在 t1，需满足“t1收盘不低于t0”后按收盘价入场。\n\n早期出场：在 t2、t3，盘中任意即时价格触及 7.0% 止损幅度即出场。\n\n后期技术出场：从 t4 开始，收盘跌破入场价或跌破MA5时出场。\n",
+    "strategy": null,
+    "assumptions": [],
+    "warnings": [],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "1f141409-c8c0-4349-a1b3-7170b74363cb",
+    "strategy_name": "趋势突破v2",
+    "created_at": "2026-07-30T17:22:46.430145Z",
+    "original_language": "基准点：t0 需满足“单日涨幅在 5.0%–6.5%、t0-15 至t0低点不在t0、相对该低点涨幅不超过20%、RSI(14)不高于90、收盘>MA5、MA5>MA10、收盘>MA20、量MA5>量MA20、阳线（收盘>开盘）、MA20(t0)较t0-2至少高0.01%”。\n\n入场点：在 t1，需满足“t1收盘不低于t0”后按收盘价入场。\n\n早期出场：在 t2、t3，盘中任意即时价格触及 7.0% 止损幅度即出场。\n\n后期技术出场：从 t4 开始，收盘跌破入场价或跌破MA5时出场。\n",
+    "strategy": {
+      "schema_version": "0.2",
+      "strategy_name": "NVDA Momentum Pullback Entry",
+      "symbol": "NVDA",
+      "frequency": "1d",
+      "direction": "long_only",
+      "position_mode": "fully_invested_or_flat",
+      "data_requirement": "intraday_ohlcv",
+      "anchor": {
+        "name": "t0",
+        "condition": {
+          "node_type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "node_type": "comparison",
+              "operator": "greater_than_or_equal",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.05
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than_or_equal",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.065
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than_or_equal",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rsi",
+                  "field": "close",
+                  "window": 14
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 90.0
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_mean",
+                  "field": "volume",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_mean",
+                  "field": "volume",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "market_field",
+                "field": "open"
+              }
+            }
+          ]
+        },
+        "constraints": [
+          {
+            "kind": "rolling_low_anchor_constraint",
+            "lookback_days": 15,
+            "reference_field": "low",
+            "low_must_precede_anchor": true,
+            "maximum_anchor_close_gain": 0.2
+          },
+          {
+            "kind": "anchor_indicator_change_constraint",
+            "indicator": {
+              "indicator": "sma",
+              "field": "close",
+              "window": 20
+            },
+            "comparison_offset_days": -2,
+            "minimum_relative_change": 0.0001,
+            "operator": "greater_than_or_equal"
+          }
+        ]
+      },
+      "entry": {
+        "active_day": {
+          "anchor": "t0",
+          "start_offset_days": 1,
+          "end_offset_days": 1
+        },
+        "condition": {
+          "node_type": "comparison",
+          "operator": "greater_than_or_equal",
+          "left": {
+            "kind": "market_field",
+            "field": "close"
+          },
+          "right": {
+            "kind": "anchor_market_field",
+            "anchor": "t0",
+            "field": "close"
+          }
+        },
+        "execution": "close"
+      },
+      "exit_rules": [
+        {
+          "rule_id": "early_stop_loss_t2_t3",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 2,
+            "end_offset_days": 3
+          },
+          "kind": "intraday_price_trigger",
+          "condition": null,
+          "price_trigger": {
+            "base": "entry_price",
+            "multiplier": 0.93,
+            "operator": "less_than_or_equal"
+          },
+          "execution": "intraday"
+        },
+        {
+          "rule_id": "late_exit_close_below_entry_t4_plus",
+          "priority": 2,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 4,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "entry_price"
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "late_exit_close_below_ma5_t4_plus",
+          "priority": 3,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 4,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 5
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        }
+      ],
+      "lifecycle_policy": null
+    },
+    "assumptions": [
+      {
+        "code": "RSI_WINDOW_DEFAULT",
+        "message": "RSI window not specified in policy (default_rsi_window=None); used window=14 as explicitly stated in the strategy description."
+      },
+      {
+        "code": "SINGLE_DAY_RETURN_PROXY",
+        "message": "单日涨幅 5.0%–6.5% 使用 rolling_return(close, window=1) 近似，即 (close_t0 / close_t0-1) - 1 在 [0.05, 0.065] 范围内。"
+      },
+      {
+        "code": "MA_INTERPRETED_AS_SMA",
+        "message": "MA5、MA10、MA20 均解释为简单移动平均线（SMA），字段为 close。"
+      },
+      {
+        "code": "VOLUME_MA_INTERPRETED",
+        "message": "量MA5 和 量MA20 解释为成交量（volume）的 rolling_mean，窗口分别为 5 和 20。"
+      },
+      {
+        "code": "ROLLING_LOW_LOOKBACK",
+        "message": "t0-15 至 t0 的低点不在 t0，使用 rolling_low_anchor_constraint，lookback_days=15，low_must_precede_anchor=true，maximum_anchor_close_gain=0.20（相对该低点涨幅不超过20%）。"
+      },
+      {
+        "code": "MA20_CHANGE_CONSTRAINT",
+        "message": "MA20(t0) 较 t0-2 至少高 0.01%，使用 anchor_indicator_change_constraint，comparison_offset_days=-2，minimum_relative_change=0.0001。"
+      },
+      {
+        "code": "STOP_LOSS_MULTIPLIER",
+        "message": "7.0% 止损幅度解释为入场价 × 0.93（即跌幅达到7%时触发），使用 intraday_price_trigger，multiplier=0.93，operator=less_than_or_equal。"
+      },
+      {
+        "code": "LATE_EXIT_OR_LOGIC",
+        "message": "t4 起，收盘跌破入场价 OR 跌破MA5 均触发出场，分别建模为两条独立的 close_condition 出场规则（priority 2 和 3）。"
+      },
+      {
+        "code": "ENTRY_EXECUTION",
+        "message": "t1 满足条件后按收盘价入场，execution 设为 close。"
+      }
+    ],
+    "warnings": [
+      {
+        "code": "INTRADAY_DATA_REQUIRED",
+        "message": "t2、t3 的盘中止损触发需要 intraday_ohlcv 数据；日线 OHLC 无法确定盘中精确触及路径，data_requirement 已设为 intraday_ohlcv。"
+      },
+      {
+        "code": "NO_EARLY_STOP_T1",
+        "message": "t1（入场日）未设置止损规则，若用户希望在 t1 也启用盘中止损，请补充说明。"
+      },
+      {
+        "code": "OPEN_ENDED_EXIT",
+        "message": "t4 起的出场规则无结束日期（end_offset_days=null），持仓将无限期持续直至条件触发，未设置强制平仓日。"
+      }
+    ],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "7ea82d95-2bbe-4de8-ac91-94adee4eac51",
+    "strategy_name": "NVDA Momentum Pullback Entry",
+    "created_at": "2026-07-31T14:42:15.768760Z",
+    "original_language": "基准点：t0 需满足“单日涨幅在 5.0%–6.5%、t0-15 至t0低点不在t0、相对该低点涨幅不超过20%、RSI(14)不高于90、收盘>MA5、MA5>MA10、收盘>MA20、量MA5>量MA20、阳线（收盘>开盘）、MA20(t0)较t0-2至少高0.01%”。\n\n入场点：在 t1，需满足“t1收盘不低于t0”后按收盘价入场。\n\n早期出场：在 t2、t3，盘中任意即时价格触及 7.0% 止损幅度即出场。\n\n后期技术出场：从 t4 开始，收盘跌破入场价或跌破MA5时出场。",
+    "strategy": null,
+    "assumptions": [],
+    "warnings": [],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "b9b8d627-70f9-469e-a42f-fd193c67a9f2",
+    "strategy_name": "alpha",
+    "created_at": "2026-07-31T14:58:30.591481Z",
+    "original_language": "基准点：t0 需满足“单日涨幅在 5.0%–6.5%、t0-15 至t0低点不在t0、相对该低点涨幅不超过20%、RSI(14)不高于90、收盘>MA5、MA5>MA10、收盘>MA20、量MA5>量MA20、阳线（收盘>开盘）、MA20(t0)较t0-2至少高0.01%”。\n\n入场点：在 t1，需满足“t1收盘不低于t0”后按收盘价入场。\n\n早期出场：在 t2、t3，盘中任意即时价格触及 7.0% 止损幅度即出场。\n\n后期技术出场：从 t4 开始，收盘跌破入场价或跌破MA5时出场。",
+    "strategy": {
+      "schema_version": "0.2",
+      "strategy_name": "NVDA Anchored Momentum Strategy",
+      "symbol": "NVDA",
+      "frequency": "1d",
+      "direction": "long_only",
+      "position_mode": "fully_invested_or_flat",
+      "data_requirement": "intraday_ohlcv",
+      "anchor": {
+        "name": "t0",
+        "condition": {
+          "node_type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "node_type": "comparison",
+              "operator": "greater_than_or_equal",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.05
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than_or_equal",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.065
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than_or_equal",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rsi",
+                  "field": "close",
+                  "window": 14
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 90.0
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_mean",
+                  "field": "volume",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_mean",
+                  "field": "volume",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "market_field",
+                "field": "open"
+              }
+            }
+          ]
+        },
+        "constraints": [
+          {
+            "kind": "rolling_low_anchor_constraint",
+            "lookback_days": 15,
+            "reference_field": "low",
+            "low_must_precede_anchor": true,
+            "maximum_anchor_close_gain": 0.2
+          },
+          {
+            "kind": "anchor_indicator_change_constraint",
+            "indicator": {
+              "indicator": "sma",
+              "field": "close",
+              "window": 20
+            },
+            "comparison_offset_days": -2,
+            "minimum_relative_change": 0.0001,
+            "operator": "greater_than_or_equal"
+          }
+        ]
+      },
+      "entry": {
+        "active_day": {
+          "anchor": "t0",
+          "start_offset_days": 1,
+          "end_offset_days": 1
+        },
+        "condition": {
+          "node_type": "comparison",
+          "operator": "greater_than_or_equal",
+          "left": {
+            "kind": "market_field",
+            "field": "close"
+          },
+          "right": {
+            "kind": "anchor_market_field",
+            "anchor": "t0",
+            "field": "close"
+          }
+        },
+        "execution": "close"
+      },
+      "exit_rules": [
+        {
+          "rule_id": "early_stop_loss",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 2,
+            "end_offset_days": 3
+          },
+          "kind": "intraday_price_trigger",
+          "condition": null,
+          "price_trigger": {
+            "base": "entry_price",
+            "multiplier": 0.93,
+            "operator": "less_than_or_equal"
+          },
+          "execution": "intraday"
+        },
+        {
+          "rule_id": "late_exit_below_entry",
+          "priority": 2,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 4,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "entry_price"
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "late_exit_below_ma5",
+          "priority": 3,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 4,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 5
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        }
+      ],
+      "lifecycle_policy": null
+    },
+    "assumptions": [
+      {
+        "code": "ROLLING_RETURN_1D_AS_DAILY_GAIN",
+        "message": "C01: 单日涨幅 interpreted as rolling_return(close, window=1), i.e. (close_t0 / close_t0-1) - 1, range [0.05, 0.065]."
+      },
+      {
+        "code": "RSI_FIELD_CLOSE",
+        "message": "C04: RSI(14) computed on close field as no field was specified."
+      },
+      {
+        "code": "LOW_REFERENCE_FIELD_FROM_ANSWER",
+        "message": "C02/C03: User confirmed reference_field=low for rolling_low_anchor_constraint; low_must_precede_anchor=true so t0 itself is excluded as the low point."
+      },
+      {
+        "code": "ANCHOR_CLOSE_GAIN_FROM_ANSWER",
+        "message": "C03: maximum_anchor_close_gain=0.20 applied to t0 close vs rolling low (Low field) over 15-day lookback."
+      },
+      {
+        "code": "MA20_CHANGE_BASIS_FROM_ANSWER",
+        "message": "C10: User confirmed relative change basis MA20(t0)/MA20(t0-2)-1 >= 0.0001, mapped to anchor_indicator_change_constraint with comparison_offset_days=-2, minimum_relative_change=0.0001."
+      },
+      {
+        "code": "ENTRY_PRICE_REFERENCE_FROM_ANSWER",
+        "message": "C11: User confirmed t0 close as the reference; entry condition checks t1 close >= t0 close (anchor_market_field)."
+      },
+      {
+        "code": "STOP_LOSS_7PCT_BELOW_ENTRY",
+        "message": "C13: 7.0% stop-loss interpreted as intraday price <= entry_price * 0.93."
+      },
+      {
+        "code": "LATE_EXIT_OR_LOGIC",
+        "message": "C14: Two separate exit rules (priority 2 and 3) both active from t4; either close < entry_price OR close < MA5 triggers exit."
+      }
+    ],
+    "warnings": [
+      {
+        "code": "INTRADAY_DATA_REQUIRED",
+        "message": "C13: Early stop-loss on t2–t3 requires intraday_ohlcv; exact intraday trigger path cannot be determined from daily OHLC alone."
+      },
+      {
+        "code": "ROLLING_RETURN_WINDOW1_APPROXIMATION",
+        "message": "C01: rolling_return window=1 measures close-to-close return; if open-to-close is intended, please clarify."
+      }
+    ],
+    "source_clauses": [
+      {
+        "clause_id": "C01",
+        "text": "基准点：t0 需满足：单日涨幅在 5.0%–6.5%"
+      },
+      {
+        "clause_id": "C02",
+        "text": "基准点：t0 需满足：t0-15 至t0低点不在t0"
+      },
+      {
+        "clause_id": "C03",
+        "text": "基准点：t0 需满足：相对该低点涨幅不超过20%"
+      },
+      {
+        "clause_id": "C04",
+        "text": "基准点：t0 需满足：RSI(14)不高于90"
+      },
+      {
+        "clause_id": "C05",
+        "text": "基准点：t0 需满足：收盘>MA5"
+      },
+      {
+        "clause_id": "C06",
+        "text": "基准点：t0 需满足：MA5>MA10"
+      },
+      {
+        "clause_id": "C07",
+        "text": "基准点：t0 需满足：收盘>MA20"
+      },
+      {
+        "clause_id": "C08",
+        "text": "基准点：t0 需满足：量MA5>量MA20"
+      },
+      {
+        "clause_id": "C09",
+        "text": "基准点：t0 需满足：阳线（收盘>开盘）"
+      },
+      {
+        "clause_id": "C10",
+        "text": "基准点：t0 需满足：MA20(t0)较t0-2至少高0.01%"
+      },
+      {
+        "clause_id": "C11",
+        "text": "入场点：在 t1，需满足：t1收盘不低于t0"
+      },
+      {
+        "clause_id": "C12",
+        "text": "后按收盘价入场"
+      },
+      {
+        "clause_id": "C13",
+        "text": "早期出场：在 t2、t3，盘中任意即时价格触及 7.0% 止损幅度即出场"
+      },
+      {
+        "clause_id": "C14",
+        "text": "后期技术出场：从 t4 开始，收盘跌破入场价或跌破MA5时出场"
+      }
+    ],
+    "coverage": [
+      {
+        "clause_id": "C01",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0]",
+          "anchor.condition.conditions[1]"
+        ],
+        "explanation": "Single-day return [5%,6.5%] mapped to two rolling_return(close,1) comparison conditions on the anchor."
+      },
+      {
+        "clause_id": "C02",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0]"
+        ],
+        "explanation": "15-day rolling low must precede t0 (low_must_precede_anchor=true, reference_field=low) via rolling_low_anchor_constraint."
+      },
+      {
+        "clause_id": "C03",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0].maximum_anchor_close_gain"
+        ],
+        "explanation": "Max gain from rolling low to t0 close capped at 20% in the same rolling_low_anchor_constraint."
+      },
+      {
+        "clause_id": "C04",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2]"
+        ],
+        "explanation": "RSI(14,close) <= 90 mapped as a comparison condition on the anchor."
+      },
+      {
+        "clause_id": "C05",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[3]"
+        ],
+        "explanation": "Close > SMA(close,5) mapped as a comparison condition on the anchor."
+      },
+      {
+        "clause_id": "C06",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[4]"
+        ],
+        "explanation": "SMA(close,5) > SMA(close,10) mapped as a comparison condition on the anchor."
+      },
+      {
+        "clause_id": "C07",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[5]"
+        ],
+        "explanation": "Close > SMA(close,20) mapped as a comparison condition on the anchor."
+      },
+      {
+        "clause_id": "C08",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[6]"
+        ],
+        "explanation": "RollingMeanVolume(5) > RollingMeanVolume(20) mapped as a comparison condition on the anchor."
+      },
+      {
+        "clause_id": "C09",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[7]"
+        ],
+        "explanation": "Bullish candle (close > open) mapped as a comparison condition on the anchor."
+      },
+      {
+        "clause_id": "C10",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[1]"
+        ],
+        "explanation": "MA20(t0)/MA20(t0-2)-1 >= 0.0001 mapped to anchor_indicator_change_constraint with comparison_offset_days=-2."
+      },
+      {
+        "clause_id": "C11",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "entry.condition",
+          "entry.active_day"
+        ],
+        "explanation": "t1 close >= t0 close mapped as TemporalComparisonCondition with active_day offset [1,1]."
+      },
+      {
+        "clause_id": "C12",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "entry.execution"
+        ],
+        "explanation": "Entry at close price mapped to execution=close on the entry rule."
+      },
+      {
+        "clause_id": "C13",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[0]"
+        ],
+        "explanation": "Intraday 7% stop-loss on t2–t3 mapped to intraday_price_trigger with multiplier=0.93, execution=intraday."
+      },
+      {
+        "clause_id": "C14",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]",
+          "exit_rules[2]"
+        ],
+        "explanation": "From t4 onward, close < entry_price OR close < MA5 mapped as two close_condition exit rules (priority 2 and 3)."
+      }
+    ]
+  },
+  {
+    "strategy_id": "f710063d-1b2c-477a-92a5-d366a4bb935e",
+    "strategy_name": "波段",
+    "created_at": "2026-07-31T15:56:36.581195Z",
+    "original_language": "当收盘价向上穿越 20 日均线时买入；当它向下穿越该均线时卖出。",
+    "strategy": null,
+    "assumptions": [],
+    "warnings": [],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "722d2a8a-9474-4b93-b848-be7091751a24",
+    "strategy_name": "波段1",
+    "created_at": "2026-07-31T15:58:49.145461Z",
+    "original_language": "1. 适用范围与数据口径\n本策略以单只股票、单笔交易为基本单位。除十字星和大阴线的开盘价定义外，价格计算一律使用日线收盘价。\n定义：\nClose[t]：第 t 个交易日收盘价\nOpen[t]：第 t 个交易日开盘价\nVolume[t]：第 t 个交易日成交量\nMA5[t]、MA10[t]、MA20[t]：分别为截至第 t 日收盘的 5、10、20 日收盘价均线\nC：买入信号确认日，同时也是按收盘价买入的交易日\nC 点后第 1 至第 10 个交易日为短期保护期；第 11 个交易日起为持仓管理期\n回测中所有买入和卖出均按规定当日收盘价成交，不考虑滑点、手续费和税费\n2. C 点的定义与买入条件\n某一交易日 t 被定义为 C 点，当且仅当以下所有条件同时满足。\n2.1 均线趋势条件\nClose[t] > MA5[t]\nMA5[t] > MA10[t]\nMA10[t] > MA20[t]\nMA20[t] > MA20[t-1]\n即：股价位于五日均线上方，5、10、20 日均线呈多头排列，且 20 日均线当日继续上行。\n2.2 前期回撤条件\n以 C 点当日为终点，向前取 50 个交易日的窗口，包含 C 点当日。\n在该窗口内：\n找到最高收盘价对应的高点 A；\n在 A 之后找到最低收盘价对应的低点 B；\nA 必须早于 B 出现；\nA 至 B 的回撤满足：\n(Close[A] - Close[B]) / Close[A] >= 25%\n2.3 买入位置条件\nC 点相对 B 点的反弹幅度不得超过 15%：\n(Close[C] - Close[B]) / Close[B] <= 15%\n当第 2.1、2.2、2.3 节全部成立时，于 C 点当日收盘价买入。\n3. 买入后前十个交易日的风险控制\n设 C 点为第 0 日。\n在买入后的第 1 至第 10 个交易日内，若任一日满足：\nClose[t] < MA20[t]\n则于该交易日收盘价立即卖出。\n4. 第十一个交易日起的持仓管理\n从买入后的第 11 个交易日起，不再因 20 日均线走平或下行而卖出。持仓持续到出现下列任一卖出信号。\n4.1 跌破十日均线卖出\n若：\nClose[t] < MA10[t]\n则于该交易日收盘价卖出。\n4.2 高位放量反转形态卖出\n若以下三项同时满足，则于该交易日收盘价卖出：\n相对 C 点的累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n\n当日成交量为 C 点以来的最大成交量：\nVolume[t] = max(Volume[C], ..., Volume[t])\n\n当日 K 线满足“十字星”或“大阴线”之一。\n\n十字星定义为不区分阴线或阳线，且不考虑上下影线：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n大阴线定义为：\nClose[t] < Open[t]\n且：\n(Open[t] - Close[t]) / Open[t] > 2%\n5. 交易状态与结束\n买入后，前十个交易日仅执行“跌破 20 日均线卖出”规则。\n第十一个交易日起，执行“跌破 10 日均线卖出”和“高位放量反转卖出”规则。\n任一卖出规则触发后，该笔交易结束。\n策略未设置止盈目标、最长持仓期限或主动再买入规则；如用于完整回测，还应另行定义样本结束时未平仓头寸的处理方式，以及卖出后是否允许重新寻找下一次 C 点。",
+    "strategy": {
+      "schema_version": "0.3",
+      "strategy_name": "NVDA C-Point Trend-Pullback Strategy",
+      "symbol": "NVDA",
+      "frequency": "1d",
+      "direction": "long_only",
+      "position_mode": "fully_invested_or_flat",
+      "data_requirement": "daily_ohlcv",
+      "anchor": {
+        "name": "t0",
+        "condition": {
+          "node_type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              },
+              "right": {
+                "kind": "lagged_indicator",
+                "offset_days": -1,
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            }
+          ]
+        },
+        "constraints": [
+          {
+            "kind": "ordered_extrema_drawdown_constraint",
+            "lookback_days": 50,
+            "field": "close",
+            "peak_tie_break": "earliest",
+            "trough_tie_break": "earliest",
+            "minimum_peak_to_trough_drawdown": 0.25,
+            "maximum_anchor_recovery_from_trough": 0.15
+          }
+        ]
+      },
+      "entry": {
+        "active_day": {
+          "anchor": "t0",
+          "start_offset_days": 0,
+          "end_offset_days": 0
+        },
+        "condition": {
+          "node_type": "comparison",
+          "operator": "greater_than",
+          "left": {
+            "kind": "scalar",
+            "value": 1.0
+          },
+          "right": {
+            "kind": "scalar",
+            "value": 0.0
+          }
+        },
+        "execution": "close"
+      },
+      "exit_rules": [
+        {
+          "rule_id": "early_protection_ma20",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 1,
+            "end_offset_days": 10
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 20
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "holding_ma10",
+          "priority": 2,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 10
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "high_volume_reversal",
+          "priority": 3,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "group",
+            "operator": "and",
+            "conditions": [
+              {
+                "node_type": "comparison",
+                "operator": "greater_than",
+                "left": {
+                  "kind": "market_field",
+                  "field": "close"
+                },
+                "right": {
+                  "kind": "scaled_entry_price",
+                  "multiplier": 1.1
+                }
+              },
+              {
+                "node_type": "comparison",
+                "operator": "equal",
+                "left": {
+                  "kind": "market_field",
+                  "field": "volume"
+                },
+                "right": {
+                  "kind": "anchor_running_maximum",
+                  "anchor": "t0",
+                  "field": "volume",
+                  "tie_break": "earliest"
+                }
+              },
+              {
+                "node_type": "group",
+                "operator": "or",
+                "conditions": [
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "doji",
+                    "body_to_open_threshold": 0.01
+                  },
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "large_bearish",
+                    "body_to_open_threshold": 0.02
+                  }
+                ]
+              }
+            ]
+          },
+          "price_trigger": null,
+          "execution": "close"
+        }
+      ],
+      "lifecycle_policy": {
+        "sample_end_open_position": "leave_open_excluded",
+        "allow_reentry_after_exit": false
+      }
+    },
+    "assumptions": [
+      {
+        "code": "ENTRY_CONDITION_TAUTOLOGY",
+        "message": "The entry rule condition is a tautology (1>0) because all anchor conditions and constraints fully encode the C-point definition; the entry fires unconditionally on t0."
+      },
+      {
+        "code": "ORDERED_EXTREMA_TIE_BREAK_EARLIEST",
+        "message": "Both peak (A) and trough (B) tie-breaks default to 'earliest' as the strategy does not specify a tie-break preference."
+      },
+      {
+        "code": "RECOVERY_CAP_15PCT",
+        "message": "C06 '(Close[C]-Close[B])/Close[B] <= 15%' is encoded as maximum_anchor_recovery_from_trough=0.15 in the ordered_extrema_drawdown_constraint."
+      },
+      {
+        "code": "DOJI_THRESHOLD_1PCT",
+        "message": "Doji body threshold set to 0.01 (1% of Open) per explicit strategy definition."
+      },
+      {
+        "code": "LARGE_BEARISH_THRESHOLD_2PCT",
+        "message": "Large-bearish body threshold set to 0.02 (2% of Open) per explicit strategy definition."
+      },
+      {
+        "code": "VOLUME_EQUAL_RUNNING_MAX",
+        "message": "Volume[t] = max(Volume[C],...,Volume[t]) encoded as anchor_running_maximum from t0 with tie_break=earliest."
+      }
+    ],
+    "warnings": [
+      {
+        "code": "NO_REENTRY",
+        "message": "Per user answer, only the first trade per symbol is executed; no re-entry after exit."
+      },
+      {
+        "code": "OPEN_POSITION_EXCLUDED",
+        "message": "Any position open at sample end is retained but excluded from closed-trade KPIs per user answer."
+      },
+      {
+        "code": "DAILY_OHLCV_CANDLESTICK",
+        "message": "Doji and large-bearish patterns use daily Open and Close only (no intraday path required); data_requirement remains daily_ohlcv."
+      }
+    ],
+    "source_clauses": [
+      {
+        "clause_id": "C01",
+        "text": "1. 适用范围与数据口径\n本策略以单只股票、单笔交易为基本单位。除十字星和大阴线的开盘价定义外，价格计算一律使用日线收盘价。"
+      },
+      {
+        "clause_id": "C02",
+        "text": "定义：\nClose[t]：第 t 个交易日收盘价\nOpen[t]：第 t 个交易日开盘价\nVolume[t]：第 t 个交易日成交量\nMA5[t]、MA10[t]、MA20[t]：分别为截至第 t 日收盘的 5、10、20 日收盘价均线\nC：买入信号确认日，同时也是按收盘价买入的交易日\nC 点后第 1 至第 10 个交易日为短期保护期；第 11 个交易日起为持仓管理期\n回测中所有买入和卖出均按规定当日收盘价成交，不考虑滑点、手续费和税费"
+      },
+      {
+        "clause_id": "C03",
+        "text": "2. C 点的定义与买入条件\n某一交易日 t 被定义为 C 点，当且仅当以下所有条件同时满足。"
+      },
+      {
+        "clause_id": "C04",
+        "text": "2.1 均线趋势条件\nClose[t] > MA5[t]\nMA5[t] > MA10[t]\nMA10[t] > MA20[t]\nMA20[t] > MA20[t-1]\n即：股价位于五日均线上方，5、10、20 日均线呈多头排列，且 20 日均线当日继续上行。"
+      },
+      {
+        "clause_id": "C05",
+        "text": "2.2 前期回撤条件\n以 C 点当日为终点，向前取 50 个交易日的窗口，包含 C 点当日。\n在该窗口内：\n找到最高收盘价对应的高点 A；\n在 A 之后找到最低收盘价对应的低点 B；\nA 必须早于 B 出现；\nA 至 B 的回撤满足：\n(Close[A] - Close[B]) / Close[A] >= 25%"
+      },
+      {
+        "clause_id": "C06",
+        "text": "2.3 买入位置条件\nC 点相对 B 点的反弹幅度不得超过 15%：\n(Close[C] - Close[B]) / Close[B] <= 15%\n当第 2.1、2.2、2.3 节全部成立时，于 C 点当日收盘价买入。"
+      },
+      {
+        "clause_id": "C07",
+        "text": "3. 买入后前十个交易日的风险控制\n设 C 点为第 0 日。\n在买入后的第 1 至第 10 个交易日内，若任一日满足：\nClose[t] < MA20[t]\n则于该交易日收盘价立即卖出。"
+      },
+      {
+        "clause_id": "C08",
+        "text": "4. 第十一个交易日起的持仓管理\n从买入后的第 11 个交易日起，不再因 20 日均线走平或下行而卖出。持仓持续到出现下列任一卖出信号。"
+      },
+      {
+        "clause_id": "C09",
+        "text": "4.1 跌破十日均线卖出\n若：\nClose[t] < MA10[t]\n则于该交易日收盘价卖出。"
+      },
+      {
+        "clause_id": "C10",
+        "text": "4.2 高位放量反转形态卖出\n若以下三项同时满足，则于该交易日收盘价卖出：\n相对 C 点的累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n当日成交量为 C 点以来的最大成交量：\nVolume[t] = max(Volume[C], ..., Volume[t])\n当日 K 线满足“十字星”或“大阴线”之一。\n十字星定义为不区分阴线或阳线，且不考虑上下影线：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n大阴线定义为：\nClose[t] < Open[t]\n且：\n(Open[t] - Close[t]) / Open[t] > 2%"
+      },
+      {
+        "clause_id": "C11",
+        "text": "5. 交易状态与结束\n买入后，前十个交易日仅执行“跌破 20 日均线卖出”规则。\n第十一个交易日起，执行“跌破 10 日均线卖出”和“高位放量反转卖出”规则。\n任一卖出规则触发后，该笔交易结束。\n策略未设置止盈目标、最长持仓期限或主动再买入规则；如用于完整回测，还应另行定义样本结束时未平仓头寸的处理方式，以及卖出后是否允许重新寻找下一次 C 点。"
+      }
+    ],
+    "coverage": [
+      {
+        "clause_id": "C01",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "frequency",
+          "data_requirement"
+        ],
+        "explanation": "Single-stock, single-trade scope; daily close prices used throughout; daily_ohlcv data requirement set."
+      },
+      {
+        "clause_id": "C02",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.name",
+          "entry.execution",
+          "exit_rules[0].execution",
+          "exit_rules[1].execution",
+          "exit_rules[2].execution"
+        ],
+        "explanation": "Defines Close/Open/Volume/MA symbols, C-point as t0 anchor, and all executions at close price."
+      },
+      {
+        "clause_id": "C03",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition"
+        ],
+        "explanation": "C-point definition encoded as the anchor condition group (all sub-conditions must hold simultaneously)."
+      },
+      {
+        "clause_id": "C04",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0]",
+          "anchor.condition.conditions[1]",
+          "anchor.condition.conditions[2]",
+          "anchor.condition.conditions[3]"
+        ],
+        "explanation": "Four MA trend conditions (Close>MA5, MA5>MA10, MA10>MA20, MA20>MA20[t-1]) mapped to anchor condition group."
+      },
+      {
+        "clause_id": "C05",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0]"
+        ],
+        "explanation": "50-day lookback ordered_extrema_drawdown_constraint with peak A before trough B and minimum drawdown 25%."
+      },
+      {
+        "clause_id": "C06",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0].maximum_anchor_recovery_from_trough"
+        ],
+        "explanation": "C-point recovery from B capped at 15% encoded as maximum_anchor_recovery_from_trough=0.15."
+      },
+      {
+        "clause_id": "C07",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[0]"
+        ],
+        "explanation": "Days t0+1 to t0+10: exit at close if Close < MA20, encoded as early_protection_ma20 exit rule."
+      },
+      {
+        "clause_id": "C08",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1].active_days",
+          "exit_rules[2].active_days"
+        ],
+        "explanation": "From t0+11 onward, MA20 rule no longer applies; holding_ma10 and high_volume_reversal rules activate."
+      },
+      {
+        "clause_id": "C09",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]"
+        ],
+        "explanation": "From t0+11: exit at close if Close < MA10, encoded as holding_ma10 exit rule."
+      },
+      {
+        "clause_id": "C10",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[2]"
+        ],
+        "explanation": "From t0+11: exit if gain>10% AND volume=running-max AND (doji OR large_bearish), encoded as high_volume_reversal exit rule."
+      },
+      {
+        "clause_id": "C11",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "lifecycle_policy.sample_end_open_position",
+          "lifecycle_policy.allow_reentry_after_exit"
+        ],
+        "explanation": "Lifecycle policy set per user answers: open position excluded from KPIs, no re-entry after exit."
+      }
+    ]
+  },
+  {
+    "strategy_id": "d8bbde59-6974-41f5-aacb-5bc9acc6a27d",
+    "strategy_name": "NVDA C-Point Trend-Pullback Strategy",
+    "created_at": "2026-07-31T17:48:41.081162Z",
+    "original_language": "1. 数据与成交约定\n使用日线数据。\n除 K 线形态需要开盘价外，价格计算一律使用收盘价。\nClose[t]：第 t 日收盘价；Open[t]：开盘价；Volume[t]：成交量。\nMA5[t]、MA10[t]、MA20[t]：截至第 t 日收盘计算的 5、10、20 日均线。\nC 点为买入信号确认日，并以 C 点当日收盘价买入。\n所有卖出按触发日收盘价成交，不考虑滑点、手续费和税费。\n每只股票只执行一笔交易；卖出后不再寻找下一次 C 点。\n2. C 点入场条件\n某日 t 作为 C 点，必须同时满足以下条件：\n2.1 均线与趋势条件\nClose[t] > MA5[t]\n\nMA5[t] > MA10[t]\n\n十日均线在当日上穿二十日均线：\nMA10[t] > MA20[t]\n且\nMA10[t-1] <= MA20[t-1]\n\n二十日均线当日继续上升：\nMA20[t] > MA20[t-1]\n\n2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点在内的最近 50 个交易日。\n在该窗口内，以最高收盘价作为 A 点；\n\n在 A 点之后，以最低收盘价作为 B 点；\n\nA 点必须位于 B 点左侧，即 A 先于 B 出现；\n\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%\n\n2.3 C 点位置与当日涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\n\nC 点当日相对前一交易日必须小幅上涨，涨幅大于 0 且不超过 3%：\n0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n\n当以上条件全部成立时，于 C 点当日收盘价买入。\n3. 买入后前十个交易日\nC 点为第 0 日。买入后的第 1 至第 10 个交易日内：\n若：\nClose[t] < MA20[t]\n则于该交易日收盘价卖出。\n4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。\n4.1 跌破十日均线\nClose[t] < MA10[t]\n4.2 高位放量反转\n以下三项同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n\n当日成交量为 C 点以来的最大成交量：\nVolume[t] = max(Volume[C], ..., Volume[t])\n\n当日 K 线为十字星或大阴线。\n\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线、阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且\n(Open[t] - Close[t]) / Open[t] > 2%",
+    "strategy": null,
+    "assumptions": [],
+    "warnings": [],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "1e00d677-cabf-49f8-9466-fd163968fb78",
+    "strategy_name": "NVDA C-Point Trend-Pullback Strategy",
+    "created_at": "2026-07-31T17:49:46.424719Z",
+    "original_language": "1. 数据与成交约定\n使用日线数据。\n除 K 线形态需要开盘价外，价格计算一律使用收盘价。\nClose[t]：第 t 日收盘价；Open[t]：开盘价；Volume[t]：成交量。\nMA5[t]、MA10[t]、MA20[t]：截至第 t 日收盘计算的 5、10、20 日均线。\nC 点为买入信号确认日，并以 C 点当日收盘价买入。\n所有卖出按触发日收盘价成交，不考虑滑点、手续费和税费。\n每只股票只执行一笔交易；卖出后不再寻找下一次 C 点。\n2. C 点入场条件\n某日 t 作为 C 点，必须同时满足以下条件：\n2.1 均线与趋势条件\nClose[t] > MA5[t]\n\nMA5[t] > MA10[t]\n\n十日均线在当日上穿二十日均线：\nMA10[t] > MA20[t]\n且\nMA10[t-1] <= MA20[t-1]\n\n二十日均线当日继续上升：\nMA20[t] > MA20[t-1]\n\n2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点在内的最近 50 个交易日。\n在该窗口内，以最高收盘价作为 A 点；\n\n在 A 点之后，以最低收盘价作为 B 点；\n\nA 点必须位于 B 点左侧，即 A 先于 B 出现；\n\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%\n\n2.3 C 点位置与当日涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\n\nC 点当日相对前一交易日必须小幅上涨，涨幅大于 0 且不超过 3%：\n0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n\n当以上条件全部成立时，于 C 点当日收盘价买入。\n3. 买入后前十个交易日\nC 点为第 0 日。买入后的第 1 至第 10 个交易日内：\n若：\nClose[t] < MA20[t]\n则于该交易日收盘价卖出。\n4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。\n4.1 跌破十日均线\nClose[t] < MA10[t]\n4.2 高位放量反转\n以下三项同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n\n当日成交量为 C 点以来的最大成交量：\nVolume[t] = max(Volume[C], ..., Volume[t])\n\n当日 K 线为十字星或大阴线。\n\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线、阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且\n(Open[t] - Close[t]) / Open[t] > 2%",
+    "strategy": {
+      "schema_version": "0.3",
+      "strategy_name": "NVDA MA Cross Pullback Recovery",
+      "symbol": "NVDA",
+      "frequency": "1d",
+      "direction": "long_only",
+      "position_mode": "fully_invested_or_flat",
+      "data_requirement": "daily_ohlcv",
+      "anchor": {
+        "name": "t0",
+        "condition": {
+          "node_type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              }
+            },
+            {
+              "node_type": "cross",
+              "operator": "cross_above",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              },
+              "right": {
+                "kind": "lagged_indicator",
+                "offset_days": -1,
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "lagged_indicator",
+                "offset_days": -1,
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            }
+          ]
+        },
+        "constraints": [
+          {
+            "kind": "ordered_extrema_drawdown_constraint",
+            "lookback_days": 50,
+            "field": "close",
+            "peak_tie_break": "earliest",
+            "trough_tie_break": "earliest",
+            "minimum_peak_to_trough_drawdown": 0.25,
+            "maximum_anchor_recovery_from_trough": 0.15
+          }
+        ]
+      },
+      "entry": {
+        "active_day": {
+          "anchor": "t0",
+          "start_offset_days": 0,
+          "end_offset_days": 0
+        },
+        "condition": {
+          "node_type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "anchor_indicator",
+                "anchor": "t0",
+                "offset_days": 0,
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.0
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than_or_equal",
+              "left": {
+                "kind": "anchor_indicator",
+                "anchor": "t0",
+                "offset_days": 0,
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.03
+              }
+            }
+          ]
+        },
+        "execution": "close"
+      },
+      "exit_rules": [
+        {
+          "rule_id": "exit_early_below_ma20",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 1,
+            "end_offset_days": 10
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 20
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "exit_late_below_ma10",
+          "priority": 2,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 10
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "exit_late_volume_reversal",
+          "priority": 3,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "group",
+            "operator": "and",
+            "conditions": [
+              {
+                "node_type": "comparison",
+                "operator": "greater_than",
+                "left": {
+                  "kind": "anchor_indicator",
+                  "anchor": "t0",
+                  "offset_days": 0,
+                  "indicator": {
+                    "indicator": "rolling_return",
+                    "field": "close",
+                    "window": 1
+                  }
+                },
+                "right": {
+                  "kind": "scalar",
+                  "value": 0.1
+                }
+              },
+              {
+                "node_type": "comparison",
+                "operator": "equal",
+                "left": {
+                  "kind": "market_field",
+                  "field": "volume"
+                },
+                "right": {
+                  "kind": "anchor_running_maximum",
+                  "anchor": "t0",
+                  "field": "volume",
+                  "tie_break": "earliest"
+                }
+              },
+              {
+                "node_type": "group",
+                "operator": "or",
+                "conditions": [
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "doji",
+                    "body_to_open_threshold": 0.01
+                  },
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "large_bearish",
+                    "body_to_open_threshold": 0.02
+                  }
+                ]
+              }
+            ]
+          },
+          "price_trigger": null,
+          "execution": "close"
+        }
+      ],
+      "lifecycle_policy": {
+        "sample_end_open_position": "force_close",
+        "allow_reentry_after_exit": false
+      }
+    },
+    "assumptions": [
+      {
+        "code": "CROSS_ABOVE_ENCODES_MA10_MA20",
+        "message": "MA10[t] > MA20[t] AND MA10[t-1] <= MA20[t-1] is encoded as a cross_above event on the anchor condition."
+      },
+      {
+        "code": "MA20_RISING_ENCODED_AS_LAGGED_COMPARISON",
+        "message": "MA20[t] > MA20[t-1] is encoded as a comparison of the current SMA20 against a lagged_indicator at offset -1."
+      },
+      {
+        "code": "CLOSE_GT_PREV_CLOSE_ENCODED_AS_ROLLING_RETURN",
+        "message": "The daily return 0 < (Close[t]-Close[t-1])/Close[t-1] <= 3% is encoded via rolling_return window=1 on the entry condition."
+      },
+      {
+        "code": "CUMULATIVE_GAIN_FROM_C_ENCODED_AS_ANCHOR_ROLLING_RETURN",
+        "message": "Cumulative gain from C point (Close[t]-Close[C])/Close[C] > 10% is approximated via anchor_indicator rolling_return offset=0 from t0; this measures the return from t0 close to the current bar's close."
+      },
+      {
+        "code": "SAMPLE_END_FORCE_CLOSE",
+        "message": "No explicit sample-end treatment was stated; force_close at last bar assumed per common convention."
+      },
+      {
+        "code": "NO_REENTRY",
+        "message": "C01 explicitly states one trade per symbol with no re-entry after exit; allow_reentry_after_exit set to false."
+      },
+      {
+        "code": "ANCHOR_RECOVERY_CONSTRAINT_MAPS_C05",
+        "message": "C point recovery from B <= 15% is encoded as maximum_anchor_recovery_from_trough=0.15 in the ordered_extrema_drawdown_constraint."
+      }
+    ],
+    "warnings": [
+      {
+        "code": "ROLLING_RETURN_WINDOW1_APPROXIMATION",
+        "message": "rolling_return with window=1 computes (Close[t]/Close[t-1])-1; this is the correct 1-day return but the DSL does not have a dedicated 'daily_return' operand."
+      },
+      {
+        "code": "CUMULATIVE_RETURN_FROM_ANCHOR_APPROXIMATION",
+        "message": "anchor_indicator rolling_return offset=0 gives the 1-day return on t0, not the cumulative return from t0 to the current exit bar; a dedicated 'cumulative_return_since_anchor' operand does not exist in the DSL. The exit_late_volume_reversal gain condition is a best-effort approximation."
+      },
+      {
+        "code": "ENTRY_CONDITION_REDUNDANT_MA20_RISING",
+        "message": "The anchor condition already encodes MA20[t] > MA20[t-1]; the entry active_day condition only checks the daily return, so the MA20 rising check is fully in the anchor."
+      }
+    ],
+    "source_clauses": [
+      {
+        "clause_id": "C01",
+        "text": "1. 数据与成交约定\n使用日线数据。\n除 K 线形态需要开盘价外，价格计算一律使用收盘价。\nClose[t]：第 t 日收盘价；Open[t]：开盘价；Volume[t]：成交量。\nMA5[t]、MA10[t]、MA20[t]：截至第 t 日收盘计算的 5、10、20 日均线。\nC 点为买入信号确认日，并以 C 点当日收盘价买入。\n所有卖出按触发日收盘价成交，不考虑滑点、手续费和税费。\n每只股票只执行一笔交易；卖出后不再寻找下一次 C 点。"
+      },
+      {
+        "clause_id": "C02",
+        "text": "2. C 点入场条件\n某日 t 作为 C 点，必须同时满足以下条件："
+      },
+      {
+        "clause_id": "C03",
+        "text": "2.1 均线与趋势条件\nClose[t] > MA5[t]\nMA5[t] > MA10[t]\n十日均线在当日上穿二十日均线：\nMA10[t] > MA20[t]\n且\nMA10[t-1] <= MA20[t-1]\n二十日均线当日继续上升：\nMA20[t] > MA20[t-1]"
+      },
+      {
+        "clause_id": "C04",
+        "text": "2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点在内的最近 50 个交易日。\n在该窗口内，以最高收盘价作为 A 点；\n在 A 点之后，以最低收盘价作为 B 点；\nA 点必须位于 B 点左侧，即 A 先于 B 出现；\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%"
+      },
+      {
+        "clause_id": "C05",
+        "text": "2.3 C 点位置与当日涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\nC 点当日相对前一交易日必须小幅上涨，涨幅大于 0 且不超过 3%："
+      },
+      {
+        "clause_id": "C06",
+        "text": "0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n当以上条件全部成立时，于 C 点当日收盘价买入。"
+      },
+      {
+        "clause_id": "C07",
+        "text": "3. 买入后前十个交易日\nC 点为第 0 日。买入后的第 1 至第 10 个交易日内：\n若：\nClose[t] < MA20[t]\n则于该交易日收盘价卖出。"
+      },
+      {
+        "clause_id": "C08",
+        "text": "4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。"
+      },
+      {
+        "clause_id": "C09",
+        "text": "4.1 跌破十日均线\nClose[t] < MA10[t]"
+      },
+      {
+        "clause_id": "C10",
+        "text": "4.2 高位放量反转\n以下三项同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n当日成交量为 C 点以来的最大成交量：\nVolume[t] = max(Volume[C], ..., Volume[t])\n当日 K 线为十字星或大阴线。\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线、阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且\n(Open[t] - Close[t]) / Open[t] > 2%"
+      }
+    ],
+    "coverage": [
+      {
+        "clause_id": "C01",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "frequency",
+          "entry.execution",
+          "lifecycle_policy.allow_reentry_after_exit"
+        ],
+        "explanation": "Daily data, close-price execution, and single-trade no-reentry policy are all encoded."
+      },
+      {
+        "clause_id": "C02",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition"
+        ],
+        "explanation": "C-point entry conditions are encoded in the anchor condition group."
+      },
+      {
+        "clause_id": "C03",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0]",
+          "anchor.condition.conditions[1]",
+          "anchor.condition.conditions[2]",
+          "anchor.condition.conditions[3]",
+          "anchor.condition.conditions[4]"
+        ],
+        "explanation": "Close>MA5, MA5>MA10, MA10 cross_above MA20, and MA20[t]>MA20[t-1] are all encoded as anchor conditions."
+      },
+      {
+        "clause_id": "C04",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0]"
+        ],
+        "explanation": "50-day lookback ordered close-high A then close-low B with >=25% drawdown encoded as ordered_extrema_drawdown_constraint."
+      },
+      {
+        "clause_id": "C05",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0].maximum_anchor_recovery_from_trough",
+          "entry.condition.conditions[0]",
+          "entry.condition.conditions[1]"
+        ],
+        "explanation": "C-point recovery from B <=15% encoded in constraint; daily gain 0–3% encoded in entry condition via rolling_return."
+      },
+      {
+        "clause_id": "C06",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "entry.condition",
+          "entry.execution"
+        ],
+        "explanation": "Daily return bounds and close-price buy execution are encoded in the entry rule."
+      },
+      {
+        "clause_id": "C07",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[0]"
+        ],
+        "explanation": "Days 1–10 close < MA20 triggers close-price sell, encoded as exit_early_below_ma20."
+      },
+      {
+        "clause_id": "C08",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]",
+          "exit_rules[2]"
+        ],
+        "explanation": "From day 11 onward, two exit rules replace the MA20 rule."
+      },
+      {
+        "clause_id": "C09",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]"
+        ],
+        "explanation": "Close < MA10 from day 11 encoded as exit_late_below_ma10."
+      },
+      {
+        "clause_id": "C10",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[2]"
+        ],
+        "explanation": "High-volume reversal (>10% gain, max volume since C, doji or large_bearish candle) encoded as exit_late_volume_reversal."
+      }
+    ]
+  },
+  {
+    "strategy_id": "f998a8ef-72f8-4e9e-8333-e70236c33f08",
+    "strategy_name": "新策略",
+    "created_at": "2026-07-31T19:29:33.251032Z",
+    "original_language": "1. 数据与交易约定\n使用日线数据。\n除 K 线形态判断外，价格计算一律使用收盘价。\nClose[t]、Open[t]、Volume[t] 分别表示第 t 个交易日的收盘价、开盘价和成交量。\nMA5[t]、MA10[t]、MA20[t] 分别为截至第 t 日收盘计算的 5、10、20 日均线。\n买入和卖出均按触发日收盘价成交；回测不计滑点、手续费和税费。\n并列极值统一取最晚出现的交易日。\n2. C 点入场条件\n某交易日 t 被定义为 C 点，必须同时满足以下条件。\n2.1 均线条件\nClose[t] > MA5[t]\n\nMA5[t] > MA10[t]\n\n十日均线在 C 点当日上穿二十日均线：\nMA10[t] > MA20[t]\n且\nMA10[t-1] <= MA20[t-1]\n\n二十日均线当日上升：\nMA20[t] > MA20[t-1]\n\n2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点在内的最近 50 个交易日。\n在窗口中，以最高收盘价确定 A 点；若并列，取最晚者。\n\n在 A 点之后，以最低收盘价确定 B 点；若并列，取最晚者。\n\nA 点必须位于 B 点左侧，即 A 先于 B 出现。\n\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%\n\n2.3 C 点位置与涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\n\nC 点当日相对前一交易日收盘价小幅上涨，涨幅大于 0 且不超过 3%：\n0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n\n满足以上全部条件时，于 C 点当日收盘价买入。\n3. 买入后前十个交易日\nC 点为第 0 日。\n在买入后的第 1 至第 10 个交易日内，若：\nClose[t] < MA20[t]\n则于该交易日收盘价卖出。\n4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。\n4.1 跌破十日均线\nClose[t] < MA10[t]\n4.2 高位放量反转\n以下三项必须同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n\n当日成交量为自 C 点以来的最大成交量；若最大值并列，取最晚出现该最大成交量的交易日：\nVolume[t] = max(Volume[C], ..., Volume[t])\n\n当日 K 线为十字星或大阴线。\n\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线或阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且：\n(Open[t] - Close[t]) / Open[t] > 2%\n5. 再次入场规则\n每笔交易卖出后，策略恢复为空仓状态。\n从卖出日的下一交易日开始，继续逐日扫描新的 C 点。若某日再次满足全部 C 点入场条件，则于该日收盘价再次买入，并重新开始计算该笔交易的 C 点、持仓天数、成交量峰值及全部卖出条件。\n6. 样本结束处理\n若样本结束时仍有未平仓头寸，则继续保留，不强制平仓，也不纳入已平仓交易 KPI。应单独输出该头寸的期末收盘价、浮动盈亏和持仓状态。",
+    "strategy": null,
+    "assumptions": [],
+    "warnings": [],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "064e1dd2-e952-4c5d-a9ec-27a4aa47098f",
+    "strategy_name": "未命名策略",
+    "created_at": "2026-07-31T20:19:57.556668Z",
+    "original_language": "1. 数据与交易约定\n使用日线数据。\n除 K 线形态判断外，价格计算一律使用收盘价。\nClose[t]、Open[t]、Volume[t] 分别表示第 t 个交易日的收盘价、开盘价和成交量。\nMA5[t]、MA10[t]、MA20[t] 分别为截至第 t 日收盘计算的 5、10、20 日均线。\n买入和卖出均按触发日收盘价成交；回测不计滑点、手续费和税费。\n并列极值统一取最晚出现的交易日。\n2. C 点入场条件\n某交易日 t 被定义为 C 点，必须同时满足以下条件。\n2.1 均线条件\nClose[t] > MA5[t]\n\nMA5[t] > MA10[t]\n\n十日均线在 C 点当日上穿二十日均线：\nMA10[t] > MA20[t]\n且\nMA10[t-1] <= MA20[t-1]\n\n二十日均线当日上升：\nMA20[t] > MA20[t-1]\n\n2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点在内的最近 50 个交易日。\n在窗口中，以最高收盘价确定 A 点；若并列，取最晚者。\n\n在 A 点之后，以最低收盘价确定 B 点；若并列，取最晚者。\n\nA 点必须位于 B 点左侧，即 A 先于 B 出现。\n\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%\n\n2.3 C 点位置与涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\n\nC 点当日相对前一交易日收盘价小幅上涨，涨幅大于 0 且不超过 3%：\n0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n\n满足以上全部条件时，于 C 点当日收盘价买入。\n3. 买入后前十个交易日\nC 点为第 0 日。\n在买入后的第 1 至第 10 个交易日内，若：\nClose[t] < MA20[t]\n则于该交易日收盘价卖出。\n4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。\n4.1 跌破十日均线\nClose[t] < MA10[t]\n4.2 高位放量反转\n以下三项必须同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n\n当日成交量为自 C 点以来的最大成交量；若最大值并列，取最晚出现该最大成交量的交易日：\nVolume[t] = max(Volume[C], ..., Volume[t])\n\n当日 K 线为十字星或大阴线。\n\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线或阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且：\n(Open[t] - Close[t]) / Open[t] > 2%\n5. 再次入场规则\n每笔交易卖出后，策略恢复为空仓状态。\n从卖出日的下一交易日开始，继续逐日扫描新的 C 点。若某日再次满足全部 C 点入场条件，则于该日收盘价再次买入，并重新开始计算该笔交易的 C 点、持仓天数、成交量峰值及全部卖出条件。\n6. 样本结束处理\n若样本结束时仍有未平仓头寸，则继续保留，不强制平仓，也不纳入已平仓交易 KPI。应单独输出该头寸的期末收盘价、浮动盈亏和持仓状态。",
+    "strategy": {
+      "schema_version": "0.3",
+      "strategy_name": "NVDA C-Point Breakout",
+      "symbol": "NVDA",
+      "frequency": "1d",
+      "direction": "long_only",
+      "position_mode": "fully_invested_or_flat",
+      "data_requirement": "daily_ohlcv",
+      "anchor": {
+        "name": "t0",
+        "condition": {
+          "node_type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              }
+            },
+            {
+              "node_type": "cross",
+              "operator": "cross_above",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              },
+              "right": {
+                "kind": "lagged_indicator",
+                "offset_days": -1,
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.0
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than_or_equal",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.03
+              }
+            }
+          ]
+        },
+        "constraints": [
+          {
+            "kind": "ordered_extrema_drawdown_constraint",
+            "lookback_days": 50,
+            "field": "close",
+            "peak_tie_break": "latest",
+            "trough_tie_break": "latest",
+            "minimum_peak_to_trough_drawdown": 0.25,
+            "maximum_anchor_recovery_from_trough": 0.15
+          }
+        ]
+      },
+      "entry": {
+        "active_day": {
+          "anchor": "t0",
+          "start_offset_days": 0,
+          "end_offset_days": 0
+        },
+        "condition": {
+          "node_type": "comparison",
+          "operator": "greater_than",
+          "left": {
+            "kind": "market_field",
+            "field": "close"
+          },
+          "right": {
+            "kind": "scalar",
+            "value": 0.0
+          }
+        },
+        "execution": "close"
+      },
+      "exit_rules": [
+        {
+          "rule_id": "early_ma20_break",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 1,
+            "end_offset_days": 10
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 20
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "late_ma10_break",
+          "priority": 2,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 10
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "late_volume_reversal",
+          "priority": 3,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "group",
+            "operator": "and",
+            "conditions": [
+              {
+                "node_type": "comparison",
+                "operator": "greater_than",
+                "left": {
+                  "kind": "market_field",
+                  "field": "close"
+                },
+                "right": {
+                  "kind": "scaled_entry_price",
+                  "multiplier": 1.1
+                }
+              },
+              {
+                "node_type": "comparison",
+                "operator": "equal",
+                "left": {
+                  "kind": "market_field",
+                  "field": "volume"
+                },
+                "right": {
+                  "kind": "anchor_running_maximum",
+                  "anchor": "t0",
+                  "field": "volume",
+                  "tie_break": "latest"
+                }
+              },
+              {
+                "node_type": "group",
+                "operator": "or",
+                "conditions": [
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "doji",
+                    "body_to_open_threshold": 0.01
+                  },
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "large_bearish",
+                    "body_to_open_threshold": 0.02
+                  }
+                ]
+              }
+            ]
+          },
+          "price_trigger": null,
+          "execution": "close"
+        }
+      ],
+      "lifecycle_policy": {
+        "sample_end_open_position": "leave_open_excluded",
+        "allow_reentry_after_exit": true
+      }
+    },
+    "assumptions": [
+      {
+        "code": "ENTRY_CONDITION_TAUTOLOGY",
+        "message": "Entry rule active_day is t0 only; the anchor conditions already gate t0, so the entry condition is set to close>0 (always true) as a pass-through."
+      }
+    ],
+    "warnings": [
+      {
+        "code": "C05_DAILY_RETURN_REMAPPED",
+        "message": "The one-day return clause (0 < (Close[t]-Close[t-1])/Close[t-1] <= 3%) was moved from anchor.constraints into anchor.condition as two rolling_return(window=1) comparisons, per the daily_return_requires_rolling_return rule."
+      }
+    ],
+    "source_clauses": [
+      {
+        "clause_id": "C01",
+        "text": "1. 数据与交易约定\n使用日线数据。\n除 K 线形态判断外，价格计算一律使用收盘价。\nClose[t]、Open[t]、Volume[t] 分别表示第 t 个交易日的收盘价、开盘价和成交量。\nMA5[t]、MA10[t]、MA20[t] 分别为截至第 t 日收盘计算的 5、10、20 日均线。\n买入和卖出均按触发日收盘价成交；回测不计滑点、手续费和税费。\n并列极值统一取最晚出现的交易日。"
+      },
+      {
+        "clause_id": "C02",
+        "text": "2. C 点入场条件\n某交易日 t 被定义为 C 点，必须同时满足以下条件。"
+      },
+      {
+        "clause_id": "C03",
+        "text": "2.1 均线条件\nClose[t] > MA5[t]\nMA5[t] > MA10[t]\n十日均线在 C 点当日上穿二十日均线：\nMA10[t] > MA20[t]\n且\nMA10[t-1] <= MA20[t-1]\n二十日均线当日上升：\nMA20[t] > MA20[t-1]"
+      },
+      {
+        "clause_id": "C04",
+        "text": "2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点在内的最近 50 个交易日。\n在窗口中，以最高收盘价确定 A 点；若并列，取最晚者。\n在 A 点之后，以最低收盘价确定 B 点；若并列，取最晚者。\nA 点必须位于 B 点左侧，即 A 先于 B 出现。\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%"
+      },
+      {
+        "clause_id": "C05",
+        "text": "2.3 C 点位置与涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\nC 点当日相对前一交易日收盘价小幅上涨，涨幅大于 0 且不超过 3%："
+      },
+      {
+        "clause_id": "C06",
+        "text": "0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n满足以上全部条件时，于 C 点当日收盘价买入。"
+      },
+      {
+        "clause_id": "C07",
+        "text": "3. 买入后前十个交易日\nC 点为第 0 日。\n在买入后的第 1 至第 10 个交易日内，若：\nClose[t] < MA20[t]\n则于该交易日收盘价卖出。"
+      },
+      {
+        "clause_id": "C08",
+        "text": "4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。"
+      },
+      {
+        "clause_id": "C09",
+        "text": "4.1 跌破十日均线\nClose[t] < MA10[t]"
+      },
+      {
+        "clause_id": "C10",
+        "text": "4.2 高位放量反转\n以下三项必须同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n当日成交量为自 C 点以来的最大成交量；若最大值并列，取最晚出现该最大成交量的交易日：\nVolume[t] = max(Volume[C], ..., Volume[t])\n当日 K 线为十字星或大阴线。\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线或阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且：\n(Open[t] - Close[t]) / Open[t] > 2%"
+      },
+      {
+        "clause_id": "C11",
+        "text": "5. 再次入场规则\n每笔交易卖出后，策略恢复为空仓状态。\n从卖出日的下一交易日开始，继续逐日扫描新的 C 点。若某日再次满足全部 C 点入场条件，则于该日收盘价再次买入，并重新开始计算该笔交易的 C 点、持仓天数、成交量峰值及全部卖出条件。"
+      },
+      {
+        "clause_id": "C12",
+        "text": "6. 样本结束处理\n若样本结束时仍有未平仓头寸，则继续保留，不强制平仓，也不纳入已平仓交易 KPI。应单独输出该头寸的期末收盘价、浮动盈亏和持仓状态。"
+      }
+    ],
+    "coverage": [
+      {
+        "clause_id": "C01",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "frequency",
+          "data_requirement"
+        ],
+        "explanation": "Daily OHLCV data, close-price convention, tie-break=latest, and execution-at-close are all encoded in schema defaults and lifecycle policy."
+      },
+      {
+        "clause_id": "C02",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor"
+        ],
+        "explanation": "The anchor definition (t0) represents the C-point entry day gating all sub-conditions."
+      },
+      {
+        "clause_id": "C03",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0]",
+          "anchor.condition.conditions[1]",
+          "anchor.condition.conditions[2]",
+          "anchor.condition.conditions[3]"
+        ],
+        "explanation": "Close>MA5, MA5>MA10, MA10 cross_above MA20, and MA20>MA20[t-1] are encoded as the first four anchor condition nodes."
+      },
+      {
+        "clause_id": "C04",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0]"
+        ],
+        "explanation": "50-day lookback ordered_extrema_drawdown_constraint encodes A (peak, latest tie-break) before B (trough, latest tie-break) with minimum drawdown 25% and max recovery 15%."
+      },
+      {
+        "clause_id": "C05",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0].maximum_anchor_recovery_from_trough",
+          "anchor.condition.conditions[4]",
+          "anchor.condition.conditions[5]"
+        ],
+        "explanation": "C-to-B recovery cap (<=15%) stays in the constraint; the one-day return bounds (0%< r <=3%) are encoded as rolling_return(window=1) comparisons in anchor.condition nodes 4 and 5."
+      },
+      {
+        "clause_id": "C06",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "entry.execution",
+          "entry.active_day"
+        ],
+        "explanation": "Buy at C-point close on t0 is encoded by entry execution=close and active_day offset 0–0."
+      },
+      {
+        "clause_id": "C07",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[0]"
+        ],
+        "explanation": "Days t1–t10 close-below-MA20 exit encoded as early_ma20_break rule with active_days 1–10."
+      },
+      {
+        "clause_id": "C08",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]",
+          "exit_rules[2]"
+        ],
+        "explanation": "From t11 onward, two exit rules (MA10 break and volume-reversal) replace the MA20 rule."
+      },
+      {
+        "clause_id": "C09",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]"
+        ],
+        "explanation": "Close < MA10 from day 11 onward encoded as late_ma10_break rule."
+      },
+      {
+        "clause_id": "C10",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[2]"
+        ],
+        "explanation": "High-volume reversal (>10% gain, max volume since t0 with latest tie-break, doji or large-bearish candle) encoded as late_volume_reversal rule."
+      },
+      {
+        "clause_id": "C11",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "lifecycle_policy.allow_reentry_after_exit"
+        ],
+        "explanation": "Re-entry after exit is allowed; the scanner restarts from the next trading day, encoded as allow_reentry_after_exit=true."
+      },
+      {
+        "clause_id": "C12",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "lifecycle_policy.sample_end_open_position"
+        ],
+        "explanation": "Open position at sample end is retained and excluded from closed-trade KPIs, encoded as leave_open_excluded."
+      }
+    ]
+  },
+  {
+    "strategy_id": "2c132e40-eba0-44c9-acc0-08a0c4b64b4f",
+    "strategy_name": "新策略2",
+    "created_at": "2026-07-31T20:20:04.004345Z",
+    "original_language": "1. 数据与交易约定\n使用日线数据。\n除 K 线形态判断外，价格计算一律使用收盘价。\nClose[t]、Open[t]、Volume[t] 分别表示第 t 个交易日的收盘价、开盘价和成交量。\nMA5[t]、MA10[t]、MA20[t] 分别为截至第 t 日收盘计算的 5、10、20 日均线。\n买入和卖出均按触发日收盘价成交；回测不计滑点、手续费和税费。\n并列极值统一取最晚出现的交易日。\n2. C 点入场条件\n某交易日 t 被定义为 C 点，必须同时满足以下条件。\n2.1 均线条件\nClose[t] > MA5[t]\n\nMA5[t] > MA10[t]\n\n十日均线在 C 点当日上穿二十日均线：\nMA10[t] > MA20[t]\n且\nMA10[t-1] <= MA20[t-1]\n\n二十日均线当日上升：\nMA20[t] > MA20[t-1]\n\n2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点在内的最近 50 个交易日。\n在窗口中，以最高收盘价确定 A 点；若并列，取最晚者。\n\n在 A 点之后，以最低收盘价确定 B 点；若并列，取最晚者。\n\nA 点必须位于 B 点左侧，即 A 先于 B 出现。\n\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%\n\n2.3 C 点位置与涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\n\nC 点当日相对前一交易日收盘价小幅上涨，涨幅大于 0 且不超过 3%：\n0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n\n满足以上全部条件时，于 C 点当日收盘价买入。\n3. 买入后前十个交易日\nC 点为第 0 日。\n在买入后的第 1 至第 10 个交易日内，若：\nClose[t] < MA20[t]\n则于该交易日收盘价卖出。\n4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。\n4.1 跌破十日均线\nClose[t] < MA10[t]\n4.2 高位放量反转\n以下三项必须同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n\n当日成交量为自 C 点以来的最大成交量；若最大值并列，取最晚出现该最大成交量的交易日：\nVolume[t] = max(Volume[C], ..., Volume[t])\n\n当日 K 线为十字星或大阴线。\n\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线或阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且：\n(Open[t] - Close[t]) / Open[t] > 2%\n5. 再次入场规则\n每笔交易卖出后，策略恢复为空仓状态。\n从卖出日的下一交易日开始，继续逐日扫描新的 C 点。若某日再次满足全部 C 点入场条件，则于该日收盘价再次买入，并重新开始计算该笔交易的 C 点、持仓天数、成交量峰值及全部卖出条件。\n6. 样本结束处理\n若样本结束时仍有未平仓头寸，则继续保留，不强制平仓，也不纳入已平仓交易 KPI。应单独输出该头寸的期末收盘价、浮动盈亏和持仓状态。",
+    "strategy": {
+      "schema_version": "0.3",
+      "strategy_name": "NVDA C-Point Breakout",
+      "symbol": "NVDA",
+      "frequency": "1d",
+      "direction": "long_only",
+      "position_mode": "fully_invested_or_flat",
+      "data_requirement": "daily_ohlcv",
+      "anchor": {
+        "name": "t0",
+        "condition": {
+          "node_type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              }
+            },
+            {
+              "node_type": "cross",
+              "operator": "cross_above",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              },
+              "right": {
+                "kind": "lagged_indicator",
+                "offset_days": -1,
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.0
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than_or_equal",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.03
+              }
+            }
+          ]
+        },
+        "constraints": [
+          {
+            "kind": "ordered_extrema_drawdown_constraint",
+            "lookback_days": 50,
+            "field": "close",
+            "peak_tie_break": "latest",
+            "trough_tie_break": "latest",
+            "minimum_peak_to_trough_drawdown": 0.25,
+            "maximum_anchor_recovery_from_trough": 0.15
+          }
+        ]
+      },
+      "entry": {
+        "active_day": {
+          "anchor": "t0",
+          "start_offset_days": 0,
+          "end_offset_days": 0
+        },
+        "condition": {
+          "node_type": "comparison",
+          "operator": "greater_than",
+          "left": {
+            "kind": "market_field",
+            "field": "close"
+          },
+          "right": {
+            "kind": "scalar",
+            "value": 0.0
+          }
+        },
+        "execution": "close"
+      },
+      "exit_rules": [
+        {
+          "rule_id": "early_ma20_break",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 1,
+            "end_offset_days": 10
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 20
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "late_ma10_break",
+          "priority": 2,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 10
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "late_volume_reversal",
+          "priority": 3,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "group",
+            "operator": "and",
+            "conditions": [
+              {
+                "node_type": "comparison",
+                "operator": "greater_than",
+                "left": {
+                  "kind": "market_field",
+                  "field": "close"
+                },
+                "right": {
+                  "kind": "scaled_entry_price",
+                  "multiplier": 1.1
+                }
+              },
+              {
+                "node_type": "comparison",
+                "operator": "equal",
+                "left": {
+                  "kind": "market_field",
+                  "field": "volume"
+                },
+                "right": {
+                  "kind": "anchor_running_maximum",
+                  "anchor": "t0",
+                  "field": "volume",
+                  "tie_break": "latest"
+                }
+              },
+              {
+                "node_type": "group",
+                "operator": "or",
+                "conditions": [
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "doji",
+                    "body_to_open_threshold": 0.01
+                  },
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "large_bearish",
+                    "body_to_open_threshold": 0.02
+                  }
+                ]
+              }
+            ]
+          },
+          "price_trigger": null,
+          "execution": "close"
+        }
+      ],
+      "lifecycle_policy": {
+        "sample_end_open_position": "leave_open_excluded",
+        "allow_reentry_after_exit": true
+      }
+    },
+    "assumptions": [
+      {
+        "code": "ENTRY_CONDITION_TAUTOLOGY",
+        "message": "Entry rule active_day is t0 only; the anchor conditions already gate t0, so the entry condition is set to close>0 (always true) as a pass-through."
+      }
+    ],
+    "warnings": [
+      {
+        "code": "C05_DAILY_RETURN_REMAPPED",
+        "message": "The one-day return clause (0 < (Close[t]-Close[t-1])/Close[t-1] <= 3%) was moved from anchor.constraints into anchor.condition as two rolling_return(window=1) comparisons, per the daily_return_requires_rolling_return rule."
+      }
+    ],
+    "source_clauses": [
+      {
+        "clause_id": "C01",
+        "text": "1. 数据与交易约定\n使用日线数据。\n除 K 线形态判断外，价格计算一律使用收盘价。\nClose[t]、Open[t]、Volume[t] 分别表示第 t 个交易日的收盘价、开盘价和成交量。\nMA5[t]、MA10[t]、MA20[t] 分别为截至第 t 日收盘计算的 5、10、20 日均线。\n买入和卖出均按触发日收盘价成交；回测不计滑点、手续费和税费。\n并列极值统一取最晚出现的交易日。"
+      },
+      {
+        "clause_id": "C02",
+        "text": "2. C 点入场条件\n某交易日 t 被定义为 C 点，必须同时满足以下条件。"
+      },
+      {
+        "clause_id": "C03",
+        "text": "2.1 均线条件\nClose[t] > MA5[t]\nMA5[t] > MA10[t]\n十日均线在 C 点当日上穿二十日均线：\nMA10[t] > MA20[t]\n且\nMA10[t-1] <= MA20[t-1]\n二十日均线当日上升：\nMA20[t] > MA20[t-1]"
+      },
+      {
+        "clause_id": "C04",
+        "text": "2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点在内的最近 50 个交易日。\n在窗口中，以最高收盘价确定 A 点；若并列，取最晚者。\n在 A 点之后，以最低收盘价确定 B 点；若并列，取最晚者。\nA 点必须位于 B 点左侧，即 A 先于 B 出现。\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%"
+      },
+      {
+        "clause_id": "C05",
+        "text": "2.3 C 点位置与涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\nC 点当日相对前一交易日收盘价小幅上涨，涨幅大于 0 且不超过 3%："
+      },
+      {
+        "clause_id": "C06",
+        "text": "0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n满足以上全部条件时，于 C 点当日收盘价买入。"
+      },
+      {
+        "clause_id": "C07",
+        "text": "3. 买入后前十个交易日\nC 点为第 0 日。\n在买入后的第 1 至第 10 个交易日内，若：\nClose[t] < MA20[t]\n则于该交易日收盘价卖出。"
+      },
+      {
+        "clause_id": "C08",
+        "text": "4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。"
+      },
+      {
+        "clause_id": "C09",
+        "text": "4.1 跌破十日均线\nClose[t] < MA10[t]"
+      },
+      {
+        "clause_id": "C10",
+        "text": "4.2 高位放量反转\n以下三项必须同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n当日成交量为自 C 点以来的最大成交量；若最大值并列，取最晚出现该最大成交量的交易日：\nVolume[t] = max(Volume[C], ..., Volume[t])\n当日 K 线为十字星或大阴线。\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线或阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且：\n(Open[t] - Close[t]) / Open[t] > 2%"
+      },
+      {
+        "clause_id": "C11",
+        "text": "5. 再次入场规则\n每笔交易卖出后，策略恢复为空仓状态。\n从卖出日的下一交易日开始，继续逐日扫描新的 C 点。若某日再次满足全部 C 点入场条件，则于该日收盘价再次买入，并重新开始计算该笔交易的 C 点、持仓天数、成交量峰值及全部卖出条件。"
+      },
+      {
+        "clause_id": "C12",
+        "text": "6. 样本结束处理\n若样本结束时仍有未平仓头寸，则继续保留，不强制平仓，也不纳入已平仓交易 KPI。应单独输出该头寸的期末收盘价、浮动盈亏和持仓状态。"
+      }
+    ],
+    "coverage": [
+      {
+        "clause_id": "C01",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "frequency",
+          "data_requirement"
+        ],
+        "explanation": "Daily OHLCV data, close-price convention, tie-break=latest, and execution-at-close are all encoded in schema defaults and lifecycle policy."
+      },
+      {
+        "clause_id": "C02",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor"
+        ],
+        "explanation": "The anchor definition (t0) represents the C-point entry day gating all sub-conditions."
+      },
+      {
+        "clause_id": "C03",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0]",
+          "anchor.condition.conditions[1]",
+          "anchor.condition.conditions[2]",
+          "anchor.condition.conditions[3]"
+        ],
+        "explanation": "Close>MA5, MA5>MA10, MA10 cross_above MA20, and MA20>MA20[t-1] are encoded as the first four anchor condition nodes."
+      },
+      {
+        "clause_id": "C04",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0]"
+        ],
+        "explanation": "50-day lookback ordered_extrema_drawdown_constraint encodes A (peak, latest tie-break) before B (trough, latest tie-break) with minimum drawdown 25% and max recovery 15%."
+      },
+      {
+        "clause_id": "C05",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0].maximum_anchor_recovery_from_trough",
+          "anchor.condition.conditions[4]",
+          "anchor.condition.conditions[5]"
+        ],
+        "explanation": "C-to-B recovery cap (<=15%) stays in the constraint; the one-day return bounds (0%< r <=3%) are encoded as rolling_return(window=1) comparisons in anchor.condition nodes 4 and 5."
+      },
+      {
+        "clause_id": "C06",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "entry.execution",
+          "entry.active_day"
+        ],
+        "explanation": "Buy at C-point close on t0 is encoded by entry execution=close and active_day offset 0–0."
+      },
+      {
+        "clause_id": "C07",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[0]"
+        ],
+        "explanation": "Days t1–t10 close-below-MA20 exit encoded as early_ma20_break rule with active_days 1–10."
+      },
+      {
+        "clause_id": "C08",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]",
+          "exit_rules[2]"
+        ],
+        "explanation": "From t11 onward, two exit rules (MA10 break and volume-reversal) replace the MA20 rule."
+      },
+      {
+        "clause_id": "C09",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]"
+        ],
+        "explanation": "Close < MA10 from day 11 onward encoded as late_ma10_break rule."
+      },
+      {
+        "clause_id": "C10",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[2]"
+        ],
+        "explanation": "High-volume reversal (>10% gain, max volume since t0 with latest tie-break, doji or large-bearish candle) encoded as late_volume_reversal rule."
+      },
+      {
+        "clause_id": "C11",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "lifecycle_policy.allow_reentry_after_exit"
+        ],
+        "explanation": "Re-entry after exit is allowed; the scanner restarts from the next trading day, encoded as allow_reentry_after_exit=true."
+      },
+      {
+        "clause_id": "C12",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "lifecycle_policy.sample_end_open_position"
+        ],
+        "explanation": "Open position at sample end is retained and excluded from closed-trade KPIs, encoded as leave_open_excluded."
+      }
+    ]
+  },
+  {
+    "strategy_id": "b2bfd8d4-c91b-42d9-a057-eb7e1e7efb7e",
+    "strategy_name": "均线多头回撤交易策略",
+    "created_at": "2026-08-01T14:19:15.775863Z",
+    "original_language": "1. 数据与成交约定\n使用日线数据。\n除 K 线形态判断外，价格计算一律使用收盘价。\nClose[t]、Open[t]、Volume[t] 分别为第 t 日的收盘价、开盘价和成交量。\nMA5[t]、MA10[t]、MA20[t] 分别为截至第 t 日收盘的 5、10、20 日均线。\n买入与卖出均按触发日收盘价成交，不计滑点、手续费和税费。\n出现并列极值时，统一取最晚出现的交易日。\n2. C 点入场条件\n某交易日 t 成为 C 点，必须同时满足以下条件。\n2.1 均线与趋势条件\nClose[t] > MA5[t]\n\nMA5[t] > MA10[t]\n\n五日均线在 C 点当日上穿二十日均线：\nMA5[t] > MA20[t]\n且\nMA5[t-1] <= MA20[t-1]\n\n二十日均线当日上升：\nMA20[t] > MA20[t-1]\n\n2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点当日在内的最近 50 个交易日。\n在窗口中，以最高收盘价确定 A 点；并列时取最晚者。\n\n在 A 点之后，以最低收盘价确定 B 点；并列时取最晚者。\n\nA 点必须位于 B 点左侧，即 A 先于 B 出现。\n\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%\n\n2.3 C 点位置与当日涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\n\nC 点当日相对前一交易日收盘价小幅上涨，涨幅大于 0 且不超过 3%：\n0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n\n满足全部条件后，于 C 点当日收盘价买入。\n3. 买入后前十个交易日\nC 点为第 0 日。\n买入后的第 1 至第 10 个交易日内，若：\nClose[t] < MA5[t]\n则于该交易日收盘价卖出。\n4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。\n4.1 跌破十日均线\nClose[t] < MA10[t]\n4.2 高位放量反转\n以下三项必须同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n\n当日成交量为 C 点以来的最大成交量：\nVolume[t] = max(Volume[C], ..., Volume[t])\n若最大成交量并列，以最晚出现该最大值的交易日为触发日。\n\n当日为十字星或大阴线。\n\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线、阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且：\n(Open[t] - Close[t]) / Open[t] > 2%\n5. 再次入场规则\n每笔交易卖出后，策略恢复为空仓状态。\n从卖出日的下一交易日开始，继续扫描新的 C 点；满足全部入场条件时，再次于该日收盘价买入，并重新计算该笔交易的所有持仓和卖出条件。\n6. 样本结束处理\n样本结束时若仍未触发卖出，则保留未平仓头寸，不强制平仓，也不纳入已平仓交易 KPI。单独输出该头寸的期末收盘价、浮动盈亏和持仓状态。",
+    "strategy": {
+      "schema_version": "0.3",
+      "strategy_name": "NVDA C-Point Trend Entry",
+      "symbol": "NVDA",
+      "frequency": "1d",
+      "direction": "long_only",
+      "position_mode": "fully_invested_or_flat",
+      "data_requirement": "daily_ohlcv",
+      "anchor": {
+        "name": "t0",
+        "condition": {
+          "node_type": "group",
+          "operator": "and",
+          "conditions": [
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "market_field",
+                "field": "close"
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 10
+                }
+              }
+            },
+            {
+              "node_type": "cross",
+              "operator": "cross_above",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 5
+                }
+              },
+              "right": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              },
+              "right": {
+                "kind": "lagged_indicator",
+                "offset_days": -1,
+                "indicator": {
+                  "indicator": "sma",
+                  "field": "close",
+                  "window": 20
+                }
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.0
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than_or_equal",
+              "left": {
+                "kind": "indicator",
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.03
+              }
+            }
+          ]
+        },
+        "constraints": [
+          {
+            "kind": "ordered_extrema_drawdown_constraint",
+            "lookback_days": 50,
+            "field": "close",
+            "peak_tie_break": "latest",
+            "trough_tie_break": "latest",
+            "minimum_peak_to_trough_drawdown": 0.25,
+            "maximum_anchor_recovery_from_trough": 0.15
+          }
+        ]
+      },
+      "entry": {
+        "active_day": {
+          "anchor": "t0",
+          "start_offset_days": 0,
+          "end_offset_days": 0
+        },
+        "condition": {
+          "node_type": "comparison",
+          "operator": "greater_than",
+          "left": {
+            "kind": "market_field",
+            "field": "close"
+          },
+          "right": {
+            "kind": "scalar",
+            "value": 0.0
+          }
+        },
+        "execution": "close"
+      },
+      "exit_rules": [
+        {
+          "rule_id": "early_below_ma5",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 1,
+            "end_offset_days": 10
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 5
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "late_below_ma10",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "comparison",
+            "operator": "less_than",
+            "left": {
+              "kind": "market_field",
+              "field": "close"
+            },
+            "right": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 10
+              }
+            }
+          },
+          "price_trigger": null,
+          "execution": "close"
+        },
+        {
+          "rule_id": "late_volume_reversal",
+          "priority": 2,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 11,
+            "end_offset_days": null
+          },
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "group",
+            "operator": "and",
+            "conditions": [
+              {
+                "node_type": "comparison",
+                "operator": "greater_than",
+                "left": {
+                  "kind": "market_field",
+                  "field": "close"
+                },
+                "right": {
+                  "kind": "scaled_entry_price",
+                  "multiplier": 1.1
+                }
+              },
+              {
+                "node_type": "comparison",
+                "operator": "equal",
+                "left": {
+                  "kind": "market_field",
+                  "field": "volume"
+                },
+                "right": {
+                  "kind": "anchor_running_maximum",
+                  "anchor": "t0",
+                  "field": "volume",
+                  "tie_break": "latest"
+                }
+              },
+              {
+                "node_type": "group",
+                "operator": "or",
+                "conditions": [
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "doji",
+                    "body_to_open_threshold": 0.01
+                  },
+                  {
+                    "node_type": "candlestick_pattern",
+                    "pattern": "large_bearish",
+                    "body_to_open_threshold": 0.02
+                  }
+                ]
+              }
+            ]
+          },
+          "price_trigger": null,
+          "execution": "close"
+        }
+      ],
+      "lifecycle_policy": {
+        "sample_end_open_position": "leave_open_excluded",
+        "allow_reentry_after_exit": true
+      }
+    },
+    "assumptions": [
+      {
+        "code": "EXEC_AT_CLOSE",
+        "message": "All entries and exits execute at the closing price of the trigger day, consistent with C01."
+      },
+      {
+        "code": "TIE_BREAK_LATEST",
+        "message": "All tied extrema (A, B, volume max) resolve to the latest occurrence per C01 and C10."
+      },
+      {
+        "code": "ENTRY_CONDITION_PLACEHOLDER",
+        "message": "Entry rule condition is a tautology (close>0); the real entry gate is fully encoded in anchor.condition and anchor.constraints."
+      }
+    ],
+    "warnings": [
+      {
+        "code": "C05_DAILY_RETURN_REPAIRED",
+        "message": "C05 daily-return sub-clauses now use rolling_return(window=1) operands instead of price-level comparisons, satisfying the daily_return_requires_rolling_return validation rule."
+      }
+    ],
+    "source_clauses": [
+      {
+        "clause_id": "C01",
+        "text": "1. 数据与成交约定\n使用日线数据。\n除 K 线形态判断外，价格计算一律使用收盘价。\nClose[t]、Open[t]、Volume[t] 分别为第 t 日的收盘价、开盘价和成交量。\nMA5[t]、MA10[t]、MA20[t] 分别为截至第 t 日收盘的 5、10、20 日均线。\n买入与卖出均按触发日收盘价成交，不计滑点、手续费和税费。\n出现并列极值时，统一取最晚出现的交易日。"
+      },
+      {
+        "clause_id": "C02",
+        "text": "2. C 点入场条件\n某交易日 t 成为 C 点，必须同时满足以下条件。"
+      },
+      {
+        "clause_id": "C03",
+        "text": "2.1 均线与趋势条件\nClose[t] > MA5[t]\nMA5[t] > MA10[t]\n五日均线在 C 点当日上穿二十日均线：\nMA5[t] > MA20[t]\n且\nMA5[t-1] <= MA20[t-1]\n二十日均线当日上升：\nMA20[t] > MA20[t-1]"
+      },
+      {
+        "clause_id": "C04",
+        "text": "2.2 前期回撤条件\n以 C 点当日为终点，取包含 C 点当日在内的最近 50 个交易日。\n在窗口中，以最高收盘价确定 A 点；并列时取最晚者。\n在 A 点之后，以最低收盘价确定 B 点；并列时取最晚者。\nA 点必须位于 B 点左侧，即 A 先于 B 出现。\nA 至 B 的回撤不低于 25%：\n(Close[A] - Close[B]) / Close[A] >= 25%"
+      },
+      {
+        "clause_id": "C05",
+        "text": "2.3 C 点位置与当日涨幅条件\nC 点相对 B 点的涨幅不超过 15%：\n(Close[t] - Close[B]) / Close[B] <= 15%\nC 点当日相对前一交易日收盘价小幅上涨，涨幅大于 0 且不超过 3%："
+      },
+      {
+        "clause_id": "C06",
+        "text": "0 < (Close[t] - Close[t-1]) / Close[t-1] <= 3%\n满足全部条件后，于 C 点当日收盘价买入。"
+      },
+      {
+        "clause_id": "C07",
+        "text": "3. 买入后前十个交易日\nC 点为第 0 日。\n买入后的第 1 至第 10 个交易日内，若：\nClose[t] < MA5[t]\n则于该交易日收盘价卖出。"
+      },
+      {
+        "clause_id": "C08",
+        "text": "4. 第十一个交易日起的卖出规则\n从买入后的第 11 个交易日起，不再因二十日均线走平或下行而卖出。出现以下任一条件时，于触发日收盘价卖出。"
+      },
+      {
+        "clause_id": "C09",
+        "text": "4.1 跌破十日均线\nClose[t] < MA10[t]"
+      },
+      {
+        "clause_id": "C10",
+        "text": "4.2 高位放量反转\n以下三项必须同时成立：\n相对 C 点累计涨幅超过 10%：\n(Close[t] - Close[C]) / Close[C] > 10%\n当日成交量为 C 点以来的最大成交量：\nVolume[t] = max(Volume[C], ..., Volume[t])\n若最大成交量并列，以最晚出现该最大值的交易日为触发日。\n当日为十字星或大阴线。\n十字星定义为：\nabs(Close[t] - Open[t]) / Open[t] <= 1%\n不区分阴线、阳线，不考虑上下影线。\n大阴线定义为：\nClose[t] < Open[t]\n且：\n(Open[t] - Close[t]) / Open[t] > 2%"
+      },
+      {
+        "clause_id": "C11",
+        "text": "5. 再次入场规则\n每笔交易卖出后，策略恢复为空仓状态。\n从卖出日的下一交易日开始，继续扫描新的 C 点；满足全部入场条件时，再次于该日收盘价买入，并重新计算该笔交易的所有持仓和卖出条件。"
+      },
+      {
+        "clause_id": "C12",
+        "text": "6. 样本结束处理\n样本结束时若仍未触发卖出，则保留未平仓头寸，不强制平仓，也不纳入已平仓交易 KPI。单独输出该头寸的期末收盘价、浮动盈亏和持仓状态。"
+      }
+    ],
+    "coverage": [
+      {
+        "clause_id": "C01",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "frequency",
+          "data_requirement",
+          "anchor.condition",
+          "exit_rules"
+        ],
+        "explanation": "Daily frequency, close-price execution, and latest tie-break convention applied throughout."
+      },
+      {
+        "clause_id": "C02",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor"
+        ],
+        "explanation": "Anchor definition t0 represents the C-point entry day with all sub-conditions."
+      },
+      {
+        "clause_id": "C03",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0]",
+          "anchor.condition.conditions[1]",
+          "anchor.condition.conditions[2]",
+          "anchor.condition.conditions[3]"
+        ],
+        "explanation": "Close>MA5, MA5>MA10, MA5 cross_above MA20, and MA20>MA20[t-1] encoded as anchor conditions 0-3."
+      },
+      {
+        "clause_id": "C04",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0]"
+        ],
+        "explanation": "50-day ordered_extrema_drawdown_constraint with latest tie-breaks and minimum 25% peak-to-trough drawdown."
+      },
+      {
+        "clause_id": "C05",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.constraints[0].maximum_anchor_recovery_from_trough",
+          "anchor.condition.conditions[4]",
+          "anchor.condition.conditions[5]"
+        ],
+        "explanation": "15% max recovery from trough in constraint; daily return >0 and <=3% encoded via rolling_return(window=1) comparisons in anchor conditions 4-5."
+      },
+      {
+        "clause_id": "C06",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "entry.execution",
+          "entry.active_day"
+        ],
+        "explanation": "Buy at C-point closing price on t0 encoded in entry rule."
+      },
+      {
+        "clause_id": "C07",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[0]"
+        ],
+        "explanation": "Days t1-t10 exit when close < MA5, executed at close."
+      },
+      {
+        "clause_id": "C08",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]",
+          "exit_rules[2]"
+        ],
+        "explanation": "From t11 onward, two exit rules cover the two sell triggers; MA20 slope no longer required."
+      },
+      {
+        "clause_id": "C09",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]"
+        ],
+        "explanation": "Close < MA10 from t11 onward mapped to late_below_ma10 exit rule."
+      },
+      {
+        "clause_id": "C10",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[2]"
+        ],
+        "explanation": "High-volume reversal: >10% gain from entry, volume equals running max (latest tie-break), doji or large_bearish candle pattern."
+      },
+      {
+        "clause_id": "C11",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "lifecycle_policy.allow_reentry_after_exit"
+        ],
+        "explanation": "Re-entry after exit allowed; strategy rescans for new C-point from next trading day."
+      },
+      {
+        "clause_id": "C12",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "lifecycle_policy.sample_end_open_position"
+        ],
+        "explanation": "Open position at sample end is left open and excluded from closed-trade KPIs per user answer."
+      }
+    ]
+  }
+]

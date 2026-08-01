@@ -35,6 +35,7 @@ from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.summaries import style_by_drawdown
 from rhein.ui.trade_chart import trade_selector_options
 from rhein.ui.chart_theme import event_annotation_style
+from rhein.ui.history_paths import portable_data_path, resolve_history_data_path, same_data_scope
 
 # The project-local file is the explicit source of truth for this local app.
 load_dotenv(ROOT / ".env", override=True)
@@ -123,7 +124,7 @@ def replace_backtest_view(
     else:
         st.session_state["dsl_backtest_loaded_run"] = loaded_run
     for key in (
-        "dsl_top100_table",
+        "dsl_symbols_table",
         "dsl_chart_result_scope",
         "dsl_chart_selected_symbol",
         "dsl_chart_trade_scope",
@@ -470,7 +471,7 @@ if matching_result is not None:
         try:
             saved_runs = [
                 run for run in backtest_history.list_for_strategy(saved_backtest_strategy_id)
-                if run.data_path == current_group_path
+                if same_data_scope(run.data_path, current_group_path, project_root=ROOT)
             ]
         except BacktestHistoryError as error:
             st.warning(f"无法读取此策略的已保存回测：{error.message}")
@@ -530,7 +531,7 @@ if matching_result is not None:
                         strategy_fingerprint=strategy_fingerprint(timed_strategy.model_dump_json()),
                         schema_version=timed_strategy.schema_version,
                         group_label=selected_scope,
-                        data_path=str(Path(data_path).resolve()),
+                        data_path=portable_data_path(data_path, project_root=ROOT),
                         input_file_count=len(paths),
                         settings={"initial_capital": float(initial_capital), "compound": True, "cost_bps": float(cost_bps), "runner": label},
                         kpis=dataframe_records(kpis),
@@ -572,17 +573,21 @@ if matching_result is not None:
                             open_position_rows.append({"标的": kpi_row["标的"], **position})
             if open_position_rows:
                 with st.expander(f"样本末尾未平仓头寸（{len(open_position_rows)}）", expanded=False):
-                    st.caption("这些头寸按策略要求保留，未计入已平仓交易 KPI 或 Top 100 的交易统计。")
+                    st.caption("这些头寸按策略要求保留，未计入已平仓交易 KPI 或全部标的表中的交易统计。")
                     st.dataframe(pd.DataFrame(open_position_rows), hide_index=True, width="stretch")
-            st.subheader("Top 100 标的")
+            st.subheader(f"全部标的（{len(kpis)}）")
             options = {"盈利因子（高→低）": "profit_factor", "累计收益率（高→低）": "cumulative_return_pct", "年化收益率（高→低）": "annualized_return_pct", "夏普比率（高→低）": "sharpe_ratio", "胜率（高→低）": "win_rate_pct", "最大回撤（低→高）": "max_drawdown_pct"}
             rank_label = st.selectbox("排序指标", list(options), key="dsl_rank_metric")
-            min_trades = st.number_input("最少交易次数", min_value=0, value=1, step=1, key="dsl_min_trades")
+            min_trades = st.number_input("最少交易次数", min_value=0, value=0, step=1, key="dsl_min_trades")
             metric = options[rank_label]
-            ranked = kpis[(kpis["n_trades"] >= min_trades) & kpis[metric].notna()].sort_values(metric, ascending=metric == "max_drawdown_pct").head(100)
+            ranked = kpis[kpis["n_trades"] >= min_trades].sort_values(
+                metric,
+                ascending=metric == "max_drawdown_pct",
+                na_position="last",
+            )
             display = ranked[["标的", "n_trades", "sharpe_ratio", "annualized_return_pct", "max_drawdown_pct", "win_rate_pct", "cumulative_return_pct", "payoff_ratio", "profit_factor", "avg_return_pct", "avg_days_held"]].rename(columns={"n_trades":"交易次数", "sharpe_ratio":"夏普比率", "annualized_return_pct":"全样本年化收益率 (%)", "max_drawdown_pct":"最大回撤 (%)", "win_rate_pct":"胜率 (%)", "cumulative_return_pct":"累计收益率 (%)", "payoff_ratio":"盈亏比", "profit_factor":"盈利因子", "avg_return_pct":"平均单笔收益 (%)", "avg_days_held":"平均持仓天数"})
-            st.caption("绿色行符合回撤阈值；红色行超过阈值。选择行后可查看该标的交易。")
-            selection = st.dataframe(style_by_drawdown(display, "最大回撤 (%)", -limit, integer_columns=("交易次数",)), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key="dsl_top100_table")
+            st.caption(f"展示当前分组全部 {len(display)} 个标的。绿色行符合回撤阈值；红色行超过阈值。选择行后可查看该标的交易。")
+            selection = st.dataframe(style_by_drawdown(display, "最大回撤 (%)", -limit, integer_columns=("交易次数",)), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key="dsl_symbols_table")
             rows = selection.selection.rows if selection else []
             selected_symbol = None
             if rows:
@@ -618,10 +623,15 @@ if matching_result is not None:
                     trade_id = st.selectbox("选择交易段", trade_option_ids, format_func=trade_labels.__getitem__, key="dsl_chart_trade_id")
                     trade = symbol_trades.iloc[trade_option_ids.index(trade_id)]
                     source_matches = kpis.loc[kpis["标的"] == selected_symbol, "源文件"]
-                    if source_matches.empty:
+                    source_path = (
+                        resolve_history_data_path(source_matches.iloc[0], project_root=ROOT)
+                        if not source_matches.empty
+                        else None
+                    )
+                    if source_path is None:
                         st.warning(f"找不到 {selected_symbol} 的回测源文件，无法绘制 K 线。")
                     else:
-                        chart = backtest_load_ohlc(Path(source_matches.iloc[0])).copy()
+                        chart = backtest_load_ohlc(source_path).copy()
                         for window in (5, 10, 20):
                             chart[f"MA{window}"] = chart["Close"].rolling(window).mean()
                         signal, entry, exit_ = (pd.Timestamp(trade[column]).normalize() for column in ("signal", "entry", "exit"))
@@ -638,15 +648,16 @@ if matching_result is not None:
                                 if len(positions):
                                     event_positions.append(int(positions[0]))
                             # Include every recorded structural event (not just
-                            # t0/entry/exit), and retain thirty completed
+                            # t0/entry/exit), and retain one hundred completed
                             # trading candles after the exit whenever the source
                             # contains them.  Then widen to at least 100
                             # consecutive trading candles when the source has
-                            # enough history. `Index` remains an ordinal x-axis,
-                            # so weekends and holidays never create gaps.
+                            # enough history. `Index` is later drawn on a
+                            # compact ordinal x-axis, so weekends and holidays
+                            # never create gaps.
                             important_positions = event_positions or [int(signal_positions[0]), int(exit_positions[0])]
                             start = max(0, min(important_positions) - 15)
-                            post_exit_candles = 30
+                            post_exit_candles = 100
                             end = min(
                                 len(chart),
                                 max(max(important_positions) + 1, int(exit_positions[0]) + 1 + post_exit_candles),
@@ -701,13 +712,17 @@ if matching_result is not None:
                                 for position, labels in marker_labels.items()
                             ]
                             chart["Date"] = pd.to_datetime(chart["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
-                            x = {"field":"Index","type":"quantitative","scale":{"domain":[0, max(len(chart) - 1, 1)], "nice":False},"axis":{"title":"连续交易日（日期见悬停）"}}
-                            # The x axis is deliberately continuous so event
-                            # arrows retain their exact candle index.  Make the
-                            # bodies wider instead of changing that scale: it
-                            # reduces the distracting white gap between daily
-                            # candles without shifting any annotation.
-                            candle_size = max(7, min(15, round(1_500 / max(len(chart), 1))))
+                            # A tightly packed ordinal band gives each trading
+                            # day its own slot while removing the large visual
+                            # gaps of a quantitative x scale. Every layer
+                            # shares this band, so event arrows keep pointing
+                            # to their exact candle.
+                            x = {
+                                "field": "Index",
+                                "type": "ordinal",
+                                "scale": {"paddingInner": 0.06, "paddingOuter": 0.01},
+                                "axis": {"title": "连续交易日（日期见悬停）", "labels": False, "ticks": False},
+                            }
                             ohlc_tooltip = [
                                 {"field":"Date","type":"nominal","title":"日期"},
                                 {"field":"Open","type":"quantitative","title":"开盘","format":".4f"},
@@ -725,7 +740,22 @@ if matching_result is not None:
                             ]
                             annotation_style = event_annotation_style(st.context.theme.type)
                             event_color = annotation_style["color"]
-                            spec = {"vconcat":[{"height":360,"layer":[{"mark":"rule","encoding":{"x":x,"y":{"field":"Low","type":"quantitative","scale":{"zero":False}},"y2":{"field":"High"},"tooltip":ohlc_tooltip}},{"mark":{"type":"bar","size":candle_size},"encoding":{"x":x,"y":{"field":"Open","type":"quantitative","scale":{"zero":False}},"y2":{"field":"Close"},"color":{"condition":{"test":"datum.Close >= datum.Open","value":"#198754"},"value":"#d62728"},"tooltip":ohlc_tooltip}},{"transform":[{"fold":["MA5","MA10","MA20"],"as":["MA","Value"]}],"mark":{"type":"line"},"encoding":{"x":x,"y":{"field":"Value","type":"quantitative","scale":{"zero":False}},"color":{"field":"MA","type":"nominal"}}},{"data":{"values":markers},"mark":{"type":"rule","color":event_color,"strokeWidth":1.2},"encoding":{"x":{"field":"Index","type":"quantitative"},"y":{"field":"EventPrice","type":"quantitative"},"y2":{"field":"LabelPrice"},"tooltip":event_tooltip}},{"data":{"values":markers},"mark":{"type":"point","filled":True,"size":90,"color":event_color},"encoding":{"x":{"field":"Index","type":"quantitative"},"y":{"field":"EventPrice","type":"quantitative"},"tooltip":event_tooltip}},{"data":{"values":markers},"mark":{"type":"text","fontWeight":"bold","color":event_color},"encoding":{"x":{"field":"Index","type":"quantitative"},"y":{"field":"LabelPrice","type":"quantitative"},"text":{"field":"ShortLabel"},"tooltip":event_tooltip}}]},{"height":100,"mark":{"type":"bar","size":candle_size},"encoding":{"x":x,"y":{"field":"Volume","type":"quantitative"},"color":{"condition":{"test":"datum.Close >= datum.Open","value":"#198754"},"value":"#d62728"},"tooltip":ohlc_tooltip}}]}
+                            spec = {
+                                "vconcat": [
+                                    {
+                                        "height": 360,
+                                        "layer": [
+                                            {"mark": "rule", "encoding": {"x": x, "y": {"field": "Low", "type": "quantitative", "scale": {"zero": False}}, "y2": {"field": "High"}, "tooltip": ohlc_tooltip}},
+                                            {"mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Open", "type": "quantitative", "scale": {"zero": False}}, "y2": {"field": "Close"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
+                                            {"transform": [{"fold": ["MA5", "MA10", "MA20"], "as": ["MA", "Value"]}], "mark": {"type": "line"}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative", "scale": {"zero": False}}, "color": {"field": "MA", "type": "nominal"}}},
+                                            {"data": {"values": markers}, "mark": {"type": "rule", "color": event_color, "strokeWidth": 1.2}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "y2": {"field": "LabelPrice"}, "tooltip": event_tooltip}},
+                                            {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 90, "color": event_color}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "tooltip": event_tooltip}},
+                                            {"data": {"values": markers}, "mark": {"type": "text", "fontWeight": "bold", "color": event_color}, "encoding": {"x": x, "y": {"field": "LabelPrice", "type": "quantitative"}, "text": {"field": "ShortLabel"}, "tooltip": event_tooltip}},
+                                        ],
+                                    },
+                                    {"height": 100, "mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Volume", "type": "quantitative"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
+                                ],
+                            }
                             price_layers = spec["vconcat"][0]["layer"]
                             for layer in price_layers:
                                 y_encoding = layer["encoding"].get("y")
@@ -747,7 +777,7 @@ if matching_result is not None:
         else:
             st.warning("该分组没有生成已平仓交易。")
     else:
-        st.info("在左侧点击“运行当前组回测”后，这里会显示 KPI 概览、Top 100 和交易 K 线。")
+        st.info("在左侧点击“运行当前组回测”后，这里会显示 KPI 概览、全部标的和交易 K 线。")
     backtest_tab.__exit__(None, None, None)
 else:
     st.info("在左侧选择或输入策略，完成解释后即可查看策略与 DSL，并运行当前分组回测。")

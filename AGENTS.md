@@ -19,6 +19,7 @@
 
 - 用户说出暗号 **“bibu”** 时，才执行 `git commit` 和 `git push`。
 - 未出现暗号时，如任务需要提交，只执行 `git commit`，不要推送远端。
+- 执行 `bibu` 时，除代码与测试外，也提交 `config/saved_strategies.json` 与 `config/saved_backtest_results.json`；它们是 Streamlit Hosted 用于展示已保存策略和回测历史的公开产品数据。提交前仍须确认其中不含密钥、令牌或其他敏感信息。
 
 ## 重构质量门槛
 
