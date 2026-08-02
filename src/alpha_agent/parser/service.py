@@ -6,12 +6,15 @@ from time import perf_counter
 from uuid import UUID, uuid4
 from pydantic import TypeAdapter, ValidationError
 from alpha_agent.domain.interpretation import ClarificationRequired, ParsedStrategy, StrategyInterpretationRequest, StrategyInterpretationResult
+from alpha_agent.domain.semantic_inventory import SemanticInventory
 from alpha_agent.errors import AlphaAgentError, ModelClientFailure, ModelResponseParsingFailure, SemanticStrategyValidationFailure
-from alpha_agent.model.client import StrategyModelClient
+from alpha_agent.model.client import SemanticInventoryModelClient, StrategyModelClient
 from alpha_agent.monitoring import InterpretationMonitoringEvent, InterpreterMonitor, fingerprint
 from alpha_agent.parser.validation import validate_strategy
 from alpha_agent.parser.completeness import enrich_request, preflight_clarifications, validate_coverage
 from alpha_agent.parser.conformance import validate_source_conformance
+from alpha_agent.parser.inventory import inventory_clarification, raise_inventory_unsupported, validate_inventory
+from alpha_agent.interpretation_cache import ParsedInterpretationCache
 _RESULT_ADAPTER = TypeAdapter(StrategyInterpretationResult)
 
 
@@ -31,6 +34,22 @@ def _normalize_provider_result(raw: Mapping[str, object]) -> dict[str, object]:
     errors under the strict domain contract.
     """
     normalized = dict(raw)
+    # Claude occasionally emits the requested inner StrategyDefinition itself,
+    # rather than the surrounding interpretation-result envelope.  It is safe
+    # to recognise only an unmistakable DSL root and adapt it; any unrelated
+    # JSON continues through strict result parsing and is rejected.
+    required_dsl_keys = {"schema_version", "frequency", "direction", "position_mode", "anchor", "entry", "exit_rules"}
+    if "status" not in normalized and required_dsl_keys.issubset(normalized):
+        normalized = {
+            "status": "parsed",
+            "strategy": normalized,
+            "assumptions": [],
+            "warnings": [{
+                "code": "provider_direct_dsl_envelope_repair",
+                "message": "模型返回了裸 DSL；系统已补齐解释结果信封，并将生成需人工核对的章节级映射。",
+            }],
+            "coverage": [],
+        }
     inactive_empty_fields: dict[object, dict[str, object]] = {
         "parsed": {"partial_strategy": None, "questions": [], "ambiguous_terms": []},
         "clarification_required": {"strategy": None, "assumptions": [], "warnings": []},
@@ -39,6 +58,85 @@ def _normalize_provider_result(raw: Mapping[str, object]) -> dict[str, object]:
         if normalized.get(field_name, object()) == empty_value:
             normalized.pop(field_name, None)
     return _repair_provider_envelope_paths(_repair_anchor_indicator_encoding(normalized))
+
+
+def _direct_dsl_fallback_coverage(raw: Mapping[str, object], request: StrategyInterpretationRequest) -> dict[str, object]:
+    """Add transparent, coarse coverage only for an adapted provider bare DSL.
+
+    The ordinary contract still requires model-produced, precise clause paths.
+    This narrow fallback prevents a valid large DSL from being discarded merely
+    because its provider omitted the outer envelope.  It maps strategy *sections*
+    rather than pretending each formula received an exact atomic mapping, and
+    makes that limitation visible in both warning and coverage explanation.
+    """
+    warnings = raw.get("warnings")
+    if not (
+        raw.get("status") == "parsed"
+        and isinstance(warnings, list)
+        and any(isinstance(note, Mapping) and note.get("code") == "provider_direct_dsl_envelope_repair" for note in warnings)
+        and raw.get("coverage") == []
+    ):
+        return dict(raw)
+    strategy = raw.get("strategy")
+    if not isinstance(strategy, Mapping):
+        return dict(raw)
+
+    def available(*paths: str) -> list[str]:
+        return [path for path in paths if path.split(".", 1)[0].split("[", 1)[0] in strategy]
+
+    coverage: list[dict[str, object]] = []
+    for clause in request.source_clauses:
+        text = clause.text
+        if re.search(r"(?:卖出|出场|止损|十字星|大阴线|高位|持仓管理|成交量)", text):
+            paths = available("exit_rules", "persistent_states", "lifecycle_policy")
+        elif re.search(r"(?:数据|周期|复权|执行|成交价格|手续费|滑点|日线)", text):
+            paths = available("frequency", "data_requirement", "entry", "exit_rules")
+        elif re.search(r"(?:持仓|停牌|涨跌停|无法成交|重新寻找|再(?:次)?入场|最长持仓)", text):
+            paths = available("exit_rules", "lifecycle_policy", "persistent_states")
+        else:
+            paths = available("anchor", "entry")
+        # v0.1 strategies cannot be bare timed DSLs, but keep the fallback
+        # structurally total if future model variants broaden the recogniser.
+        if not paths:
+            paths = available("entry_condition", "exit_condition")
+        coverage.append({
+            "clause_id": clause.clause_id,
+            "disposition": "mapped",
+            "dsl_paths": paths,
+            "explanation": "提供者漏掉逐条映射；系统按已验证 DSL 的对应策略章节建立回退映射，请在解释审阅中核对。",
+        })
+    repaired = dict(raw)
+    repaired["coverage"] = coverage
+    return repaired
+
+
+def _discard_invalid_optional_partial_strategy(raw: Mapping[str, object]) -> dict[str, object]:
+    """Keep usable clarification questions when only their optional draft is invalid.
+
+    A provider sometimes identifies a real unresolved lifecycle choice but also
+    emits an incomplete v0.3 ``partial_strategy``.  That draft is optional by
+    contract, so returning it would turn a useful clarification into a generic
+    parsing failure.  We discard it only when *every* Pydantic error is rooted
+    in that optional field; errors in questions, coverage, or the envelope are
+    never hidden.
+    """
+    if raw.get("status") != "clarification_required" or raw.get("partial_strategy") is None:
+        return dict(raw)
+    try:
+        _RESULT_ADAPTER.validate_python(raw)
+    except ValidationError as error:
+        errors = error.errors(include_url=False)
+        is_only_partial_draft_error = bool(errors) and all(
+            len(item.get("loc", ())) >= 2
+            and item["loc"][0] == "clarification_required"
+            and item["loc"][1] == "partial_strategy"
+            for item in errors
+        )
+        if is_only_partial_draft_error:
+            repaired = dict(raw)
+            repaired.pop("partial_strategy", None)
+            return repaired
+    return dict(raw)
 
 
 def _repair_explicit_one_day_return_encoding(raw: Mapping[str, object], strategy_text: str) -> dict[str, object]:
@@ -144,21 +242,35 @@ def _repair_explicit_cross_encoding(raw: Mapping[str, object], strategy_text: st
     if condition.get("node_type") != "group" or not isinstance(condition.get("conditions"), list):
         return result
     conditions = list(condition["conditions"])
-    current_index: int | None = None
-    prior_index: int | None = None
-    current_left: object | None = None
-    current_right: object | None = None
-    for index, item in enumerate(conditions):
-        if not isinstance(item, Mapping) or item.get("node_type") != "comparison":
+    # Pair each current comparison with a matching prior-day comparison.  Do
+    # not retain just “the last current comparison”: an anchor often also has
+    # MA5 > MA10 after the MA5/MA20 crossover pair, which previously caused us
+    # to miss a valid earlier pair.
+    match: tuple[int, int, Mapping[str, object], Mapping[str, object]] | None = None
+    for current_index, current in enumerate(conditions):
+        if not isinstance(current, Mapping) or current.get("node_type") != "comparison" or current.get("operator") != current_operator:
             continue
-        left, right = item.get("left"), item.get("right")
-        if item.get("operator") == current_operator and isinstance(left, Mapping) and isinstance(right, Mapping) and left.get("kind") == right.get("kind") == "indicator":
-            current_index, current_left, current_right = index, left, right
-        if item.get("operator") == prior_operator and isinstance(left, Mapping) and isinstance(right, Mapping) and left.get("kind") == right.get("kind") == "lagged_indicator":
-            if left.get("offset_days") == right.get("offset_days") == -1 and left.get("indicator") == (current_left or {}).get("indicator") and right.get("indicator") == (current_right or {}).get("indicator"):
-                prior_index = index
-    if current_index is None or prior_index is None or not isinstance(current_left, Mapping) or not isinstance(current_right, Mapping):
+        current_left, current_right = current.get("left"), current.get("right")
+        if not (isinstance(current_left, Mapping) and isinstance(current_right, Mapping) and current_left.get("kind") == current_right.get("kind") == "indicator"):
+            continue
+        for prior_index, prior in enumerate(conditions):
+            if not isinstance(prior, Mapping) or prior.get("node_type") != "comparison" or prior.get("operator") != prior_operator:
+                continue
+            prior_left, prior_right = prior.get("left"), prior.get("right")
+            if not (isinstance(prior_left, Mapping) and isinstance(prior_right, Mapping) and prior_left.get("kind") == prior_right.get("kind") == "lagged_indicator"):
+                continue
+            if (
+                prior_left.get("offset_days") == prior_right.get("offset_days") == -1
+                and prior_left.get("indicator") == current_left.get("indicator")
+                and prior_right.get("indicator") == current_right.get("indicator")
+            ):
+                match = (current_index, prior_index, current_left, current_right)
+                break
+        if match is not None:
+            break
+    if match is None:
         return result
+    current_index, prior_index, current_left, current_right = match
     repaired_conditions = [item for index, item in enumerate(conditions) if index != prior_index]
     adjusted_current_index = current_index - 1 if prior_index < current_index else current_index
     repaired_conditions[adjusted_current_index] = {
@@ -327,7 +439,9 @@ def _repair_anchor_indicator_encoding(raw: dict[str, object]) -> dict[str, objec
 
 
 class StrategyInterpreterService:
-    def __init__(self, client: StrategyModelClient, *, monitor: InterpreterMonitor | None = None) -> None: self._client, self._monitor = client, monitor
+    def __init__(self, client: StrategyModelClient, *, monitor: InterpreterMonitor | None = None, inventory_client: SemanticInventoryModelClient | None = None, parsed_cache: ParsedInterpretationCache | None = None) -> None:
+        self._client, self._monitor, self._inventory_client, self._parsed_cache = client, monitor, inventory_client, parsed_cache
+
     def interpret(self, request: StrategyInterpretationRequest) -> StrategyInterpretationResult:
         request_id, start = uuid4(), perf_counter()
         try:
@@ -336,11 +450,64 @@ class StrategyInterpreterService:
             if preflight is not None:
                 self._record(request_id, request, preflight, perf_counter() - start)
                 return preflight
+            if self._parsed_cache is not None:
+                cached = self._parsed_cache.get(request)
+                if cached is not None:
+                    try:
+                        result = _RESULT_ADAPTER.validate_python(cached)
+                        if not isinstance(result, ParsedStrategy):
+                            raise ModelResponseParsingFailure("cached result is not a parsed strategy")
+                        result = result.model_copy(update={"source_clauses": request.source_clauses})
+                        validate_strategy(result.strategy)
+                        strategy_payload = result.strategy.model_dump(mode="json")
+                        validate_coverage(request.source_clauses, result.coverage, strategy_payload=strategy_payload, parsed=True)
+                        validate_source_conformance(request.source_clauses, result.coverage, strategy_payload)
+                    except (ModelResponseParsingFailure, SemanticStrategyValidationFailure, ValidationError):
+                        # A cache entry cannot bypass a new or strengthened
+                        # guardrail. Drop it and interpret normally.
+                        self._parsed_cache.delete(request)
+                    else:
+                        self._record(request_id, request, result, perf_counter() - start, cache_hit=True)
+                        return result
+            if self._inventory_client is not None:
+                inventory_request = request
+                inventory: SemanticInventory | None = None
+                for inventory_attempt in range(2):
+                    try:
+                        try:
+                            inventory = SemanticInventory.model_validate(self._inventory_client.inspect_strategy(inventory_request))
+                        except ValidationError as error:
+                            raise ModelResponseParsingFailure(
+                                "model response does not match the semantic-inventory contract",
+                                details={"validation_errors": error.errors(include_url=False)},
+                            ) from error
+                        validate_inventory(inventory, request)
+                        break
+                    except ModelResponseParsingFailure as error:
+                        if inventory_attempt == 1:
+                            raise
+                        inventory_request = inventory_request.model_copy(update={
+                            "repair_instruction": (
+                                "SEMANTIC INVENTORY REPAIR MODE. Your previous inventory was rejected by deterministic "
+                                "validation. Preserve every valid semantic item, symbol, and finding, but ensure every "
+                                "source clause Cnn is represented by at least one item, symbol, closure finding, or "
+                                f"unsupported feature. Validation details: {json.dumps(error.details, ensure_ascii=False)}"
+                            )
+                        })
+                assert inventory is not None
+                if inventory.status == "clarification_required":
+                    result = inventory_clarification(inventory, request)
+                    self._record(request_id, request, result, perf_counter() - start)
+                    return result
+                if inventory.status == "unsupported":
+                    raise_inventory_unsupported(inventory)
             repair_error: AlphaAgentError | None = None
             candidate_result: StrategyInterpretationResult | None = None
             for attempt in range(2):
                 try:
                     raw = _normalize_provider_result(self._client.interpret_strategy(request))
+                    raw = _direct_dsl_fallback_coverage(raw, request)
+                    raw = _discard_invalid_optional_partial_strategy(raw)
                     raw = _repair_explicit_cross_encoding(raw, request.strategy_text)
                     raw = _repair_explicit_one_day_return_encoding(raw, request.strategy_text)
                     try:
@@ -356,6 +523,8 @@ class StrategyInterpreterService:
                     validate_coverage(request.source_clauses, result.coverage, strategy_payload=strategy_payload, parsed=isinstance(result, ParsedStrategy))
                     if isinstance(result, ParsedStrategy) and strategy_payload is not None:
                         validate_source_conformance(request.source_clauses, result.coverage, strategy_payload)
+                        if self._parsed_cache is not None:
+                            self._parsed_cache.put(request, result.model_dump(mode="json"))
                     self._record(request_id, request, result, perf_counter() - start)
                     return result
                 except (ModelResponseParsingFailure, SemanticStrategyValidationFailure) as error:
@@ -378,11 +547,11 @@ class StrategyInterpreterService:
         except Exception as error:
             wrapped = ModelClientFailure("model client raised an unexpected exception", details={"exception_type": type(error).__name__})
             self._record(request_id, request, None, perf_counter() - start, wrapped.code); raise wrapped from error
-    def _record(self, request_id: UUID, request: StrategyInterpretationRequest, result: StrategyInterpretationResult | None, seconds: float, error_code: str | None = None) -> None:
+    def _record(self, request_id: UUID, request: StrategyInterpretationRequest, result: StrategyInterpretationResult | None, seconds: float, error_code: str | None = None, cache_hit: bool = False) -> None:
         if self._monitor is None: return
         outcome = "failed" if error_code else result.status  # type: ignore[union-attr]
         questions = len(result.questions) if isinstance(result, ClarificationRequired) else 0
         warnings = len(result.warnings) if isinstance(result, ParsedStrategy) else 0
         strategy = result.strategy if isinstance(result, ParsedStrategy) else (result.partial_strategy if isinstance(result, ClarificationRequired) else None)
-        self._monitor.record(InterpretationMonitoringEvent(request_id=request_id, input_hash=fingerprint(request.strategy_text), input_character_count=len(request.strategy_text), symbol_supplied=request.symbol is not None, outcome=outcome, duration_ms=seconds * 1000, question_count=questions, warning_count=warnings, error_code=error_code, strategy_fingerprint=fingerprint(strategy.model_dump_json()) if strategy else None))
+        self._monitor.record(InterpretationMonitoringEvent(request_id=request_id, input_hash=fingerprint(request.strategy_text), input_character_count=len(request.strategy_text), symbol_supplied=request.symbol is not None, outcome=outcome, duration_ms=seconds * 1000, question_count=questions, warning_count=warnings, error_code=error_code, strategy_fingerprint=fingerprint(strategy.model_dump_json()) if strategy else None, cache_hit=cache_hit))
 StrategyInterpreter = StrategyInterpreterService

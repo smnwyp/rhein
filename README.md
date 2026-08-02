@@ -43,9 +43,16 @@ calling the provider.
 
 `StrategyInterpreterService` takes a typed `StrategyInterpretationRequest` and delegates to the provider-independent `StrategyModelClient` protocol. Provider adapters return JSON-compatible data only. The service then performs:
 
-1. Pydantic schema/discriminated-union parsing.
-2. Deterministic semantic validation, including operand compatibility, RSI ranges, non-empty groups, cross operand types, and indicator field constraints.
-3. Typed errors for client failure, malformed model output, invalid schema, unsupported features, and semantic violations.
+1. For complex requests, a compact Semantic Inventory phase that records source-grounded symbols, atomic requirements, closure dimensions, and required capabilities.
+2. Pydantic schema/discriminated-union parsing of the final DSL only after the inventory is compile-eligible.
+3. Deterministic semantic validation, including operand compatibility, RSI ranges, non-empty groups, cross operand types, and indicator field constraints.
+4. Typed errors for client failure, malformed model output, invalid schema, unsupported features, and semantic violations.
+
+The inventory distinguishes unresolved user intent from clear-but-unsupported
+requirements. It can therefore return a targeted clarification or a typed
+unsupported-feature result before asking a model to produce the much larger,
+recursive final DSL. It is not an execution plan and cannot calculate a KPI or
+trade result.
 
 `FakeModelClient` queues structured responses or exceptions, so tests require no real external model.
 

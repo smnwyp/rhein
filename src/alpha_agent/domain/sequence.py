@@ -86,8 +86,16 @@ class EntryRunningMaximumOperand(DSLModel):
     tie_break: Literal["earliest", "latest"] = "earliest"
 
 
+class AnchorRunningVolumeRankOperand(DSLModel):
+    """Competition rank of today's volume from t0 through today (ties share rank)."""
+
+    kind: Literal["anchor_running_volume_rank"]
+    anchor: Literal["t0"]
+    field: Literal["volume"]
+
+
 TemporalOperand = Annotated[
-    CurrentMarketOperand | CurrentIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand,
+    CurrentMarketOperand | CurrentIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand | AnchorRunningVolumeRankOperand,
     Field(discriminator="kind"),
 ]
 TemporalSeriesOperand = Annotated[
@@ -192,7 +200,13 @@ class EntryBranch(DSLModel):
 
 
 class EntryRule(DSLModel):
-    """Either one fixed entry or explicit conditional entry-day branches."""
+    """Either one fixed entry or explicit conditional entry-day branches.
+
+    A fixed entry on t0 can rely entirely on the already-validated anchor
+    condition.  In that common case ``condition`` is intentionally absent:
+    requiring the model to duplicate every C-point predicate in two different
+    condition languages is both redundant and a source of semantic drift.
+    """
 
     mode: Literal["fixed", "conditional"] = "fixed"
     active_day: RelativeDayRange | None = None
@@ -203,8 +217,8 @@ class EntryRule(DSLModel):
     @model_validator(mode="after")
     def entry_must_be_one_day(self) -> "EntryRule":
         if self.mode == "fixed":
-            if self.active_day is None or self.condition is None or self.branches is not None:
-                raise ValueError("fixed entry requires active_day and condition only")
+            if self.active_day is None or self.branches is not None:
+                raise ValueError("fixed entry requires active_day and cannot define branches")
             if self.active_day.end_offset_days != self.active_day.start_offset_days:
                 raise ValueError("entry active_day must name exactly one relative day")
         else:
@@ -222,6 +236,16 @@ class EntryPriceTrigger(DSLModel):
     operator: Literal["less_than_or_equal", "greater_than_or_equal"]
 
 
+class PersistentStateDefinition(DSLModel):
+    """A state that becomes true once and remains true until the position exits."""
+
+    state_id: str = Field(min_length=1)
+    active_days: RelativeDayRange
+    relative_to: Literal["anchor", "entry"] = "anchor"
+    activate_when: TemporalCondition
+    reset_on: Literal["position_exit"] = "position_exit"
+
+
 class ExitRule(DSLModel):
     rule_id: str = Field(min_length=1)
     priority: int = Field(gt=0)
@@ -231,9 +255,13 @@ class ExitRule(DSLModel):
     condition: TemporalCondition | None = None
     price_trigger: EntryPriceTrigger | None = None
     execution: Literal["close", "intraday"]
+    requires_state: str | None = None
+    forbids_state: str | None = None
 
     @model_validator(mode="after")
     def validate_kind_payload(self) -> "ExitRule":
+        if self.requires_state is not None and self.forbids_state is not None:
+            raise ValueError("an exit rule cannot both require and forbid a state")
         if self.kind == "close_condition" and (self.condition is None or self.price_trigger is not None or self.execution != "close"):
             raise ValueError("close_condition requires condition only and close execution")
         if self.kind == "intraday_price_trigger" and (self.price_trigger is None or self.condition is not None or self.execution != "intraday"):
@@ -261,12 +289,21 @@ class TimedStrategyDefinition(DSLModel):
     anchor: AnchorDefinition
     entry: EntryRule
     exit_rules: list[ExitRule] = Field(min_length=1)
+    persistent_states: list[PersistentStateDefinition] = Field(default_factory=list)
     lifecycle_policy: StrategyLifecyclePolicy | None = None
 
     @model_validator(mode="after")
     def validate_exit_rules(self) -> "TimedStrategyDefinition":
         if len({rule.rule_id for rule in self.exit_rules}) != len(self.exit_rules):
             raise ValueError("exit rule IDs must be unique")
+        state_ids = {state.state_id for state in self.persistent_states}
+        if len(state_ids) != len(self.persistent_states):
+            raise ValueError("persistent state IDs must be unique")
+        for rule in self.exit_rules:
+            if rule.requires_state is not None and rule.requires_state not in state_ids:
+                raise ValueError("exit rule requires an unknown persistent state")
+            if rule.forbids_state is not None and rule.forbids_state not in state_ids:
+                raise ValueError("exit rule forbids an unknown persistent state")
         for left_index, left_rule in enumerate(self.exit_rules):
             for right_rule in self.exit_rules[left_index + 1:]:
                 if left_rule.priority != right_rule.priority:

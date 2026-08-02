@@ -2,57 +2,136 @@
 import json
 import os
 from collections.abc import Mapping
-from typing import Any
+from time import sleep as default_sleep
+from typing import Any, Callable
 from urllib.parse import quote
 
 import requests
 
 from alpha_agent.domain.interpretation import ModelInterpretationEnvelope, StrategyInterpretationRequest
 from alpha_agent.errors import ModelClientFailure
-from alpha_agent.parser.prompts import SYSTEM_PROMPT, user_prompt
+from alpha_agent.parser.prompts import SYSTEM_PROMPT, inventory_system_instruction, inventory_user_prompt, user_prompt
 
 
 class BedrockStrategyModelClient:
-    def __init__(self, *, model: str = "us.anthropic.claude-sonnet-4-6", region: str = "us-east-1", api_key: str | None = None, session: requests.Session | None = None, max_tokens: int = 8192, timeout_seconds: int = 180) -> None:
+    def __init__(self, *, model: str = "us.anthropic.claude-sonnet-4-6", region: str = "us-east-1", api_key: str | None = None, session: requests.Session | None = None, max_tokens: int = 8192, timeout_seconds: int = 180, transient_retry_attempts: int = 1, retry_backoff_seconds: float = 0.75, sleep: Callable[[float], None] = default_sleep) -> None:
+        if transient_retry_attempts < 0:
+            raise ValueError("transient_retry_attempts must be non-negative")
+        if retry_backoff_seconds < 0:
+            raise ValueError("retry_backoff_seconds must be non-negative")
         self._model, self._region = model, region
         self._api_key = api_key or os.getenv("AWS_BEARER_TOKEN_BEDROCK")
         self._session = session or requests.Session()
         self._max_tokens = max_tokens
+        # Inventory responses are deliberately compact by contract, but a
+        # complex strategy can still need more than 4k output tokens.  Use the
+        # same bounded ceiling as the final response; providers charge actual
+        # generated tokens, not this unused headroom.
+        self._inventory_max_tokens = min(max_tokens, 8192)
         self._timeout_seconds = timeout_seconds
+        self._transient_retry_attempts = transient_retry_attempts
+        self._retry_backoff_seconds = retry_backoff_seconds
+        self._sleep = sleep
 
     def interpret_strategy(self, request: StrategyInterpretationRequest) -> Mapping[str, Any]:
         if not self._api_key:
             raise ModelClientFailure("Bedrock API key is missing", details={"required_env": "AWS_BEARER_TOKEN_BEDROCK"})
-        url = f"https://bedrock-runtime.{self._region}.amazonaws.com/model/{quote(self._model, safe='.:_-')}/converse"
-        payload = {
-            "system": [{"text": self._system_instruction()}],
-            "messages": [{"role": "user", "content": [{"text": user_prompt(request)}]}],
-            # A timed DSL plus one source-coverage item per original clause can
-            # exceed 4k tokens.  A truncation is worse than a larger upper bound:
-            # it costs a full failed request and cannot be safely recovered.
-            "inferenceConfig": {"maxTokens": self._max_tokens, "temperature": 0},
-            "outputConfig": {
-                "textFormat": {
-                    "type": "json_schema",
-                    "structure": {
-                        "jsonSchema": {
-                            "name": "strategy_interpretation",
-                            "description": "A StrategyInterpretationResult conforming to the supplied schema.",
-                            "schema": json.dumps(_bedrock_transport_schema(), ensure_ascii=False, separators=(",", ":")),
-                        }
-                    },
-                }
-            },
+        for format_attempt in range(2):
+            attempt_request = request if format_attempt == 0 else self._format_retry_request(request)
+            payload = {
+                "system": [{"text": self._system_instruction()}],
+                "messages": [{"role": "user", "content": [{"text": user_prompt(attempt_request)}]}],
+                # A timed DSL plus one source-coverage item per original clause can
+                # exceed 4k tokens.  A truncation is worse than a larger upper bound:
+                # it costs a full failed request and cannot be safely recovered.
+                "inferenceConfig": {"maxTokens": self._max_tokens, "temperature": 0},
+                "outputConfig": {"textFormat": {"type": "json_schema", "structure": {"jsonSchema": {
+                    "name": "strategy_interpretation",
+                    "description": "A StrategyInterpretationResult conforming to the supplied schema.",
+                    "schema": json.dumps(_bedrock_transport_schema(), ensure_ascii=False, separators=(",", ":")),
+                }}}},
+            }
+            try:
+                return self._extract_interpretation(self._post_payload(payload))
+            except ModelClientFailure as error:
+                if format_attempt == 0 and self._is_format_failure(error):
+                    continue
+                raise
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                raise ModelClientFailure("Bedrock returned invalid structured output", details={"exception_type": type(error).__name__, "model": self._model}) from error
+        raise AssertionError("unreachable")
+
+    def inspect_strategy(self, request: StrategyInterpretationRequest) -> Mapping[str, Any]:
+        """Run the compact semantic-inventory phase before recursive DSL lowering."""
+        if not self._api_key:
+            raise ModelClientFailure("Bedrock API key is missing", details={"required_env": "AWS_BEARER_TOKEN_BEDROCK"})
+        for format_attempt in range(2):
+            attempt_request = request if format_attempt == 0 else self._format_retry_request(request)
+            payload = {
+                "system": [{"text": inventory_system_instruction()}],
+                "messages": [{"role": "user", "content": [{"text": inventory_user_prompt(attempt_request)}]}],
+                "inferenceConfig": {"maxTokens": self._inventory_max_tokens, "temperature": 0},
+                "outputConfig": {"textFormat": {"type": "json_schema", "structure": {"jsonSchema": {
+                    "name": "semantic_inventory",
+                    "description": "A SemanticInventory conforming to the supplied schema.",
+                    "schema": json.dumps(_bedrock_string_transport_schema("inventory_json"), ensure_ascii=False, separators=(",", ":")),
+                }}}},
+            }
+            try:
+                return self._extract_string_envelope(self._post_payload(payload), "inventory_json", "semantic inventory")
+            except ModelClientFailure as error:
+                if format_attempt == 0 and self._is_format_failure(error):
+                    continue
+                raise
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                raise ModelClientFailure("Bedrock returned invalid structured output", details={"exception_type": type(error).__name__, "model": self._model}) from error
+        raise AssertionError("unreachable")
+
+    @staticmethod
+    def _format_retry_request(request: StrategyInterpretationRequest) -> StrategyInterpretationRequest:
+        instruction = (
+            "FORMAT-ONLY RETRY: your prior response could not be parsed. Preserve the original strategy meaning, "
+            "but return exactly the requested JSON object with double-quoted keys and values. "
+            "Do not use Markdown fences, explanation, or any text before or after the JSON."
+        )
+        combined = f"{request.repair_instruction}\n{instruction}" if request.repair_instruction else instruction
+        return request.model_copy(update={"repair_instruction": combined})
+
+    @staticmethod
+    def _is_format_failure(error: ModelClientFailure) -> bool:
+        return error.message in {
+            "Bedrock returned malformed JSON for the strategy interpretation",
+            "Bedrock did not return a usable strategy interpretation",
+            "Bedrock returned an invalid semantic inventory envelope",
+            "Bedrock did not return a usable semantic inventory",
         }
-        try:
-            response = self._session.post(url, json=payload, headers={"Content-Type": "application/json", "Authorization": f"Bearer {self._api_key}"}, timeout=self._timeout_seconds)
-            response.raise_for_status()
-            return self._extract_interpretation(response.json())
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-            raise ModelClientFailure("Bedrock returned invalid structured output", details={"exception_type": type(error).__name__, "model": self._model}) from error
-        except requests.RequestException as error:
-            provider_message = error.response.text if error.response is not None else str(error)
-            raise ModelClientFailure("Bedrock strategy interpretation request failed", details={"exception_type": type(error).__name__, "http_status": getattr(error.response, "status_code", None), "provider_message": provider_message, "model": self._model, "region": self._region, "timeout_seconds": self._timeout_seconds}) from error
+
+    def _post_payload(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        url = f"https://bedrock-runtime.{self._region}.amazonaws.com/model/{quote(self._model, safe='.:_-')}/converse"
+        for attempt in range(self._transient_retry_attempts + 1):
+            try:
+                response = self._session.post(url, json=payload, headers={"Content-Type": "application/json", "Authorization": f"Bearer {self._api_key}"}, timeout=self._timeout_seconds)
+                response.raise_for_status()
+                response_payload = response.json()
+                if not isinstance(response_payload, Mapping):
+                    raise ModelClientFailure("Bedrock returned an unexpected response envelope", details={"model": self._model, "response_type": type(response_payload).__name__})
+                return response_payload
+            except (requests.ConnectionError, requests.Timeout) as error:
+                if attempt < self._transient_retry_attempts:
+                    self._sleep(self._retry_backoff_seconds * (2 ** attempt))
+                    continue
+                provider_message = error.response.text if error.response is not None else str(error)
+                raise ModelClientFailure(
+                    "Bedrock transient connection failed after bounded retry",
+                    details={
+                        "exception_type": type(error).__name__, "http_status": getattr(error.response, "status_code", None),
+                        "provider_message": provider_message, "model": self._model, "region": self._region,
+                        "timeout_seconds": self._timeout_seconds, "attempts": attempt + 1, "retryable": True,
+                    },
+                ) from error
+            except requests.RequestException as error:
+                provider_message = error.response.text if error.response is not None else str(error)
+                raise ModelClientFailure("Bedrock strategy interpretation request failed", details={"exception_type": type(error).__name__, "http_status": getattr(error.response, "status_code", None), "provider_message": provider_message, "model": self._model, "region": self._region, "timeout_seconds": self._timeout_seconds}) from error
 
     def _extract_interpretation(self, response_payload: object) -> Mapping[str, Any]:
         """Read raw JSON text, while retaining compatibility with old tool output.
@@ -115,6 +194,24 @@ class BedrockStrategyModelClient:
             ) from parse_error
         raise ModelClientFailure("Bedrock did not return a usable strategy interpretation", details=self._response_shape(response_payload, content))
 
+    def _extract_string_envelope(self, response_payload: Mapping[str, Any], field_name: str, purpose: str) -> Mapping[str, Any]:
+        """Extract a compact structured response whose inner object is a JSON string."""
+        output = response_payload.get("output")
+        message = output.get("message") if isinstance(output, Mapping) else None
+        content = message.get("content") if isinstance(message, Mapping) else None
+        if not isinstance(content, list):
+            raise ModelClientFailure(f"Bedrock returned an unexpected {purpose} envelope", details=self._response_shape(response_payload))
+        text = "\n".join(item["text"] for item in content if isinstance(item, Mapping) and isinstance(item.get("text"), str))
+        if response_payload.get("stopReason") == "max_tokens":
+            raise ModelClientFailure(f"Bedrock truncated the {purpose}", details={**self._response_shape(response_payload, content), "configured_max_tokens": self._inventory_max_tokens})
+        if not text:
+            raise ModelClientFailure(f"Bedrock did not return a usable {purpose}", details=self._response_shape(response_payload, content))
+        envelope = self._parse_json_object(text)
+        inner = envelope.get(field_name)
+        if not isinstance(inner, str):
+            raise ModelClientFailure(f"Bedrock returned an invalid {purpose} envelope", details=self._response_shape(response_payload, content))
+        return self._parse_json_object(inner)
+
     def _response_shape(self, payload: Mapping[str, Any], content: list[object] | None = None) -> dict[str, object]:
         """Diagnostic metadata only; never return a raw model response to the UI."""
         blocks = content
@@ -123,11 +220,16 @@ class BedrockStrategyModelClient:
             message = output.get("message") if isinstance(output, Mapping) else None
             candidate = message.get("content") if isinstance(message, Mapping) else None
             blocks = candidate if isinstance(candidate, list) else []
+        text_blocks = [item.get("text") for item in blocks if isinstance(item, Mapping) and isinstance(item.get("text"), str)]
         return {
             "model": self._model,
             "response_keys": sorted(str(key) for key in payload),
             "content_block_kinds": [sorted(str(key) for key in item) if isinstance(item, Mapping) else type(item).__name__ for item in blocks],
             "stop_reason": payload.get("stopReason"),
+            # Diagnostics intentionally describe structure only: provider text
+            # may contain private strategy prose and must not be echoed into UI.
+            "text_block_character_counts": [len(text) for text in text_blocks],
+            "text_blocks_start_with_json": [text.lstrip().startswith(("{", "[")) for text in text_blocks],
         }
 
     @staticmethod
@@ -150,12 +252,25 @@ class BedrockStrategyModelClient:
             if cleaned.rstrip().endswith("```"):
                 cleaned = cleaned.rstrip()[:-3].strip()
         try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            start, end = cleaned.find("{"), cleaned.rfind("}")
-            if start < 0 or end <= start:
-                raise
-            return json.loads(cleaned[start:end + 1])
+            parsed = json.loads(cleaned)
+            if not isinstance(parsed, Mapping):
+                raise TypeError("expected JSON object")
+            return parsed
+        except json.JSONDecodeError as original_error:
+            # Providers occasionally add one prose sentence before/after an
+            # otherwise complete JSON object.  ``raw_decode`` locates a full
+            # object without the fragile first-{ / last-} slicing approach.
+            decoder = json.JSONDecoder()
+            for offset, character in enumerate(cleaned):
+                if character != "{":
+                    continue
+                try:
+                    parsed, _ = decoder.raw_decode(cleaned[offset:])
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, Mapping):
+                    return parsed
+            raise original_error
 
 
 def _bedrock_transport_schema() -> dict[str, Any]:
@@ -164,9 +279,13 @@ def _bedrock_transport_schema() -> dict[str, Any]:
     The embedded value is parsed immediately against the full recursive
     Pydantic contract, so this transport envelope never weakens DSL guards.
     """
+    return _bedrock_string_transport_schema("interpretation_json")
+
+
+def _bedrock_string_transport_schema(field_name: str) -> dict[str, Any]:
     return {
         "type": "object",
-        "properties": {"interpretation_json": {"type": "string"}},
-        "required": ["interpretation_json"],
+        "properties": {field_name: {"type": "string"}},
+        "required": [field_name],
         "additionalProperties": False,
     }

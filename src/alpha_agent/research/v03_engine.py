@@ -10,7 +10,7 @@ from alpha_agent.domain.conditions import ComparisonCondition, Condition, Condit
 from alpha_agent.domain.indicators import EMA, RSI, RollingMeanVolume, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
-    AnchorIndicatorChangeConstraint, AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand,
+    AnchorIndicatorChangeConstraint, AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand,
     CandlestickPatternCondition, CurrentIndicatorOperand, CurrentMarketOperand, EntryPriceOperand,
     EntryRunningMaximumOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingLowAnchorConstraint,
     ScaledEntryPriceOperand, TemporalComparisonCondition,
@@ -143,6 +143,14 @@ def _temporal_operand(df: pd.DataFrame, operand: TemporalOperand, *, index: int,
     if isinstance(operand, EntryRunningMaximumOperand):
         start = anchor_index if entry_index is None else entry_index
         return float(df["Volume"].iloc[start:index + 1].max())
+    if isinstance(operand, AnchorRunningVolumeRankOperand):
+        current = float(df["Volume"].iloc[index])
+        values = df["Volume"].iloc[anchor_index:index + 1].to_numpy(dtype=float)
+        if not np.isfinite(current) or not np.isfinite(values).all():
+            return float("nan")
+        # Competition rank: 100, 100, 90 are ranks 1, 1, 3. Thus an equal
+        # maximum or second-highest volume satisfies rank <= 2 as specified.
+        return float(1 + np.count_nonzero(values > current))
     raise UnsupportedStrategyFeature("v0.3 daily engine cannot evaluate this temporal operand")
 
 
@@ -245,10 +253,17 @@ def _rule_active(rule: ExitRule, relative_day: int) -> bool:
     return relative_day >= rule.active_days.start_offset_days and (rule.active_days.end_offset_days is None or relative_day <= rule.active_days.end_offset_days)
 
 
+def _state_active(state, *, anchor_index: int, entry_index: int, day: int) -> bool:
+    relative_day = day - (entry_index if state.relative_to == "entry" else anchor_index)
+    return relative_day >= state.active_days.start_offset_days and (
+        state.active_days.end_offset_days is None or relative_day <= state.active_days.end_offset_days
+    )
+
+
 def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_index: int) -> tuple[int, float] | None:
     """Resolve fixed or conditional E-day entry without guessing a branch."""
     if strategy.entry.mode == "fixed":
-        assert strategy.entry.active_day is not None and strategy.entry.condition is not None
+        assert strategy.entry.active_day is not None
         candidates = [(strategy.entry.active_day.start_offset_days, strategy.entry.condition)]
     else:
         assert strategy.entry.branches is not None
@@ -258,7 +273,9 @@ def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_i
         if entry_index >= len(df):
             continue
         entry_price = float(df["Close"].iloc[entry_index])
-        if _temporal_condition(df, condition, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price):
+        # An omitted fixed-entry condition means “enter whenever the anchor
+        # qualifies”. It is not a permissive fallback for branch entries.
+        if condition is None or _temporal_condition(df, condition, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price):
             return entry_index, entry_price
     return None
 
@@ -288,11 +305,23 @@ def run_v03_backtest(df: pd.DataFrame, *, strategy: TimedStrategyDefinition, cap
             continue
         entry_index, entry_price = resolved_entry
         exit_index, reason = None, None
+        state_values = {state.state_id: False for state in strategy.persistent_states}
         for day in range(entry_index + 1, n):
+            # State transitions happen before exits, so a state entered today
+            # can intentionally activate an exit rule on the same close.
+            for state in strategy.persistent_states:
+                if state_values[state.state_id] or not _state_active(state, anchor_index=index, entry_index=entry_index, day=day):
+                    continue
+                state_values[state.state_id] = _temporal_condition(
+                    df, state.activate_when, index=day, anchor_index=index,
+                    entry_index=entry_index, entry_price=entry_price,
+                )
             matching = [
                 rule
                 for rule in strategy.exit_rules
                 if _rule_active(rule, day - (entry_index if rule.relative_to == "entry" else index))
+                and (rule.requires_state is None or state_values[rule.requires_state])
+                and (rule.forbids_state is None or not state_values[rule.forbids_state])
                 and rule.condition is not None
                 and _temporal_condition(df, rule.condition, index=day, anchor_index=index, entry_index=entry_index, entry_price=entry_price)
             ]

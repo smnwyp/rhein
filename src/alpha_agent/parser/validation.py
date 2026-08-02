@@ -54,13 +54,14 @@ def validate_strategy(strategy: AnyStrategyDefinition) -> None:
     if isinstance(strategy, TimedStrategyDefinition):
         issues: list[dict[str, str]] = []
         if strategy.entry.mode == "fixed":
-            assert strategy.entry.condition is not None and strategy.entry.active_day is not None
-            _walk_timed_condition(
-                strategy.entry.condition,
-                "entry.condition",
-                issues,
-                evaluated_on_anchor_day=strategy.entry.active_day.start_offset_days == 0,
-            )
+            assert strategy.entry.active_day is not None
+            if strategy.entry.condition is not None:
+                _walk_timed_condition(
+                    strategy.entry.condition,
+                    "entry.condition",
+                    issues,
+                    evaluated_on_anchor_day=strategy.entry.active_day.start_offset_days == 0,
+                )
         else:
             assert strategy.entry.branches is not None
             for index, branch in enumerate(strategy.entry.branches):

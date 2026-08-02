@@ -108,7 +108,11 @@ def preflight_clarifications(request: StrategyInterpretationRequest) -> Clarific
             answer_kind="choice",
         ))
         ambiguous.append("较 t0-2 至少高 0.01%")
-    if re.search(r"样本结束.*未平仓", text) and not _answered(request, "sample_end_open_position"):
+    # “No maximum holding period” leaves a position potentially open at the
+    # end of a finite backtest just as explicitly as a direct sample-end
+    # sentence does.  Ask this locally rather than spending a model request on
+    # a lifecycle gap no DSL compiler can safely invent.
+    if (re.search(r"样本结束.*未平仓", text) or re.search(r"不设置最长持仓(?:时间|期)?", text)) and not _answered(request, "sample_end_open_position"):
         questions.append(ClarificationQuestion(
             question_id="sample_end_open_position",
             question="样本结束时仍未平仓的头寸如何处理？",

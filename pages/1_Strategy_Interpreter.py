@@ -24,6 +24,7 @@ from alpha_agent.parser.review import build_review_items
 from alpha_agent.parser.completeness import segment_source_clauses
 from alpha_agent.parser.mock_timeline import build_mock_candle_timeline
 from alpha_agent.parser.service import StrategyInterpreterService
+from alpha_agent.interpretation_cache import JsonParsedInterpretationCache
 from alpha_agent.strategy_library import JsonStrategyLibrary, SavedStrategy, StrategyLibraryError
 from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHistory, SavedBacktestRun, dataframe_records, recalculated_trade_level_kpis, strategy_fingerprint
 from alpha_agent.domain.sequence import TimedStrategyDefinition
@@ -43,6 +44,9 @@ load_dotenv(ROOT / ".env", override=True)
 st.set_page_config(page_title="自然语言策略解释器", layout="wide")
 st.title("自然语言策略解释器")
 st.caption("策略解释、逐条审阅与当前分组的确定性回测。解释覆盖关系与合成 K 线仅用于核对，不是市场数据。")
+interpretation_notice = st.session_state.pop("interpretation_notice", None)
+if interpretation_notice is not None:
+    st.success(interpretation_notice)
 
 if "interpreter_monitor" not in st.session_state: st.session_state.interpreter_monitor = InMemoryInterpreterMonitor()
 if "interpreter_strategy_text" not in st.session_state:
@@ -54,6 +58,10 @@ def load_strategy_text(text: str) -> None:
     st.session_state.strategy_source = "新建策略"
     for key in ("active_saved_strategy_id", "active_saved_strategy_text", "active_saved_strategy_fingerprint"):
         st.session_state.pop(key, None)
+    # A clarification belongs to one immutable source text. Never show it
+    # after the user has explicitly switched to a different strategy.
+    st.session_state.pop("pending_clarification", None)
+    st.session_state.pop("pending_clarification_text", None)
 
 
 def activate_saved_strategy(strategy: object, text: str, assumptions: object, warnings: object, source_clauses: object = (), coverage: object = (), strategy_id: object | None = None) -> None:
@@ -337,25 +345,32 @@ if strategy_source == "新建策略":
 
 
 def interpret_and_render(request: StrategyInterpretationRequest, source_text: str) -> None:
+    model_client = BedrockStrategyModelClient(model=model, region=region)
     service = StrategyInterpreterService(
-        BedrockStrategyModelClient(model=model, region=region),
+        model_client,
         monitor=st.session_state.interpreter_monitor,
+        inventory_client=model_client,
+        parsed_cache=JsonParsedInterpretationCache(ROOT / ".cache" / "parsed_interpretations.json"),
     )
     try:
         with st.spinner("正在解释策略…"):
             result = service.interpret(request)
         if result.status == "parsed":
-            st.success("策略已解释完成。请在“解释审阅”中逐条核对原文与 DSL 映射。")
             st.session_state["last_parsed_strategy"] = result
             st.session_state["last_strategy_text"] = source_text
             st.session_state["last_review_request_id"] = st.session_state.interpreter_monitor.events[-1].request_id
             st.session_state.pop("pending_clarification", None)
             st.session_state.pop("pending_clarification_text", None)
+            st.session_state["interpretation_notice"] = "策略已解释完成。请在“解释审阅”中逐条核对原文与 DSL 映射。"
+            # ``matching_result`` and ``pending_clarification`` were read
+            # earlier in this Streamlit run. Restart from a coherent session
+            # snapshot so a freshly parsed strategy immediately renders both
+            # tabs; saving must never be a prerequisite for review/backtest.
+            st.rerun()
         else:
-            st.warning("需要补充澄清信息。请在下方逐项回答后重新解释。")
-            st.caption("尚未确认的表达：" + "、".join(result.ambiguous_terms))
             st.session_state["pending_clarification"] = result
             st.session_state["pending_clarification_text"] = source_text
+            st.rerun()
     except AlphaAgentError as error:
         st.error(f"{error.code}: {error.message}")
         if error.code == "model_client_failure":

@@ -40,6 +40,10 @@ operations remain deterministic Python code.
   Bedrock client reads its bearer token and configuration from `.env`; the fake
   client is used by tests.
 - `parser/service.py` — the single interpreter orchestration boundary.
+- `domain/semantic_inventory.py` and `parser/inventory.py` — the strict,
+  source-grounded semantic intermediate representation. It records symbols,
+  atomic requirements, closure dimensions, and required capabilities before a
+  complex strategy is lowered into the recursive executable DSL.
 - `parser/completeness.py` — deterministic clause segmentation, targeted
   preflight clarification guards, and source-coverage validation.
 - `parser/review.py` and `parser/mock_timeline.py` — deterministic Chinese DSL
@@ -50,8 +54,8 @@ operations remain deterministic Python code.
   raises a typed unsupported-feature error instead of dropping a DSL clause.
 - `research/v03_engine.py` — deterministic daily-close execution for the
   supported v0.3 C-point/stateful subset. It evaluates ordered extrema, anchor
-  running volume maxima, candlestick definitions, lifecycle policy, and costs;
-  it never invokes a model.
+  running-volume maxima/ranks, persistent post-trigger states, candlestick
+  definitions, lifecycle policy, and costs; it never invokes a model.
 - `strategy_library.py` — repository-local saved strategy records, including
   original text, DSL, explicit assumptions, source clauses, and coverage data.
 
@@ -61,6 +65,9 @@ operations remain deterministic Python code.
 Natural-language strategy
   → deterministic C01…Cn clause segmentation
   → deterministic ambiguity guards (when applicable)
+  → compact Semantic Inventory model call
+  → deterministic inventory coverage / closure / capability gate
+  → clarification or typed unsupported result when not compile-eligible
   → provider-independent model client
   → Pydantic schema parsing
   → semantic DSL validation
@@ -78,6 +85,13 @@ Coverage establishes traceability, not formal proof that two natural-language
 phrases have identical financial meaning. The review UI therefore presents the
 original wording, C ID, disposition, DSL path, and a compact explanation for
 user verification.
+
+The inventory is intentionally not executable DSL and does not calculate any
+financial value. It is a bounded agentic planning step: the model identifies
+source-grounded semantic components and whether vocabulary, parameters,
+temporal relations, state, execution, data, lifecycle, and capability are
+closed. This prevents clearly unsupported complex strategies from consuming a
+second, much larger recursive-DSL generation request.
 
 ## Clarification and execution safeguards
 
@@ -101,6 +115,16 @@ user verification.
   Close rather than silently executing it as Low.
 - The adapter also rejects unsupported condition trees or timing rules rather
   than producing a partial backtest.
+- The current research policy executes every backtest order at the final daily
+  close. If source prose asks for a close-minus-minutes price or cumulative
+  minute volume, the interpreter records an explicit daily-close proxy
+  assumption and uses final daily Close/Volume. Suspension, price-limit, and
+  no-fill handling are surfaced as a warning: daily OHLCV assumes the close
+  order filled and never fabricates exchange-state data.
+- v0.3 supports a persistent state that activates once and remains active until
+  position exit, plus a tied top-two running-volume rank from t0. Exit rules may
+  require or forbid such a state; the daily executor evaluates a state
+  transition before same-day state-gated exits.
 
 ## Bedrock and observability
 
@@ -108,6 +132,14 @@ The Bedrock adapter uses a tiny native JSON-schema envelope because Bedrock
 cannot compile the recursive DSL directly. Its embedded interpretation is
 immediately parsed by the same local strict validators before it can become a
 strategy.
+
+For complex strategies, the adapter first calls a separate compact
+`SemanticInventory` transport. Its strict compact-output contract keeps normal
+responses small, while its 8192-token ceiling prevents a legitimate complex
+inventory from being truncated solely by an artificial 4096-token cap. Only an
+inventory marked `compile_eligible` proceeds to the existing full DSL call.
+Transient Bedrock connection and read-timeout failures receive one bounded
+retry; provider 4xx errors and local validation failures never retry.
 
 The output ceiling is 8192 tokens because a v0.3 DSL plus C-clause coverage can
 legitimately exceed 4096. A `max_tokens` stop is reported as a truncation, never

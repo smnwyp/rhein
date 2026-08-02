@@ -4,7 +4,11 @@ from pydantic import Field, PositiveInt
 from alpha_agent.domain.clarification import ClarificationQuestion
 from alpha_agent.domain.indicators import DSLModel
 from alpha_agent.domain.strategy import AnyStrategyDefinition
-class InterpretationPolicy(DSLModel): default_rsi_window: PositiveInt | None = None
+class InterpretationPolicy(DSLModel):
+    default_rsi_window: PositiveInt | None = None
+    # Product-level research policy confirmed by the user: daily backtests use
+    # the final daily close, even when source prose describes a pre-close order.
+    execution_price_policy: Literal["daily_close"] = "daily_close"
 
 
 class ClarificationAnswer(DSLModel):

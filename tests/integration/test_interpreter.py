@@ -1,12 +1,21 @@
 from copy import deepcopy
 
 import pytest
-from alpha_agent.domain.interpretation import ClarificationRequired, ParsedStrategy, StrategyInterpretationRequest
+from pydantic import TypeAdapter
+from alpha_agent.domain.interpretation import ClarificationRequired, ParsedStrategy, StrategyInterpretationRequest, StrategyInterpretationResult
 from alpha_agent.errors import ModelClientFailure, ModelResponseParsingFailure, SemanticStrategyValidationFailure
 from alpha_agent.model.fake_client import FakeModelClient
 from alpha_agent.monitoring import InMemoryInterpreterMonitor, InterpretationEvaluation
-from alpha_agent.parser.service import StrategyInterpreterService, _repair_explicit_cross_encoding, _repair_explicit_one_day_return_encoding
+from alpha_agent.interpretation_cache import JsonParsedInterpretationCache
+from alpha_agent.parser.service import StrategyInterpreterService, _direct_dsl_fallback_coverage, _discard_invalid_optional_partial_strategy, _normalize_provider_result, _repair_explicit_cross_encoding, _repair_explicit_one_day_return_encoding
 from alpha_agent.parser.completeness import segment_source_clauses
+from alpha_agent.parser.prompts import INVENTORY_SYSTEM_PROMPT, SYSTEM_PROMPT
+
+
+def test_interpreter_prompts_require_chinese_user_facing_clarifications():
+    assert "Simplified Chinese" in SYSTEM_PROMPT
+    assert "English question" in SYSTEM_PROMPT
+    assert "Simplified" in INVENTORY_SYSTEM_PROMPT
 
 def f(name): return {"kind":"market_field","field":name}
 def i(kind, window): return {"kind":"indicator","indicator":{"indicator":kind,"field":"volume" if kind == "rolling_mean" else "close","window":window}}
@@ -31,12 +40,48 @@ def test_clarification_and_partial_strategy_are_validated():
     with pytest.raises(SemanticStrategyValidationFailure): StrategyInterpreterService(FakeModelClient([invalid])).interpret(StrategyInterpretationRequest(strategy_text="ambiguous"))
 
 
+def test_invalid_optional_clarification_draft_is_discarded_but_questions_are_preserved():
+    raw = {
+        "status": "clarification_required",
+        "partial_strategy": {
+            "schema_version": "0.3", "symbol": "AAON", "frequency": "1d",
+            "direction": "long_only", "position_mode": "fully_invested_or_flat",
+            "data_requirement": "daily_ohlcv", "anchor": {"name": "t0", "condition": cmp(f("close"), i("sma", 5)), "constraints": []},
+            "entry": {"active_day": {"start_offset_days": 0, "end_offset_days": 0}, "condition": cmp(f("close"), i("sma", 5)), "execution": "close"},
+            "exit_rules": [],
+        },
+        "questions": [{"question_id": "sample_end", "question": "How should the sample end be handled?", "target_path": "lifecycle_policy.sample_end_open_position", "suggested_answers": ["Force close"], "answer_kind": "choice"}],
+        "ambiguous_terms": ["sample-end position handling"],
+    }
+    normalized = _discard_invalid_optional_partial_strategy(raw)
+    assert "partial_strategy" not in normalized
+    assert isinstance(TypeAdapter(StrategyInterpretationResult).validate_python(normalized), ClarificationRequired)
+
+
 def test_empty_provider_transport_fields_are_normalized_but_populated_ones_are_rejected():
     response = parsed(cmp(i("rsi",14),s(30),"less_than"),cmp(i("rsi",14),s(70)))
     response.update({"partial_strategy":None,"questions":[],"ambiguous_terms":[]})
     assert isinstance(StrategyInterpreterService(FakeModelClient([response])).interpret(StrategyInterpretationRequest(strategy_text="test")), ParsedStrategy)
     response["questions"] = [{"question_id":"unexpected","question":"Unexpected","target_path":"entry_condition","suggested_answers":[],"answer_kind":"choice"}]
     with pytest.raises(ModelResponseParsingFailure): StrategyInterpreterService(FakeModelClient([response])).interpret(StrategyInterpretationRequest(strategy_text="test"))
+
+
+def test_provider_bare_dsl_is_adapted_with_visible_section_level_coverage():
+    bare = {
+        "schema_version": "0.3", "symbol": "AAON", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": cmp(f("close"), i("sma", 5)), "constraints": []},
+        "entry": {"mode": "fixed", "active_day": {"start_offset_days": 0, "end_offset_days": 0}, "execution": "close"},
+        "exit_rules": [{"rule_id": "exit", "priority": 1, "active_days": {"start_offset_days": 1}, "kind": "close_condition", "condition": cmp(f("close"), i("sma", 5), "less_than"), "execution": "close"}],
+        "lifecycle_policy": {"sample_end_open_position": "leave_open_excluded", "allow_reentry_after_exit": True},
+    }
+    request = StrategyInterpretationRequest(strategy_text="日线数据。\n入场：C 点。\n卖出：跌破均线。", source_clauses=segment_source_clauses("日线数据。\n入场：C 点。\n卖出：跌破均线。"))
+    adapted = _direct_dsl_fallback_coverage(_normalize_provider_result(bare), request)
+    result = StrategyInterpreterService(FakeModelClient([bare])).interpret(request)
+    assert isinstance(result, ParsedStrategy)
+    assert len(adapted["coverage"]) == len(request.source_clauses)
+    assert result.warnings[0].code == "provider_direct_dsl_envelope_repair"
+    assert any(item.dsl_paths == ["anchor", "entry"] for item in result.coverage)
 
 
 def test_malformed_and_client_failures_are_typed_and_monitored():
@@ -58,6 +103,37 @@ def test_interpreter_retries_one_repair_with_structured_validation_feedback():
     assert client.requests[0].repair_instruction is None
     assert client.requests[1].repair_instruction is not None
     assert "Validation details" in client.requests[1].repair_instruction
+
+
+def test_validated_parsed_result_is_reused_without_any_model_call(tmp_path):
+    cache = JsonParsedInterpretationCache(tmp_path / "parsed_interpretations.json")
+    response = parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))
+    first_client = FakeModelClient([response])
+    request = StrategyInterpretationRequest(strategy_text="buy then sell", symbol="AAPL")
+    first = StrategyInterpreterService(first_client, parsed_cache=cache).interpret(request)
+    assert isinstance(first, ParsedStrategy)
+    assert len(first_client.requests) == 1
+
+    monitor = InMemoryInterpreterMonitor()
+    second_client = FakeModelClient([])
+    second = StrategyInterpreterService(second_client, parsed_cache=cache, monitor=monitor).interpret(request)
+    assert isinstance(second, ParsedStrategy)
+    assert not second_client.requests
+    assert monitor.events[-1].cache_hit is True
+    assert monitor.summary()["cache_hits"] == 1
+
+
+def test_invalid_cached_result_is_deleted_and_cannot_bypass_validation(tmp_path):
+    cache = JsonParsedInterpretationCache(tmp_path / "parsed_interpretations.json")
+    request = StrategyInterpretationRequest(strategy_text="buy then sell", symbol="AAPL")
+    # This raw result cannot satisfy the typed result contract, so the service
+    # must discard it and use the model once rather than returning it.
+    cache.put(request.model_copy(update={"source_clauses": segment_source_clauses(request.strategy_text)}), {"status": "parsed"})
+    response = parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))
+    client = FakeModelClient([response])
+    result = StrategyInterpreterService(client, parsed_cache=cache).interpret(request)
+    assert isinstance(result, ParsedStrategy)
+    assert len(client.requests) == 1
 
 
 def test_source_validation_failure_uses_targeted_clause_repair_instruction():
@@ -137,6 +213,18 @@ def test_explicit_cross_source_repair_folds_only_the_exact_current_prior_pair():
     assert _repair_explicit_cross_encoding(raw, "均线高于另一根均线") == raw
 
 
+def test_cross_repair_finds_the_matching_pair_even_when_another_ma_comparison_follows():
+    sma5, sma10, sma20 = i("sma", 5), i("sma", 10), i("sma", 20)
+    raw = {"status": "parsed", "strategy": {"schema_version": "0.3", "anchor": {"condition": group("and",
+        cmp(sma5, sma10),
+        cmp({"kind": "lagged_indicator", "offset_days": -1, "indicator": sma5["indicator"]}, {"kind": "lagged_indicator", "offset_days": -1, "indicator": sma20["indicator"]}, "less_than_or_equal"),
+        cmp(sma5, sma20),
+    )}}, "warnings": [], "coverage": []}
+    repaired = _repair_explicit_cross_encoding(raw, "5 日均线上穿 20 日均线。")
+    conditions = repaired["strategy"]["anchor"]["condition"]["conditions"]
+    assert [condition.get("operator") for condition in conditions] == ["greater_than", "cross_above"]
+
+
 def test_coverage_rejects_silent_omission_and_preflight_questions_are_structured():
     response = parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))
     response["coverage"] = []
@@ -189,6 +277,139 @@ def test_lifecycle_policy_is_clarified_locally_before_the_provider_is_called():
     assert isinstance(result, ClarificationRequired)
     assert {question.question_id for question in result.questions} == {"sample_end_open_position", "allow_reentry_after_exit"}
     assert not client.requests
+
+
+def test_no_maximum_holding_period_requires_sample_end_policy_without_a_model_call():
+    client = FakeModelClient([])
+    result = StrategyInterpreterService(client).interpret(
+        StrategyInterpretationRequest(strategy_text="不设置最长持仓时间；持仓持续至卖出条件触发。")
+    )
+    assert isinstance(result, ClarificationRequired)
+    assert [question.question_id for question in result.questions] == ["sample_end_open_position"]
+    assert "样本结束时仍未平仓" in result.questions[0].question
+    assert not client.requests
+
+
+class InventoryClient:
+    def __init__(self, response):
+        self.response = response
+        self.requests = []
+
+    def inspect_strategy(self, request):
+        self.requests.append(request)
+        return self.response
+
+
+def _inventory(status, *, disposition="resolved", questions=None, unsupported_features=None):
+    return {
+        "status": status,
+        "symbols": [],
+        "items": [{
+            "semantic_id": "I-ENTRY", "source_clause_ids": ["C01"], "category": "entry_rule",
+            "pseudo_dsl": "enter when condition", "dependencies": [], "required_capabilities": [],
+            "disposition": disposition,
+        }],
+        "closure": [{
+            "dimension": "capability",
+            "status": "closed" if status == "compile_eligible" else status,
+            "explanation": "test finding", "source_clause_ids": ["C01"], "semantic_ids": ["I-ENTRY"],
+        }],
+        "questions": questions or [],
+        "ambiguous_terms": ["ambiguous"] if questions else [],
+        "unsupported_features": unsupported_features or [],
+    }
+
+
+def test_semantic_inventory_blocks_unsupported_complex_capability_before_full_dsl_request():
+    inventory = _inventory(
+        "unsupported",
+        disposition="unsupported",
+        unsupported_features=[{
+            "capability_id": "persistent_regime_state", "source_clause_ids": ["C01"],
+            "source_concept": "high state persists until exit", "required_extension": "persistent state transition",
+        }],
+    )
+    final_client = FakeModelClient([])
+    inventory_client = InventoryClient(inventory)
+
+    from alpha_agent.errors import UnsupportedStrategyFeature
+    with pytest.raises(UnsupportedStrategyFeature, match="cannot express faithfully"):
+        StrategyInterpreterService(final_client, inventory_client=inventory_client).interpret(
+            StrategyInterpretationRequest(strategy_text="high state persists")
+        )
+
+    assert len(inventory_client.requests) == 1
+    assert not final_client.requests
+
+
+def test_semantic_inventory_returns_user_clarification_before_full_dsl_request():
+    question = {"question_id": "execution_time", "question": "Which execution price?", "target_path": "execution", "suggested_answers": ["close"], "answer_kind": "choice"}
+    final_client = FakeModelClient([])
+    result = StrategyInterpreterService(
+        final_client,
+        inventory_client=InventoryClient(_inventory("clarification_required", disposition="clarification_required", questions=[question])),
+    ).interpret(StrategyInterpretationRequest(strategy_text="buy later"))
+
+    assert isinstance(result, ClarificationRequired)
+    assert result.questions[0].question_id == "execution_time"
+    assert not final_client.requests
+
+
+def test_compile_eligible_inventory_allows_existing_final_dsl_pipeline():
+    response = parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))
+    final_client = FakeModelClient([response])
+    result = StrategyInterpreterService(
+        final_client,
+        inventory_client=InventoryClient(_inventory("compile_eligible")),
+    ).interpret(StrategyInterpretationRequest(strategy_text="buy then sell"))
+
+    assert isinstance(result, ParsedStrategy)
+    assert len(final_client.requests) == 1
+
+
+def test_inventory_coverage_accepts_a_clause_grounded_in_a_closure_finding():
+    from alpha_agent.domain.semantic_inventory import SemanticInventory
+    from alpha_agent.parser.inventory import validate_inventory
+
+    inventory = SemanticInventory.model_validate({
+        "status": "compile_eligible", "symbols": [],
+        "items": [{"semantic_id": "I-ENTRY", "source_clause_ids": ["C01"], "category": "entry_rule", "pseudo_dsl": "enter", "dependencies": [], "required_capabilities": [], "disposition": "resolved"}],
+        "closure": [
+            {"dimension": "temporal", "status": "closed", "explanation": "entry timing", "source_clause_ids": ["C01"], "semantic_ids": ["I-ENTRY"]},
+            {"dimension": "execution", "status": "closed", "explanation": "daily close policy", "source_clause_ids": ["C02"], "semantic_ids": []},
+        ],
+        "questions": [], "ambiguous_terms": [], "unsupported_features": [],
+    })
+    request = StrategyInterpretationRequest(strategy_text="test", source_clauses=[
+        {"clause_id": "C01", "text": "entry"}, {"clause_id": "C02", "text": "execution"},
+    ])
+
+    validate_inventory(inventory, request)
+
+
+def test_inventory_coverage_failure_retries_only_the_inventory_before_final_dsl():
+    class QueuedInventoryClient:
+        def __init__(self, responses):
+            self.responses, self.requests = list(responses), []
+
+        def inspect_strategy(self, request):
+            self.requests.append(request)
+            return self.responses.pop(0)
+
+    invalid = _inventory("compile_eligible")
+    invalid["items"][0]["source_clause_ids"] = ["C99"]
+    corrected = _inventory("compile_eligible")
+    inventory_client = QueuedInventoryClient([invalid, corrected])
+    final_client = FakeModelClient([parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))])
+
+    result = StrategyInterpreterService(final_client, inventory_client=inventory_client).interpret(
+        StrategyInterpretationRequest(strategy_text="buy then sell")
+    )
+
+    assert isinstance(result, ParsedStrategy)
+    assert len(inventory_client.requests) == 2
+    assert inventory_client.requests[1].repair_instruction is not None
+    assert len(final_client.requests) == 1
 
 
 def test_v03_anchor_indicator_from_provider_is_losslessly_normalized_to_a_lagged_indicator():

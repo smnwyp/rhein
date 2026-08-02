@@ -19,6 +19,7 @@ output/
 
 # Streamlit's local state
 .streamlit/secrets.toml
+.cache/
 
 # OS / editor files
 .DS_Store

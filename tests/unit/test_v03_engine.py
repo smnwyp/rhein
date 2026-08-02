@@ -6,6 +6,7 @@ from alpha_agent.domain.indicators import SMA
 from alpha_agent.domain.operands import IndicatorOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand,
+    AnchorRunningVolumeRankOperand,
     TemporalComparisonCondition,
     TemporalCrossCondition,
     TemporalScalarOperand,
@@ -57,6 +58,17 @@ def test_v03_engine_uses_earliest_ordered_extrema_and_high_volume_doji_exit():
     assert all(check["passed"] for check in trades.iloc[0].anchor_checks)
     assert {check["left"] for check in trades.iloc[0].anchor_checks} == {"Close", "SMA(5)", "SMA(10)"}
     assert stats["n_trades"] == 1
+
+
+def test_v03_engine_enters_on_a_qualified_anchor_without_duplicate_entry_condition():
+    payload = _strategy().model_dump(mode="json")
+    payload["entry"] = {"mode": "fixed", "active_day": {"start_offset_days": 0, "end_offset_days": 0}, "execution": "close"}
+    strategy = TimedStrategyDefinition.model_validate(payload)
+    close = np.concatenate([np.linspace(100, 70, 20), np.linspace(70, 80, 31), np.linspace(81, 90, 15)])
+    frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=len(close), freq="B"), "Open": close, "High": close + 1, "Low": close - 1, "Close": close, "Volume": 100.0})
+    trades, _ = run_v03_backtest(frame, strategy=strategy, capital=10_000, compound=False)
+    assert len(trades) == 1
+    assert trades.iloc[0].signal == trades.iloc[0].entry
 
 
 def test_v03_anchor_cross_requires_current_cross_and_prior_non_crossing_state():
@@ -166,3 +178,40 @@ def test_v03_leaves_sample_end_position_out_of_closed_trade_kpis_and_reports_it(
     assert stats["open_position_count"] == 1
     assert stats["open_positions"][0]["period_end_close"] == 60.0
     assert stats["open_positions"][0]["status"] == "open_excluded_from_closed_trade_kpis"
+
+
+def test_v03_volume_rank_treats_tied_maximum_as_rank_one_and_next_value_as_rank_two():
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-01", periods=4, freq="B"),
+        "Open": [1.0] * 4, "High": [1.0] * 4, "Low": [1.0] * 4, "Close": [1.0] * 4,
+        "Volume": [100.0, 100.0, 90.0, 80.0],
+    })
+    rank = AnchorRunningVolumeRankOperand(kind="anchor_running_volume_rank", anchor="t0", field="volume")
+    assert _temporal_operand(frame, rank, index=1, anchor_index=0, entry_index=0, entry_price=1.0) == 1
+    assert _temporal_operand(frame, rank, index=2, anchor_index=0, entry_index=0, entry_price=1.0) == 3
+
+
+def test_v03_persistent_state_activates_before_same_day_state_gated_exit():
+    payload = {
+        "schema_version": "0.3", "symbol": "TEST", "frequency": "1d", "direction": "long_only", "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": _cmp(_field("close"), _sma(1), "greater_than_or_equal"), "constraints": []},
+        "entry": {"active_day": {"start_offset_days": 0, "end_offset_days": 0}, "condition": _cmp(_field("close"), _sma(1), "greater_than_or_equal"), "execution": "close"},
+        "persistent_states": [{
+            "state_id": "high_state", "relative_to": "entry", "active_days": {"start_offset_days": 1},
+            "activate_when": _cmp(_field("close"), {"kind": "scaled_entry_price", "multiplier": 1.1}, "greater_than"),
+        }],
+        "exit_rules": [{
+            "rule_id": "high_state_doji", "priority": 1, "relative_to": "entry", "active_days": {"start_offset_days": 1},
+            "requires_state": "high_state", "kind": "close_condition",
+            "condition": {"node_type": "candlestick_pattern", "pattern": "doji", "body_to_open_threshold": .005}, "execution": "close",
+        }],
+        "lifecycle_policy": {"sample_end_open_position": "force_close", "allow_reentry_after_exit": False},
+    }
+    strategy = TimedStrategyDefinition.model_validate(payload)
+    close = [10.0, 12.0, 11.0]
+    frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=3, freq="B"), "Open": close, "High": close, "Low": close, "Close": close, "Volume": [100.0, 200.0, 100.0]})
+
+    trades, _ = run_v03_backtest(frame, strategy=strategy, capital=10_000, compound=False)
+
+    assert trades.iloc[0].exit == "2020-01-02"
+    assert trades.iloc[0].reason == "v03:high_state_doji"

@@ -153,6 +153,19 @@ def test_v03_supports_ordered_drawdown_running_volume_and_candlestick_exit():
         TimedStrategyDefinition.model_validate(without_policy)
 
 
+def test_fixed_t0_entry_can_rely_on_the_anchor_without_a_duplicate_condition():
+    timed = {
+        "schema_version": "0.3", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": comparison(field("close"), indicator("sma", 5)), "constraints": []},
+        "entry": {"mode": "fixed", "active_day": {"start_offset_days": 0, "end_offset_days": 0}, "execution": "close"},
+        "exit_rules": [{"rule_id": "exit", "priority": 1, "active_days": {"start_offset_days": 1}, "kind": "close_condition", "condition": comparison(field("close"), indicator("sma", 5), "less_than"), "execution": "close"}],
+        "lifecycle_policy": {"sample_end_open_position": "force_close", "allow_reentry_after_exit": True},
+    }
+    parsed = TimedStrategyDefinition.model_validate(timed)
+    assert parsed.entry.condition is None
+
+
 def test_review_items_are_deterministically_derived_from_validated_dsl():
     model = StrategyDefinition.model_validate(strategy())
     items = build_review_items(model)
