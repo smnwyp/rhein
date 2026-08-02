@@ -9,6 +9,7 @@ from urllib.parse import quote
 import requests
 
 from alpha_agent.domain.interpretation import ModelInterpretationEnvelope, StrategyInterpretationRequest
+from alpha_agent.domain.semantic_inventory import SemanticInventory
 from alpha_agent.errors import ModelClientFailure
 from alpha_agent.parser.prompts import SYSTEM_PROMPT, inventory_system_instruction, inventory_user_prompt, user_prompt
 
@@ -59,7 +60,10 @@ class BedrockStrategyModelClient:
                 raise
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 raise ModelClientFailure("Bedrock returned invalid structured output", details={"exception_type": type(error).__name__, "model": self._model}) from error
-        raise AssertionError("unreachable")
+        raise ModelClientFailure(
+            "Bedrock interpretation completed without a usable result",
+            details={"model": self._model, "phase": "interpretation_format_retry", "attempts": 2},
+        )
 
     def inspect_strategy(self, request: StrategyInterpretationRequest) -> Mapping[str, Any]:
         """Run the compact semantic-inventory phase before recursive DSL lowering."""
@@ -74,18 +78,24 @@ class BedrockStrategyModelClient:
                 "outputConfig": {"textFormat": {"type": "json_schema", "structure": {"jsonSchema": {
                     "name": "semantic_inventory",
                     "description": "A SemanticInventory conforming to the supplied schema.",
-                    "schema": json.dumps(_bedrock_string_transport_schema("inventory_json"), ensure_ascii=False, separators=(",", ":")),
+                    # SemanticInventory has no recursive condition tree, so it
+                    # can use Bedrock's native schema directly. This avoids the
+                    # fragile JSON-inside-a-JSON-string transport.
+                    "schema": json.dumps(_bedrock_inventory_schema(), ensure_ascii=False, separators=(",", ":")),
                 }}}},
             }
             try:
-                return self._extract_string_envelope(self._post_payload(payload), "inventory_json", "semantic inventory")
+                return self._extract_inventory(self._post_payload(payload))
             except ModelClientFailure as error:
                 if format_attempt == 0 and self._is_format_failure(error):
                     continue
                 raise
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 raise ModelClientFailure("Bedrock returned invalid structured output", details={"exception_type": type(error).__name__, "model": self._model}) from error
-        raise AssertionError("unreachable")
+        raise ModelClientFailure(
+            "Bedrock semantic inventory completed without a usable result",
+            details={"model": self._model, "phase": "inventory_format_retry", "attempts": 2},
+        )
 
     @staticmethod
     def _format_retry_request(request: StrategyInterpretationRequest) -> StrategyInterpretationRequest:
@@ -103,6 +113,7 @@ class BedrockStrategyModelClient:
             "Bedrock returned malformed JSON for the strategy interpretation",
             "Bedrock did not return a usable strategy interpretation",
             "Bedrock returned an invalid semantic inventory envelope",
+            "Bedrock returned malformed JSON for the semantic inventory",
             "Bedrock did not return a usable semantic inventory",
         }
 
@@ -212,6 +223,36 @@ class BedrockStrategyModelClient:
             raise ModelClientFailure(f"Bedrock returned an invalid {purpose} envelope", details=self._response_shape(response_payload, content))
         return self._parse_json_object(inner)
 
+    def _extract_inventory(self, response_payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Read native Inventory JSON, accepting the former string wrapper."""
+        output = response_payload.get("output")
+        message = output.get("message") if isinstance(output, Mapping) else None
+        content = message.get("content") if isinstance(message, Mapping) else None
+        if not isinstance(content, list):
+            raise ModelClientFailure("Bedrock returned an unexpected semantic inventory envelope", details=self._response_shape(response_payload))
+        if response_payload.get("stopReason") == "max_tokens":
+            raise ModelClientFailure("Bedrock truncated the semantic inventory", details={**self._response_shape(response_payload, content), "configured_max_tokens": self._inventory_max_tokens})
+        text = "\n".join(item["text"] for item in content if isinstance(item, Mapping) and isinstance(item.get("text"), str))
+        if not text:
+            raise ModelClientFailure("Bedrock did not return a usable semantic inventory", details=self._response_shape(response_payload, content))
+        try:
+            parsed = self._parse_json_object(text)
+        except json.JSONDecodeError as error:
+            raise ModelClientFailure(
+                "Bedrock returned malformed JSON for the semantic inventory",
+                details={**self._response_shape(response_payload, content), "exception_type": type(error).__name__},
+            ) from error
+        wrapped = parsed.get("inventory_json")
+        if not isinstance(wrapped, str):
+            return parsed
+        try:
+            return self._parse_json_object(wrapped)
+        except json.JSONDecodeError as error:
+            raise ModelClientFailure(
+                "Bedrock returned malformed JSON for the semantic inventory",
+                details={**self._response_shape(response_payload, content), "exception_type": type(error).__name__},
+            ) from error
+
     def _response_shape(self, payload: Mapping[str, Any], content: list[object] | None = None) -> dict[str, object]:
         """Diagnostic metadata only; never return a raw model response to the UI."""
         blocks = content
@@ -280,6 +321,35 @@ def _bedrock_transport_schema() -> dict[str, Any]:
     Pydantic contract, so this transport envelope never weakens DSL guards.
     """
     return _bedrock_string_transport_schema("interpretation_json")
+
+
+def _bedrock_inventory_schema() -> dict[str, Any]:
+    """Compile Pydantic's inventory schema to Bedrock's supported subset.
+
+    Bedrock rejects array/string cardinality constraints such as ``maxItems``.
+    Those constraints remain authoritative in local Pydantic validation after
+    transport; the provider schema only constrains JSON shape and closed object
+    fields. Keeping this compiler explicit prevents provider-specific 400s
+    from being mistaken for strategy interpretation failures.
+    """
+    unsupported_keywords = {"maxItems", "minItems", "maxLength", "minLength", "pattern"}
+
+    def strip(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: strip(child) for key, child in value.items() if key not in unsupported_keywords}
+        if isinstance(value, list):
+            return [strip(child) for child in value]
+        return value
+
+    schema = strip(SemanticInventory.model_json_schema())
+    if not isinstance(schema, dict):
+        # Defensive only: never leak an AssertionError from a provider-boundary
+        # helper into the user-facing interpreter.
+        raise ModelClientFailure(
+            "could not compile the semantic-inventory transport schema",
+            details={"schema_type": type(schema).__name__},
+        )
+    return schema
 
 
 def _bedrock_string_transport_schema(field_name: str) -> dict[str, Any]:

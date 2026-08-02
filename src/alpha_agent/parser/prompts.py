@@ -50,6 +50,11 @@ t0/C-to-B recovery cap, omit `maximum_anchor_recovery_from_trough`; never use
 1.0 as a fake unlimited threshold. For a prior-window low such as
 min(Close[S-15], ..., Close[S-1]), use `rolling_low_anchor_constraint` with
 `reference_field: "close"`, `include_anchor: false`, and the user's tie-break.
+For a direct rolling price floor such as `MinClose15[t] = min(Close[t-14],
+..., Close[t])`, use the price-series indicator `rolling_min(field="close",
+window=15)`. Compare Close directly against that price indicator (for example,
+Close <= rolling_min(Close,15) × 1.15). Never use `rolling_return` as a price
+level, and never multiply a return indicator to represent a rolling minimum.
 The `doji` `body_to_open_threshold` is user-configurable: preserve 0.5% as
 0.005 rather than changing it to 1%.
 Use `entry.mode: "conditional"` with explicit one-day `entry.branches` when
@@ -77,6 +82,14 @@ For a persistent state entered once and kept until position exit, use
 `requires_state` or `forbids_state`. For current daily volume that is highest
 or second-highest since t0, compare `anchor_running_volume_rank` against scalar
 2 using `less_than_or_equal`; this rank includes ties (a tied maximum is rank 1).
+For “recent N MA60 changes have at least K strict increases”, use
+`rolling_comparison_count` with `lookback_days: N`, `minimum_true_count: K`,
+and an explicit MA60-versus-prior-MA60 comparison. For MACD(a,b,c), use
+`macd_line` for the fast line and `macd_signal` for the signal/slow line with
+all three explicit windows. For “current volume is highest or second-highest in
+recent N days”, compare `rolling_volume_rank(window=N)` <= 2. For an unbounded
+delayed entry after t0, use `entry.mode: "wait_until"` with explicit
+`defer_when` and `resume_when`; it has no hidden maximum wait period.
 Use only the field names and nested shapes in the supplied inner JSON Schema. In particular, do not
 invent fields such as `indicators`, `rules`, `order_type`, or `risk_management`."""
 
@@ -104,9 +117,10 @@ express it faithfully. Never invent a default parameter or execution assumption.
 The product policy uses final daily Close and Volume for every backtest order. A
 source request for a pre-close/minute price or volume must be normalized to this
 explicit daily-close proxy and reported as an assumption/warning, not unsupported.
-Current capabilities include daily-close comparisons, crosses, SMA/EMA/RSI/rolling return/rolling mean volume,
-rolling close/low constraints, ordered A-to-B close drawdowns, close-executed conditional entry branches,
-running maximum or tied top-two volume since anchor, persistent post-trigger state flags,
+Current capabilities include daily-close comparisons, crosses, SMA/EMA/RSI/rolling return/rolling minimum/rolling mean volume,
+MACD fast/signal lines, rolling comparison-count conditions, rolling close/low constraints,
+ordered A-to-B close drawdowns, close-executed conditional and wait-until entry rules,
+running maximum or tied top-two volume since anchor or in a fixed rolling window, persistent post-trigger state flags,
 doji/large-bearish patterns, and lifecycle choices.
 Suspension, price-limit, and no-fill prose is a documented daily-close execution
 limitation, not an unsupported interpreter feature; record it as a warning.
@@ -120,9 +134,8 @@ def inventory_system_instruction() -> str:
     schema = SemanticInventory.model_json_schema()
     return (
         f"{INVENTORY_SYSTEM_PROMPT}\n\n"
-        "Bedrock transports your answer in an outer object with one field named `inventory_json`. "
-        "Put the complete inner SemanticInventory JSON object, and nothing else, in that field. "
-        f"The following JSON Schema describes the INNER object exactly:\n{schema}"
+        "Return the complete SemanticInventory JSON object directly, with no outer wrapper, Markdown, or commentary. "
+        f"The following JSON Schema describes that object exactly:\n{schema}"
     )
 
 

@@ -1,5 +1,5 @@
 """Deterministic domain semantics, separate from schema parsing."""
-from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup
+from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, RollingComparisonCountCondition
 from alpha_agent.domain.indicators import RSI, RollingMeanVolume, RollingReturn
 from alpha_agent.domain.operands import IndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
@@ -25,6 +25,8 @@ def _dimension(o: Operand) -> str:
 def _walk(c: Condition, path: str, issues: list[dict[str, str]]) -> None:
     if isinstance(c, ConditionGroup):
         for i, child in enumerate(c.conditions): _walk(child, f"{path}.conditions[{i}]", issues)
+    elif isinstance(c, RollingComparisonCountCondition):
+        _walk(c.comparison, f"{path}.comparison", issues)
     elif isinstance(c, ComparisonCondition):
         l, r = _dimension(c.left), _dimension(c.right)
         if "scalar" not in (l, r) and l != r: issues.append(_issue(path, "compatible_operands", f"cannot compare {l} with {r}"))
@@ -53,8 +55,14 @@ def _walk_timed_condition(condition: TemporalCondition, path: str, issues: list[
 def validate_strategy(strategy: AnyStrategyDefinition) -> None:
     if isinstance(strategy, TimedStrategyDefinition):
         issues: list[dict[str, str]] = []
+        # Timed strategies have a static C/t0 anchor tree as well as temporal
+        # entry/exit rules.  Validate both; otherwise a price-vs-return error
+        # can be accepted and silently produce a zero-trade backtest.
+        _walk(strategy.anchor.condition, "anchor.condition", issues)
         if strategy.entry.mode == "fixed":
-            assert strategy.entry.active_day is not None
+            if strategy.entry.active_day is None:
+                issues.append(_issue("entry.active_day", "fixed_entry_active_day", "fixed entry requires one active day"))
+                raise SemanticStrategyValidationFailure(issues)
             if strategy.entry.condition is not None:
                 _walk_timed_condition(
                     strategy.entry.condition,
@@ -62,8 +70,10 @@ def validate_strategy(strategy: AnyStrategyDefinition) -> None:
                     issues,
                     evaluated_on_anchor_day=strategy.entry.active_day.start_offset_days == 0,
                 )
-        else:
-            assert strategy.entry.branches is not None
+        elif strategy.entry.mode == "conditional":
+            if strategy.entry.branches is None:
+                issues.append(_issue("entry.branches", "conditional_entry_branches", "conditional entry requires branches"))
+                raise SemanticStrategyValidationFailure(issues)
             for index, branch in enumerate(strategy.entry.branches):
                 _walk_timed_condition(
                     branch.condition,
@@ -71,6 +81,17 @@ def validate_strategy(strategy: AnyStrategyDefinition) -> None:
                     issues,
                     evaluated_on_anchor_day=branch.active_day.start_offset_days == 0,
                 )
+        elif strategy.entry.mode == "wait_until":
+            # The deferral predicate is evaluated on the anchor day.  The
+            # resume predicate is deliberately evaluated on later candidate
+            # days, so it must not be subjected to anchor-day identity checks.
+            if strategy.entry.defer_when is None or strategy.entry.resume_when is None:
+                issues.append(_issue("entry", "wait_until_predicates", "wait_until entry requires defer_when and resume_when"))
+                raise SemanticStrategyValidationFailure(issues)
+            _walk_timed_condition(strategy.entry.defer_when, "entry.defer_when", issues, evaluated_on_anchor_day=True)
+            _walk_timed_condition(strategy.entry.resume_when, "entry.resume_when", issues, evaluated_on_anchor_day=False)
+        else:
+            issues.append(_issue("entry.mode", "supported_entry_mode", f"unsupported entry mode: {strategy.entry.mode}"))
         if issues:
             raise SemanticStrategyValidationFailure(issues)
         return

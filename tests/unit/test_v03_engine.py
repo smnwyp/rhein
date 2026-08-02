@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from alpha_agent.domain.conditions import CrossCondition
-from alpha_agent.domain.indicators import SMA
+from alpha_agent.domain.indicators import MACDLine, MACDSignal, RollingMinimum, SMA
 from alpha_agent.domain.operands import IndicatorOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand,
@@ -12,7 +12,8 @@ from alpha_agent.domain.sequence import (
     TemporalScalarOperand,
     TimedStrategyDefinition,
 )
-from alpha_agent.research.v03_engine import _anchor_condition_checks, _anchor_constraints_hold, _static_condition, _temporal_condition, _temporal_operand, run_v03_backtest
+from alpha_agent.research.v03_engine import _anchor_condition_checks, _anchor_constraints_hold, _indicator_values, _resolve_entry, _static_condition, _temporal_condition, _temporal_operand, run_v03_backtest
+from alpha_agent.parser.validation import validate_strategy
 
 
 def _field(name): return {"kind": "market_field", "field": name}
@@ -69,6 +70,39 @@ def test_v03_engine_enters_on_a_qualified_anchor_without_duplicate_entry_conditi
     trades, _ = run_v03_backtest(frame, strategy=strategy, capital=10_000, compound=False)
     assert len(trades) == 1
     assert trades.iloc[0].signal == trades.iloc[0].entry
+
+
+def test_v03_supports_macd_rolling_trend_count_and_wait_until_entry():
+    close = np.array([10, 9, 8, 8.5, 8.2, 8.1, 8.4, 8.3, 8.6, 8.5, 8.8, 8.7, 9.0, 8.9, 9.2, 9.4, 9.6, 9.8, 10.0, 10.2, 10.4, 10.6, 10.8, 11.0, 11.2, 11.4, 11.6, 11.8, 12.0, 12.2], dtype=float)
+    frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=len(close), freq="B"), "Open": close, "High": close + .1, "Low": close - .1, "Close": close, "Volume": np.arange(len(close), dtype=float)})
+    macd_line = {"indicator": "macd_line", "field": "close", "fast_window": 3, "slow_window": 6, "signal_window": 3}
+    macd_signal = {"indicator": "macd_signal", "field": "close", "fast_window": 3, "slow_window": 6, "signal_window": 3}
+    assert np.isfinite(_indicator_values(frame, MACDLine.model_validate(macd_line))[-1])
+    assert np.isfinite(_indicator_values(frame, MACDSignal.model_validate(macd_signal))[-1])
+    assert _indicator_values(frame, RollingMinimum.model_validate({"indicator": "rolling_min", "field": "close", "window": 5}))[-1] == 11.4
+    sma = SMA(indicator="sma", field="close", window=5)
+    assert _indicator_values(frame, sma) is _indicator_values(frame, sma)
+    assert sma in frame.attrs["_alpha_indicator_cache"]
+    rolling_count = {"node_type": "rolling_comparison_count", "lookback_days": 5, "minimum_true_count": 3, "comparison": _cmp(_sma(5), {"kind": "lagged_indicator", "offset_days": -1, "indicator": {"indicator": "sma", "field": "close", "window": 5}})}
+    from alpha_agent.domain.conditions import Condition
+    from pydantic import TypeAdapter
+    assert _static_condition(frame, TypeAdapter(Condition).validate_python(rolling_count), len(frame) - 1)
+
+    payload = _strategy().model_dump(mode="json")
+    payload["entry"] = {
+        "mode": "wait_until",
+        "execution": "close",
+        "defer_when": _cmp(_field("close"), {"kind": "lagged_market_field", "offset_days": -1, "field": "close"}, "less_than"),
+        "resume_when": _cmp(_field("close"), {"kind": "lagged_market_field", "offset_days": -1, "field": "close"}, "greater_than"),
+    }
+    strategy = TimedStrategyDefinition.model_validate(payload)
+    # A wait-until entry has no branches; semantic validation must inspect its
+    # defer/resume predicates instead of assuming every non-fixed entry is
+    # conditional.
+    validate_strategy(strategy)
+    # Anchor at a declining day waits for the first subsequent up-close.
+    resolved = _resolve_entry(frame, strategy, 4)
+    assert resolved is not None and resolved[0] == 6
 
 
 def test_v03_anchor_cross_requires_current_cross_and_prior_non_crossing_state():

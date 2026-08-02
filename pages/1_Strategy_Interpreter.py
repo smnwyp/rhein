@@ -30,6 +30,7 @@ from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHisto
 from alpha_agent.domain.sequence import TimedStrategyDefinition
 from alpha_agent.research.legacy_adapter import compile_timed_strategy
 from alpha_agent.research.v03_engine import run_v03_backtest
+from alpha_agent.research.reporting import aggregate_gross_pnl
 from rhein.backtest import input_files as backtest_input_files, load_ohlc as backtest_load_ohlc, run_backtest as legacy_run_backtest
 from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
@@ -346,15 +347,28 @@ if strategy_source == "新建策略":
 
 def interpret_and_render(request: StrategyInterpretationRequest, source_text: str) -> None:
     model_client = BedrockStrategyModelClient(model=model, region=region)
-    service = StrategyInterpreterService(
-        model_client,
-        monitor=st.session_state.interpreter_monitor,
-        inventory_client=model_client,
-        parsed_cache=JsonParsedInterpretationCache(ROOT / ".cache" / "parsed_interpretations.json"),
-    )
     try:
-        with st.spinner("正在解释策略…"):
-            result = service.interpret(request)
+        # This is intentionally a phase log rather than a fake percentage: a
+        # provider call has variable latency, while the deterministic checks
+        # are meaningful checkpoints users can audit.
+        with st.status("正在准备策略解释…", expanded=True) as interpretation_status:
+            def show_interpretation_progress(message: str) -> None:
+                interpretation_status.write(f"• {message}")
+                interpretation_status.update(label=message, state="running", expanded=True)
+
+            service = StrategyInterpreterService(
+                model_client,
+                monitor=st.session_state.interpreter_monitor,
+                inventory_client=model_client,
+                parsed_cache=JsonParsedInterpretationCache(ROOT / ".cache" / "parsed_interpretations.json"),
+                progress=show_interpretation_progress,
+            )
+            try:
+                result = service.interpret(request)
+            except Exception:
+                interpretation_status.update(label="解释未完成：已停止在最后一个可见步骤。", state="error", expanded=True)
+                raise
+            interpretation_status.update(label="策略解释完成", state="complete", expanded=False)
         if result.status == "parsed":
             st.session_state["last_parsed_strategy"] = result
             st.session_state["last_strategy_text"] = source_text
@@ -574,7 +588,10 @@ if matching_result is not None:
             gauges[0].html(kpi_gauge_html("sharpe", active["sharpe_ratio"].median() if len(active) else None, max_drawdown_limit=limit))
             gauges[1].html(kpi_gauge_html("annualized_return", active["annualized_return_pct"].median() if len(active) else None, max_drawdown_limit=limit))
             gauges[2].html(kpi_gauge_html("drawdown", active["max_drawdown_pct"].median() if len(active) else None, max_drawdown_limit=limit))
-            gross_profit, gross_loss = active["gross_profit"].fillna(0).sum(), active["gross_loss"].fillna(0).sum()
+            gross_profit, gross_loss = aggregate_gross_pnl(
+                kpis,
+                st.session_state.get("dsl_backtest_trades", pd.DataFrame()),
+            )
             overview_metrics = [
                 ("标的数", len(kpis)),
                 ("总交易数", int(kpis["n_trades"].sum())),
@@ -657,7 +674,10 @@ if matching_result is not None:
                         st.warning(f"找不到 {selected_symbol} 的回测源文件，无法绘制 K 线。")
                     else:
                         chart = backtest_load_ohlc(source_path).copy()
-                        for window in (5, 10, 20):
+                        # Display-only overlays are calculated from the same
+                        # source OHLC data. They never alter stored trades or
+                        # trigger a group backtest rerun.
+                        for window in (5, 10, 20, 60):
                             chart[f"MA{window}"] = chart["Close"].rolling(window).mean()
                         signal, entry, exit_ = (pd.Timestamp(trade[column]).normalize() for column in ("signal", "entry", "exit"))
                         chart_dates = pd.to_datetime(chart["Date"], errors="coerce").dt.normalize()
@@ -778,7 +798,8 @@ if matching_result is not None:
                                         "layer": [
                                             {"mark": "rule", "encoding": {"x": x, "y": {"field": "Low", "type": "quantitative", "scale": {"zero": False}}, "y2": {"field": "High"}, "tooltip": ohlc_tooltip}},
                                             {"mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Open", "type": "quantitative", "scale": {"zero": False}}, "y2": {"field": "Close"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
-                                            {"transform": [{"fold": ["MA5", "MA10", "MA20"], "as": ["MA", "Value"]}], "mark": {"type": "line"}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative", "scale": {"zero": False}}, "color": {"field": "MA", "type": "nominal"}}},
+                                            {"transform": [{"fold": ["MA5", "MA10", "MA20"], "as": ["MA", "Value"]}], "mark": {"type": "line", "strokeWidth": 1.8}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative", "scale": {"zero": False}}, "color": {"field": "MA", "type": "nominal", "scale": {"domain": ["MA5", "MA10", "MA20"], "range": ["#2563eb", "#f59e0b", "#dc2626"]}, "legend": {"title": "均线"}}}},
+                                            {"transform": [{"calculate": "'MA60（60日）'", "as": "MA"}], "mark": {"type": "line", "stroke": "#334155", "strokeWidth": 3, "strokeDash": [7, 3]}, "encoding": {"x": x, "y": {"field": "MA60", "type": "quantitative", "scale": {"zero": False}}, "color": {"field": "MA", "type": "nominal", "scale": {"domain": ["MA5", "MA10", "MA20", "MA60（60日）"], "range": ["#2563eb", "#f59e0b", "#dc2626", "#334155"]}, "legend": {"title": "均线"}}}},
                                             {"data": {"values": markers}, "mark": {"type": "rule", "color": event_color, "strokeWidth": 1.2}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "y2": {"field": "LabelPrice"}, "tooltip": event_tooltip}},
                                             {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 90, "color": event_color}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "tooltip": event_tooltip}},
                                             {"data": {"values": markers}, "mark": {"type": "text", "fontWeight": "bold", "color": event_color}, "encoding": {"x": x, "y": {"field": "LabelPrice", "type": "quantitative"}, "text": {"field": "ShortLabel"}, "tooltip": event_tooltip}},

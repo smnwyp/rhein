@@ -21,6 +21,17 @@ def test_library_can_save_original_language_before_a_dsl_exists(tmp_path):
     assert stored.strategy is None
 
 
+def test_library_replaces_a_draft_in_place_after_interpretation(tmp_path):
+    library = JsonStrategyLibrary(tmp_path / "saved_strategies.json")
+    draft = library.save(SavedStrategy(strategy_name="草稿", original_language="收盘价上穿均线"))
+    parsed = draft.model_copy(update={"strategy": strategy()})
+    library.replace(parsed)
+    restored = library.list()
+    assert len(restored) == 1
+    assert restored[0].strategy_id == draft.strategy_id
+    assert restored[0].strategy == strategy()
+
+
 def test_library_deletes_a_draft_without_affecting_validated_strategies(tmp_path):
     library = JsonStrategyLibrary(tmp_path / "saved_strategies.json")
     draft = library.save(SavedStrategy(strategy_name="草稿", original_language="t0 后买入"))

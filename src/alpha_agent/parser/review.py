@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition
-from alpha_agent.domain.indicators import EMA, RSI, RollingMeanVolume, RollingReturn, SMA
+from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition
+from alpha_agent.domain.indicators import EMA, MACDLine, MACDSignal, RSI, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand, CandlestickPatternCondition,
-    CurrentIndicatorOperand, CurrentMarketOperand, EntryPriceOperand, ExitRule, OrderedExtremaDrawdownConstraint, ScaledEntryPriceOperand,
+    CurrentIndicatorOperand, CurrentMarketOperand, LaggedMarketOperand, EntryPriceOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingVolumeRankOperand, ScaledEntryPriceOperand,
     EntryRunningMaximumOperand,
     TemporalComparisonCondition, TemporalCondition, TemporalConditionGroup, TemporalCrossCondition, TemporalOperand,
     TemporalScalarOperand, TimedStrategyDefinition,
@@ -28,7 +28,10 @@ def _indicator(indicator: object) -> str:
     if isinstance(indicator, EMA): return f"收盘 EMA({indicator.window})"
     if isinstance(indicator, RSI): return f"RSI({indicator.window})"
     if isinstance(indicator, RollingReturn): return f"{indicator.window} 日滚动收益"
+    if isinstance(indicator, RollingMinimum): return f"{indicator.field} {indicator.window} 日滚动最低值"
     if isinstance(indicator, RollingMeanVolume): return f"成交量 MA({indicator.window})"
+    if isinstance(indicator, MACDSignal): return f"MACD 慢线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
+    if isinstance(indicator, MACDLine): return f"MACD 快线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     raise TypeError(f"unknown indicator: {type(indicator).__name__}")
 
 
@@ -43,6 +46,7 @@ def _operand(operand: Operand) -> str:
 
 def _temporal_operand(operand: TemporalOperand) -> str:
     if isinstance(operand, CurrentMarketOperand): return _operand(MarketFieldOperand(kind="market_field", field=operand.field))
+    if isinstance(operand, LaggedMarketOperand): return f"前 {abs(operand.offset_days)} 日{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}"
     if isinstance(operand, CurrentIndicatorOperand): return _indicator(operand.indicator)
     if isinstance(operand, TemporalScalarOperand): return f"{operand.value:g}"
     if isinstance(operand, AnchorMarketOperand): return f"{operand.anchor} 日{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}"
@@ -52,6 +56,7 @@ def _temporal_operand(operand: TemporalOperand) -> str:
     if isinstance(operand, AnchorRunningMaximumOperand): return f"自 t0 起至当日的最大{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}（并列取最早）"
     if isinstance(operand, EntryRunningMaximumOperand): return f"自实际入场日起至当日的最大{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}（并列取{('最晚' if operand.tie_break == 'latest' else '最早')}）"
     if isinstance(operand, AnchorRunningVolumeRankOperand): return "自 t0 起至当日成交量的并列排名"
+    if isinstance(operand, RollingVolumeRankOperand): return f"最近 {operand.window} 日成交量的并列排名"
     raise TypeError(f"unknown temporal operand: {type(operand).__name__}")
 
 
@@ -61,6 +66,7 @@ _OPERATOR = {"greater_than": ">", "less_than": "<", "greater_than_or_equal": "�
 def _condition(condition: Condition) -> str:
     if isinstance(condition, ComparisonCondition): return f"{_operand(condition.left)} {_OPERATOR[condition.operator]} {_operand(condition.right)}"
     if isinstance(condition, CrossCondition): return f"{_operand(condition.left)} {_OPERATOR[condition.operator]} {_operand(condition.right)}"
+    if isinstance(condition, RollingComparisonCountCondition): return f"最近 {condition.lookback_days} 日中，{_condition(condition.comparison)} 至少成立 {condition.minimum_true_count} 次"
     if isinstance(condition, ConditionGroup):
         joiner = " 且 " if condition.operator == "and" else " 或 "
         return "(" + joiner.join(_condition(item) for item in condition.conditions) + ")"
@@ -128,10 +134,13 @@ def build_review_items(strategy: AnyStrategyDefinition) -> list[ReviewItem]:
         timing = _range(strategy.entry.active_day.start_offset_days, strategy.entry.active_day.end_offset_days)
         explanation = f"{timing}：t0 条件全部成立后，按收盘价入场。" if strategy.entry.condition is None else f"{timing}：若{_temporal_condition(strategy.entry.condition)}，按收盘价入场。"
         items.append(ReviewItem("入场", "entry", explanation))
-    else:
+    elif strategy.entry.mode == "conditional":
         assert strategy.entry.branches is not None
         branches = "；".join(f"t0+{branch.active_day.start_offset_days}（{branch.branch_id}）：若{_temporal_condition(branch.condition)}，按收盘价入场" for branch in strategy.entry.branches)
         items.append(ReviewItem("条件入场", "entry.branches", branches + "。未命中任何分支则放弃该候选点。"))
+    else:
+        assert strategy.entry.defer_when is not None and strategy.entry.resume_when is not None
+        items.append(ReviewItem("延后入场", "entry", f"若 t0 当日{_temporal_condition(strategy.entry.defer_when)}，则不入场；自下一交易日起，首次{_temporal_condition(strategy.entry.resume_when)}时按收盘价入场。"))
     for index, state in enumerate(strategy.persistent_states):
         prefix = "实际入场日 E" if state.relative_to == "entry" else "t0"
         window = _range(state.active_days.start_offset_days, state.active_days.end_offset_days).replace("t0", prefix)

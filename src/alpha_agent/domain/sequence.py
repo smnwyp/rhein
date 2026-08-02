@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import Field, FiniteFloat, model_validator
+from pydantic import Field, FiniteFloat, PositiveInt, model_validator
 
 from alpha_agent.domain.conditions import Condition
 from alpha_agent.domain.indicators import DSLModel, IndicatorDefinition, MarketFieldName
@@ -32,6 +32,14 @@ class RelativeDayRange(DSLModel):
 
 class CurrentMarketOperand(DSLModel):
     kind: Literal["market_field"]
+    field: MarketFieldName
+
+
+class LaggedMarketOperand(DSLModel):
+    """A prior market field relative to the day currently being evaluated."""
+
+    kind: Literal["lagged_market_field"]
+    offset_days: int = Field(lt=0)
     field: MarketFieldName
 
 
@@ -94,8 +102,16 @@ class AnchorRunningVolumeRankOperand(DSLModel):
     field: Literal["volume"]
 
 
+class RollingVolumeRankOperand(DSLModel):
+    """Competition rank of current volume within the inclusive trailing window."""
+
+    kind: Literal["rolling_volume_rank"]
+    window: PositiveInt
+    field: Literal["volume"]
+
+
 TemporalOperand = Annotated[
-    CurrentMarketOperand | CurrentIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand | AnchorRunningVolumeRankOperand,
+    CurrentMarketOperand | LaggedMarketOperand | CurrentIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand | AnchorRunningVolumeRankOperand | RollingVolumeRankOperand,
     Field(discriminator="kind"),
 ]
 TemporalSeriesOperand = Annotated[
@@ -208,25 +224,30 @@ class EntryRule(DSLModel):
     condition languages is both redundant and a source of semantic drift.
     """
 
-    mode: Literal["fixed", "conditional"] = "fixed"
+    mode: Literal["fixed", "conditional", "wait_until"] = "fixed"
     active_day: RelativeDayRange | None = None
     condition: TemporalCondition | None = None
     execution: Literal["close"]
     branches: list[EntryBranch] | None = None
+    defer_when: TemporalCondition | None = None
+    resume_when: TemporalCondition | None = None
 
     @model_validator(mode="after")
     def entry_must_be_one_day(self) -> "EntryRule":
         if self.mode == "fixed":
-            if self.active_day is None or self.branches is not None:
+            if self.active_day is None or self.branches is not None or self.defer_when is not None or self.resume_when is not None:
                 raise ValueError("fixed entry requires active_day and cannot define branches")
             if self.active_day.end_offset_days != self.active_day.start_offset_days:
                 raise ValueError("entry active_day must name exactly one relative day")
-        else:
+        elif self.mode == "conditional":
             if self.active_day is not None or self.condition is not None or not self.branches:
                 raise ValueError("conditional entry requires one or more branches only")
             offsets = [branch.active_day.start_offset_days for branch in self.branches]
             if len(offsets) != len(set(offsets)):
                 raise ValueError("conditional entry branches must use distinct relative days")
+        else:
+            if self.active_day is not None or self.condition is not None or self.branches is not None or self.defer_when is None or self.resume_when is None:
+                raise ValueError("wait_until entry requires defer_when and resume_when only")
         return self
 
 

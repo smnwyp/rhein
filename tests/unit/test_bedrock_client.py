@@ -5,7 +5,7 @@ import pytest
 import requests
 from alpha_agent.domain.interpretation import StrategyInterpretationRequest
 from alpha_agent.errors import ModelClientFailure
-from alpha_agent.model.bedrock_client import BedrockStrategyModelClient, _bedrock_transport_schema
+from alpha_agent.model.bedrock_client import BedrockStrategyModelClient, _bedrock_inventory_schema, _bedrock_transport_schema
 
 class Session:
     def __init__(self): self.call = None
@@ -93,7 +93,6 @@ def test_bedrock_structured_output_transport_schema_is_small_and_non_recursive()
 def test_bedrock_adapter_uses_compact_semantic_inventory_request():
     session = Session()
     client = BedrockStrategyModelClient(api_key="test-token", session=session)
-    # Reuse the minimal envelope but replace its inner content with inventory JSON.
     inventory = {
         "status": "compile_eligible",
         "symbols": [],
@@ -101,7 +100,7 @@ def test_bedrock_adapter_uses_compact_semantic_inventory_request():
         "closure": [{"dimension": "temporal", "status": "closed", "explanation": "explicit", "source_clause_ids": ["C01"], "semantic_ids": ["I-ENTRY"]}],
         "questions": [], "ambiguous_terms": [], "unsupported_features": [],
     }
-    response = {"output": {"message": {"content": [{"text": json.dumps({"inventory_json": json.dumps(inventory)})}]}}}
+    response = {"output": {"message": {"content": [{"text": json.dumps(inventory)}]}}}
     session.post = lambda url, **kwargs: (setattr(session, "call", (url, kwargs)) or SimpleNamespace(raise_for_status=lambda: None, json=lambda: response))
 
     result = client.inspect_strategy(StrategyInterpretationRequest(strategy_text="Buy", source_clauses=[{"clause_id": "C01", "text": "Buy"}]))
@@ -109,7 +108,15 @@ def test_bedrock_adapter_uses_compact_semantic_inventory_request():
     assert result["status"] == "compile_eligible"
     assert session.call[1]["json"]["inferenceConfig"]["maxTokens"] == 8192
     schema = json.loads(session.call[1]["json"]["outputConfig"]["textFormat"]["structure"]["jsonSchema"]["schema"])
-    assert schema["required"] == ["inventory_json"]
+    assert schema["type"] == "object"
+    assert "status" in schema["properties"]
+
+
+def test_bedrock_inventory_schema_strips_provider_unsupported_cardinality_keywords():
+    serialized = json.dumps(_bedrock_inventory_schema())
+    assert "maxItems" not in serialized
+    assert "minItems" not in serialized
+    assert "additionalProperties" in serialized
 
 
 def test_bedrock_adapter_retries_one_transient_connection_failure_before_succeeding():

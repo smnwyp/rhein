@@ -6,14 +6,14 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition
-from alpha_agent.domain.indicators import EMA, RSI, RollingMeanVolume, RollingReturn, SMA
+from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition
+from alpha_agent.domain.indicators import EMA, MACDLine, MACDSignal, RSI, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorChangeConstraint, AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand,
-    CandlestickPatternCondition, CurrentIndicatorOperand, CurrentMarketOperand, EntryPriceOperand,
+    CandlestickPatternCondition, CurrentIndicatorOperand, CurrentMarketOperand, LaggedMarketOperand, EntryPriceOperand,
     EntryRunningMaximumOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingLowAnchorConstraint,
-    ScaledEntryPriceOperand, TemporalComparisonCondition,
+    RollingVolumeRankOperand, ScaledEntryPriceOperand, TemporalComparisonCondition,
     TemporalCrossCondition,
     TemporalCondition, TemporalConditionGroup, TemporalOperand, TemporalScalarOperand, TimedStrategyDefinition,
 )
@@ -22,17 +22,47 @@ from rhein.engine.kpis import calculate_kpis
 
 
 def _indicator_values(df: pd.DataFrame, indicator: object) -> np.ndarray:
+    # An anchor tree evaluates several conditions for every trading day.  The
+    # same SMA/MACD series must be calculated once per input frame, not once
+    # per condition/day.  ``attrs`` keeps this deterministic cache local to
+    # the in-memory backtest frame and out of persisted strategy artifacts.
+    cache = df.attrs.setdefault("_alpha_indicator_cache", {})
+    try:
+        if indicator in cache:
+            return cache[indicator]
+    except TypeError:
+        # All supported DSL indicator models are frozen/hashable.  Preserve a
+        # safe fallback for callers supplying an unsupported object so the
+        # normal typed error below remains authoritative.
+        cache = None
     close = df["Close"]
-    if isinstance(indicator, SMA): return close.rolling(indicator.window).mean().to_numpy()
-    if isinstance(indicator, EMA): return close.ewm(span=indicator.window, adjust=False, min_periods=indicator.window).mean().to_numpy()
-    if isinstance(indicator, RollingReturn): return (close / close.shift(indicator.window) - 1).to_numpy()
-    if isinstance(indicator, RollingMeanVolume): return df["Volume"].rolling(indicator.window).mean().to_numpy()
-    if isinstance(indicator, RSI):
+    if isinstance(indicator, SMA):
+        values = close.rolling(indicator.window).mean().to_numpy()
+    elif isinstance(indicator, EMA):
+        values = close.ewm(span=indicator.window, adjust=False, min_periods=indicator.window).mean().to_numpy()
+    elif isinstance(indicator, RollingReturn):
+        values = (close / close.shift(indicator.window) - 1).to_numpy()
+    elif isinstance(indicator, RollingMinimum):
+        values = df[indicator.field.capitalize()].rolling(indicator.window).min().to_numpy()
+    elif isinstance(indicator, RollingMeanVolume): values = df["Volume"].rolling(indicator.window).mean().to_numpy()
+    elif isinstance(indicator, RSI):
         delta = close.diff()
         gain = delta.clip(lower=0).ewm(alpha=1 / indicator.window, adjust=False, min_periods=indicator.window).mean()
         loss = (-delta.clip(upper=0)).ewm(alpha=1 / indicator.window, adjust=False, min_periods=indicator.window).mean()
-        return (100 - 100 / (1 + gain / loss)).to_numpy()
-    raise UnsupportedStrategyFeature("v0.3 daily engine does not support this indicator", details={"indicator": type(indicator).__name__})
+        values = (100 - 100 / (1 + gain / loss)).to_numpy()
+    elif isinstance(indicator, (MACDLine, MACDSignal)):
+        fast = close.ewm(span=indicator.fast_window, adjust=False, min_periods=indicator.slow_window).mean()
+        slow = close.ewm(span=indicator.slow_window, adjust=False, min_periods=indicator.slow_window).mean()
+        line = fast - slow
+        if isinstance(indicator, MACDSignal):
+            values = line.ewm(span=indicator.signal_window, adjust=False, min_periods=indicator.signal_window).mean().to_numpy()
+        else:
+            values = line.to_numpy()
+    else:
+        raise UnsupportedStrategyFeature("v0.3 daily engine does not support this indicator", details={"indicator": type(indicator).__name__})
+    if cache is not None:
+        cache[indicator] = values
+    return values
 
 
 def _compare(left: float, right: float, operator: str) -> bool:
@@ -80,16 +110,32 @@ def _static_condition(df: pd.DataFrame, condition: Condition, index: int) -> boo
     if isinstance(condition, ConditionGroup):
         outcomes = [_static_condition(df, child, index) for child in condition.conditions]
         return all(outcomes) if condition.operator == "and" else any(outcomes)
+    if isinstance(condition, RollingComparisonCountCondition):
+        start = index - condition.lookback_days + 1
+        if start < 0:
+            return False
+        passed = sum(
+            _static_condition(df, condition.comparison, candidate_index)
+            for candidate_index in range(start, index + 1)
+        )
+        return passed >= condition.minimum_true_count
     raise UnsupportedStrategyFeature("v0.3 daily engine supports comparison/group anchor conditions only")
 
 
 def _anchor_operand_label(operand: Operand) -> str:
     if isinstance(operand, MarketFieldOperand): return operand.field.capitalize()
-    if isinstance(operand, IndicatorOperand): return f"{operand.indicator.indicator.upper()}({operand.indicator.window})"
-    if isinstance(operand, LaggedIndicatorOperand): return f"{operand.indicator.indicator.upper()}({operand.indicator.window})[t{operand.offset_days:+d}]"
+    if isinstance(operand, IndicatorOperand): return _indicator_label(operand.indicator)
+    if isinstance(operand, LaggedIndicatorOperand): return f"{_indicator_label(operand.indicator)}[t{operand.offset_days:+d}]"
     if isinstance(operand, ScalarOperand): return f"{operand.value:g}"
     if isinstance(operand, ScaledOperand): return f"{_anchor_operand_label(operand.operand)} × {operand.multiplier:g}"
     raise UnsupportedStrategyFeature("v0.3 daily engine cannot describe this anchor operand")
+
+
+def _indicator_label(indicator: object) -> str:
+    if isinstance(indicator, (MACDLine, MACDSignal)):
+        component = "慢线" if isinstance(indicator, MACDSignal) else "快线"
+        return f"MACD{component}({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
+    return f"{indicator.indicator.upper()}({indicator.window})"  # type: ignore[union-attr]
 
 
 def _anchor_condition_checks(df: pd.DataFrame, condition: Condition, index: int, path: str = "anchor.condition") -> list[dict[str, object]]:
@@ -126,11 +172,26 @@ def _anchor_condition_checks(df: pd.DataFrame, condition: Condition, index: int,
             "prior_right_value": round(prior_right, 6) if np.isfinite(prior_right) else None,
             "passed": _static_condition(df, condition, index),
         }]
+    if isinstance(condition, RollingComparisonCountCondition):
+        start = index - condition.lookback_days + 1
+        count = sum(_static_condition(df, condition.comparison, day) for day in range(max(0, start), index + 1))
+        return [{
+            "dsl_path": path,
+            "left": f"{condition.lookback_days} 日内满足次数",
+            "left_value": count,
+            "operator": "greater_than_or_equal",
+            "right": str(condition.minimum_true_count),
+            "right_value": condition.minimum_true_count,
+            "passed": start >= 0 and count >= condition.minimum_true_count,
+        }]
     raise UnsupportedStrategyFeature("v0.3 daily engine cannot materialize this anchor condition")
 
 
 def _temporal_operand(df: pd.DataFrame, operand: TemporalOperand, *, index: int, anchor_index: int, entry_price: float, entry_index: int | None = None) -> float:
     if isinstance(operand, CurrentMarketOperand): return float(df[operand.field.capitalize()].iloc[index])
+    if isinstance(operand, LaggedMarketOperand):
+        lagged_index = index + operand.offset_days
+        return float(df[operand.field.capitalize()].iloc[lagged_index]) if lagged_index >= 0 else float("nan")
     if isinstance(operand, CurrentIndicatorOperand): return float(_indicator_values(df, operand.indicator)[index])
     if isinstance(operand, TemporalScalarOperand): return float(operand.value)
     if isinstance(operand, AnchorMarketOperand): return float(df[operand.field.capitalize()].iloc[anchor_index])
@@ -150,6 +211,15 @@ def _temporal_operand(df: pd.DataFrame, operand: TemporalOperand, *, index: int,
             return float("nan")
         # Competition rank: 100, 100, 90 are ranks 1, 1, 3. Thus an equal
         # maximum or second-highest volume satisfies rank <= 2 as specified.
+        return float(1 + np.count_nonzero(values > current))
+    if isinstance(operand, RollingVolumeRankOperand):
+        start = index - operand.window + 1
+        if start < 0:
+            return float("nan")
+        current = float(df["Volume"].iloc[index])
+        values = df["Volume"].iloc[start:index + 1].to_numpy(dtype=float)
+        if not np.isfinite(current) or not np.isfinite(values).all():
+            return float("nan")
         return float(1 + np.count_nonzero(values > current))
     raise UnsupportedStrategyFeature("v0.3 daily engine cannot evaluate this temporal operand")
 
@@ -265,9 +335,19 @@ def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_i
     if strategy.entry.mode == "fixed":
         assert strategy.entry.active_day is not None
         candidates = [(strategy.entry.active_day.start_offset_days, strategy.entry.condition)]
-    else:
+    elif strategy.entry.mode == "conditional":
         assert strategy.entry.branches is not None
         candidates = [(branch.active_day.start_offset_days, branch.condition) for branch in strategy.entry.branches]
+    else:
+        assert strategy.entry.defer_when is not None and strategy.entry.resume_when is not None
+        anchor_price = float(df["Close"].iloc[anchor_index])
+        if not _temporal_condition(df, strategy.entry.defer_when, index=anchor_index, anchor_index=anchor_index, entry_index=anchor_index, entry_price=anchor_price):
+            return anchor_index, anchor_price
+        for entry_index in range(anchor_index + 1, len(df)):
+            entry_price = float(df["Close"].iloc[entry_index])
+            if _temporal_condition(df, strategy.entry.resume_when, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price):
+                return entry_index, entry_price
+        return None
     for offset, condition in sorted(candidates, key=lambda item: item[0]):
         entry_index = anchor_index + offset
         if entry_index >= len(df):

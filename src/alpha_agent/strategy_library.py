@@ -52,6 +52,21 @@ class JsonStrategyLibrary:
         self._write(entries)
         return strategy
 
+    def replace(self, strategy: SavedStrategy) -> SavedStrategy:
+        """Replace one saved record while preserving its stable library ID.
+
+        A parsed draft is the same user strategy after interpretation, not a
+        new strategy.  Replacing rather than appending prevents duplicate
+        entries and keeps any future saved research history linkable to it.
+        """
+        entries = self.list()
+        for index, entry in enumerate(entries):
+            if entry.strategy_id == strategy.strategy_id:
+                entries[index] = strategy
+                self._write(entries)
+                return strategy
+        raise StrategyLibraryError("saved strategy was not found", details={"strategy_id": str(strategy.strategy_id)})
+
     def rename(self, strategy_id: UUID, strategy_name: str) -> SavedStrategy:
         entries = self.list()
         for index, entry in enumerate(entries):

@@ -105,6 +105,19 @@ def test_interpreter_retries_one_repair_with_structured_validation_feedback():
     assert "Validation details" in client.requests[1].repair_instruction
 
 
+def test_interpreter_reports_auditable_phase_progress_without_affecting_result():
+    response = parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))
+    phases: list[str] = []
+    result = StrategyInterpreterService(FakeModelClient([response]), progress=phases.append).interpret(
+        StrategyInterpretationRequest(strategy_text="buy then sell", symbol="AAPL")
+    )
+    assert isinstance(result, ParsedStrategy)
+    assert phases[0] == "正在切分原始策略条款…"
+    assert "正在执行 Pydantic schema 校验…" in phases
+    assert "正在执行策略语义与时序校验…" in phases
+    assert phases[-1] == "解释完成。"
+
+
 def test_validated_parsed_result_is_reused_without_any_model_call(tmp_path):
     cache = JsonParsedInterpretationCache(tmp_path / "parsed_interpretations.json")
     response = parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))

@@ -3,6 +3,7 @@ import re
 import json
 from collections.abc import Mapping
 from time import perf_counter
+from typing import Callable
 from uuid import UUID, uuid4
 from pydantic import TypeAdapter, ValidationError
 from alpha_agent.domain.interpretation import ClarificationRequired, ParsedStrategy, StrategyInterpretationRequest, StrategyInterpretationResult
@@ -439,18 +440,31 @@ def _repair_anchor_indicator_encoding(raw: dict[str, object]) -> dict[str, objec
 
 
 class StrategyInterpreterService:
-    def __init__(self, client: StrategyModelClient, *, monitor: InterpreterMonitor | None = None, inventory_client: SemanticInventoryModelClient | None = None, parsed_cache: ParsedInterpretationCache | None = None) -> None:
+    def __init__(self, client: StrategyModelClient, *, monitor: InterpreterMonitor | None = None, inventory_client: SemanticInventoryModelClient | None = None, parsed_cache: ParsedInterpretationCache | None = None, progress: Callable[[str], None] | None = None) -> None:
         self._client, self._monitor, self._inventory_client, self._parsed_cache = client, monitor, inventory_client, parsed_cache
+        self._progress = progress
+
+    def _report_progress(self, message: str) -> None:
+        """Emit UI-only progress; observer failures must not affect interpretation."""
+        if self._progress is None:
+            return
+        try:
+            self._progress(message)
+        except Exception:
+            pass
 
     def interpret(self, request: StrategyInterpretationRequest) -> StrategyInterpretationResult:
         request_id, start = uuid4(), perf_counter()
         try:
+            self._report_progress("正在切分原始策略条款…")
             request = enrich_request(request)
+            self._report_progress("正在进行确定性预检查与澄清检查…")
             preflight = preflight_clarifications(request)
             if preflight is not None:
                 self._record(request_id, request, preflight, perf_counter() - start)
                 return preflight
             if self._parsed_cache is not None:
+                self._report_progress("正在检查已验证的解释缓存…")
                 cached = self._parsed_cache.get(request)
                 if cached is not None:
                     try:
@@ -467,13 +481,17 @@ class StrategyInterpreterService:
                         # guardrail. Drop it and interpret normally.
                         self._parsed_cache.delete(request)
                     else:
+                        self._report_progress("已命中已验证缓存；正在完成校验。")
                         self._record(request_id, request, result, perf_counter() - start, cache_hit=True)
                         return result
             if self._inventory_client is not None:
+                self._report_progress("正在建立语义清单：识别指标、状态、执行与数据要求…")
                 inventory_request = request
                 inventory: SemanticInventory | None = None
                 for inventory_attempt in range(2):
                     try:
+                        if inventory_attempt:
+                            self._report_progress("语义清单未通过本地契约；正在请求定点修复…")
                         try:
                             inventory = SemanticInventory.model_validate(self._inventory_client.inspect_strategy(inventory_request))
                         except ValidationError as error:
@@ -494,7 +512,8 @@ class StrategyInterpreterService:
                                 f"unsupported feature. Validation details: {json.dumps(error.details, ensure_ascii=False)}"
                             )
                         })
-                assert inventory is not None
+                if inventory is None:
+                    raise ModelClientFailure("semantic inventory phase completed without a result", details={"phase": "semantic_inventory", "attempts": 2})
                 if inventory.status == "clarification_required":
                     result = inventory_clarification(inventory, request)
                     self._record(request_id, request, result, perf_counter() - start)
@@ -505,12 +524,14 @@ class StrategyInterpreterService:
             candidate_result: StrategyInterpretationResult | None = None
             for attempt in range(2):
                 try:
+                    self._report_progress("正在将语义清单编译为策略 DSL…" if attempt == 0 else "DSL 未通过本地校验；正在请求仅修复受影响条款…")
                     raw = _normalize_provider_result(self._client.interpret_strategy(request))
                     raw = _direct_dsl_fallback_coverage(raw, request)
                     raw = _discard_invalid_optional_partial_strategy(raw)
                     raw = _repair_explicit_cross_encoding(raw, request.strategy_text)
                     raw = _repair_explicit_one_day_return_encoding(raw, request.strategy_text)
                     try:
+                        self._report_progress("正在执行 Pydantic schema 校验…")
                         result = _RESULT_ADAPTER.validate_python(raw)
                     except ValidationError as error:
                         raise ModelResponseParsingFailure("model response does not match the interpretation contract", details={"validation_errors": error.errors(include_url=False)}) from error
@@ -518,14 +539,17 @@ class StrategyInterpreterService:
                     candidate_result = result
                     strategy = result.strategy if isinstance(result, ParsedStrategy) else result.partial_strategy
                     if strategy is not None:
+                        self._report_progress("正在执行策略语义与时序校验…")
                         validate_strategy(strategy)
                     strategy_payload = strategy.model_dump(mode="json") if strategy is not None else None
+                    self._report_progress("正在核对原文条款覆盖与 DSL 映射…")
                     validate_coverage(request.source_clauses, result.coverage, strategy_payload=strategy_payload, parsed=isinstance(result, ParsedStrategy))
                     if isinstance(result, ParsedStrategy) and strategy_payload is not None:
                         validate_source_conformance(request.source_clauses, result.coverage, strategy_payload)
                         if self._parsed_cache is not None:
                             self._parsed_cache.put(request, result.model_dump(mode="json"))
                     self._record(request_id, request, result, perf_counter() - start)
+                    self._report_progress("解释完成。")
                     return result
                 except (ModelResponseParsingFailure, SemanticStrategyValidationFailure) as error:
                     if attempt == 1:
@@ -541,7 +565,7 @@ class StrategyInterpreterService:
                     if repair_error is not None:
                         raise repair_error from error
                     raise
-            raise AssertionError("unreachable")
+            raise ModelClientFailure("interpreter exhausted its bounded attempts without a result", details={"phase": "dsl_compilation", "attempts": 2})
         except AlphaAgentError as error:
             self._record(request_id, request, None, perf_counter() - start, error.code); raise
         except Exception as error:

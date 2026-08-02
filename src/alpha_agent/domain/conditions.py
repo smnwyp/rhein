@@ -1,7 +1,7 @@
 """Typed recursive condition trees."""
 from __future__ import annotations
 from typing import Annotated, Literal
-from pydantic import Field
+from pydantic import Field, PositiveInt, model_validator
 from alpha_agent.domain.indicators import DSLModel
 from alpha_agent.domain.operands import Operand, SeriesOperand
 
@@ -15,9 +15,21 @@ class CrossCondition(DSLModel):
     operator: Literal["cross_above", "cross_below"]
     left: SeriesOperand
     right: SeriesOperand
+class RollingComparisonCountCondition(DSLModel):
+    """Count bars where one explicit persistent comparison holds in a window."""
+    node_type: Literal["rolling_comparison_count"]
+    lookback_days: PositiveInt
+    minimum_true_count: PositiveInt
+    comparison: ComparisonCondition
+
+    @model_validator(mode="after")
+    def count_fits_window(self) -> "RollingComparisonCountCondition":
+        if self.minimum_true_count > self.lookback_days:
+            raise ValueError("minimum_true_count cannot exceed lookback_days")
+        return self
 class ConditionGroup(DSLModel):
     node_type: Literal["group"]
     operator: Literal["and", "or"]
     conditions: list[Condition] = Field(min_length=1)
-Condition = Annotated[ComparisonCondition | CrossCondition | ConditionGroup, Field(discriminator="node_type")]
+Condition = Annotated[ComparisonCondition | CrossCondition | RollingComparisonCountCondition | ConditionGroup, Field(discriminator="node_type")]
 ConditionGroup.model_rebuild()
