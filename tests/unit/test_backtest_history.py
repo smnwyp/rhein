@@ -34,6 +34,16 @@ def test_backtest_history_persists_results_by_strategy_identity(tmp_path):
     assert history.list_for_strategy(strategy_b) == [run_b]
 
 
+def test_backtest_history_deletes_only_the_requested_run(tmp_path):
+    history = JsonBacktestHistory(tmp_path / "saved_backtest_results.json")
+    strategy_id = uuid4()
+    first, second = history.save(run(strategy_id)), history.save(run(strategy_id))
+
+    history.delete(second.run_id)
+
+    assert history.list_for_strategy(strategy_id) == [first]
+
+
 def test_historical_view_recalculates_trade_kpis_without_mutating_saved_records() -> None:
     stored_kpis = [{"标的": "LGND", "max_drawdown_pct": 0.0, "annualized_return_pct": 2.0}]
     stored_trades = [

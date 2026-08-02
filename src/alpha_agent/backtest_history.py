@@ -59,6 +59,14 @@ class JsonBacktestHistory:
         entries = self._read()
         self._write([entry for entry in entries if entry.strategy_id != strategy_id])
 
+    def delete(self, run_id: UUID) -> None:
+        """Remove one known run without affecting other strategy history."""
+        entries = self._read()
+        remaining = [entry for entry in entries if entry.run_id != run_id]
+        if len(remaining) == len(entries):
+            raise BacktestHistoryError("saved backtest run was not found", details={"run_id": str(run_id)})
+        self._write(remaining)
+
     def _read(self) -> list[SavedBacktestRun]:
         if not self._path.exists():
             return []

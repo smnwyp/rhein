@@ -373,8 +373,13 @@ def run_v03_backtest(df: pd.DataFrame, *, strategy: TimedStrategyDefinition, cap
             index += 1
             continue
         anchor_checks = _anchor_condition_checks(df, strategy.anchor.condition, index)
-        if not all(bool(check["passed"]) for check in anchor_checks):
-            raise AssertionError("accepted anchor point has a failed materialized condition")
+        # ``anchor_checks`` is an audit trail, not an additional eligibility
+        # gate.  In particular, an accepted ``OR`` group deliberately has
+        # false leaves whenever another branch is true.  Requiring every
+        # flattened leaf to pass turned valid strategies into a group-wide
+        # failure (and hid the real result behind an AssertionError).
+        # Eligibility is authoritatively decided above by the recursively
+        # evaluated condition tree, which preserves AND/OR semantics.
         constraints_hold, event_points = _anchor_constraints_hold(df, strategy, index)
         if not constraints_hold:
             index += 1

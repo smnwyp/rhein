@@ -498,10 +498,15 @@ if matching_result is not None:
     if saved_backtest_strategy_id is not None:
         current_group_path = str(Path(data_path).resolve())
         try:
-            saved_runs = [
+            all_saved_runs = [
                 run for run in backtest_history.list_for_strategy(saved_backtest_strategy_id)
                 if same_data_scope(run.data_path, current_group_path, project_root=ROOT)
             ]
+            # A previous engine-wide failure may have created an empty record
+            # before the UI could surface its per-file errors.  That is not a
+            # usable research result (unlike a normal zero-trade run, which
+            # still has one KPI row per symbol), so do not offer it for load.
+            saved_runs = [run for run in all_saved_runs if run.kpis]
         except BacktestHistoryError as error:
             st.warning(f"无法读取此策略的已保存回测：{error.message}")
             saved_runs = []
@@ -526,6 +531,8 @@ if matching_result is not None:
                 )
                 st.rerun()
         else:
+            if 'all_saved_runs' in locals() and all_saved_runs:
+                st.warning("已忽略一条没有任何标的 KPI 的失败回测记录；请重新运行当前组回测。")
             st.caption("此已保存策略尚未在当前数据组保存过回测。运行后会自动建立第一条记录。")
     else:
         st.caption("当前是未保存策略或已修改版本：仍可临时回测；先保存策略后，结果才会按“策略 × 数据组”持久化。")
@@ -546,6 +553,9 @@ if matching_result is not None:
                     params["cost_bps"] = cost_bps
                 paths = backtest_input_files(Path(data_path))
                 kpis, trades = collect_results(paths, params, initial_capital, True, load_ohlc=backtest_load_ohlc, run_backtest=runner, progress_label=label)
+                if kpis.empty:
+                    st.warning("本次所有标的均运行失败，未保存为空白回测记录；请检查上方逐文件错误后重试。")
+                    raise BacktestHistoryError("all input files failed; no empty backtest result was saved")
                 assert current_backtest_view_scope is not None
                 replace_backtest_view(
                     kpis=kpis,

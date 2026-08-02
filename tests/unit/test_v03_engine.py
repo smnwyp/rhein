@@ -72,6 +72,35 @@ def test_v03_engine_enters_on_a_qualified_anchor_without_duplicate_entry_conditi
     assert trades.iloc[0].signal == trades.iloc[0].entry
 
 
+def test_v03_engine_allows_false_leaf_inside_a_satisfied_anchor_or_group():
+    """Audit snapshots retain false OR branches without rejecting the anchor."""
+    payload = _strategy().model_dump(mode="json")
+    payload["anchor"]["condition"] = {
+        "node_type": "group",
+        "operator": "or",
+        "conditions": [
+            _cmp(_field("close"), {"kind": "scalar", "value": 10_000}),
+            _cmp(_field("close"), _sma(5)),
+        ],
+    }
+    payload["anchor"]["constraints"] = []
+    payload["entry"] = {
+        "mode": "fixed",
+        "active_day": {"start_offset_days": 0, "end_offset_days": 0},
+        "execution": "close",
+    }
+    payload["lifecycle_policy"]["allow_reentry_after_exit"] = False
+    strategy = TimedStrategyDefinition.model_validate(payload)
+    close = np.linspace(10, 30, 30)
+    frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=len(close), freq="B"), "Open": close, "High": close + 1, "Low": close - 1, "Close": close, "Volume": 100.0})
+
+    trades, _ = run_v03_backtest(frame, strategy=strategy, capital=10_000, compound=False)
+
+    assert len(trades) == 1
+    assert any(not check["passed"] for check in trades.iloc[0].anchor_checks)
+    assert any(check["passed"] for check in trades.iloc[0].anchor_checks)
+
+
 def test_v03_supports_macd_rolling_trend_count_and_wait_until_entry():
     close = np.array([10, 9, 8, 8.5, 8.2, 8.1, 8.4, 8.3, 8.6, 8.5, 8.8, 8.7, 9.0, 8.9, 9.2, 9.4, 9.6, 9.8, 10.0, 10.2, 10.4, 10.6, 10.8, 11.0, 11.2, 11.4, 11.6, 11.8, 12.0, 12.2], dtype=float)
     frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=len(close), freq="B"), "Open": close, "High": close + .1, "Low": close - .1, "Close": close, "Volume": np.arange(len(close), dtype=float)})
