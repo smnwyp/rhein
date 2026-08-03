@@ -1,7 +1,7 @@
 """Deterministic domain semantics, separate from schema parsing."""
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import RSI, RollingMeanVolume, RollingReturn
-from alpha_agent.domain.operands import IndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
+from alpha_agent.domain.indicators import ADX, RSI, RollingMeanVolume, RollingReturn
+from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorMarketOperand,
     CurrentMarketOperand,
@@ -13,11 +13,12 @@ from alpha_agent.domain.sequence import (
 from alpha_agent.domain.strategy import AnyStrategyDefinition, StrategyDefinition
 from alpha_agent.errors import SemanticStrategyValidationFailure
 def _issue(path: str, rule: str, message: str) -> dict[str, str]: return {"path": path, "rule": rule, "message": message}
-def _series_dimension(o: MarketFieldOperand | IndicatorOperand) -> str:
+def _series_dimension(o: MarketFieldOperand | IndicatorOperand | LaggedIndicatorOperand) -> str:
     if isinstance(o, MarketFieldOperand): return "volume" if o.field == "volume" else "price"
     if isinstance(o.indicator, RollingMeanVolume): return "volume"
     if isinstance(o.indicator, RSI): return "rsi"
     if isinstance(o.indicator, RollingReturn): return "return"
+    if isinstance(o.indicator, ADX): return "adx"
     return "price"
 def _dimension(o: Operand) -> str:
     if isinstance(o, ScalarOperand): return "scalar"

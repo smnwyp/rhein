@@ -88,6 +88,8 @@ def _direct_dsl_fallback_coverage(raw: Mapping[str, object], request: StrategyIn
     coverage: list[dict[str, object]] = []
     for clause in request.source_clauses:
         text = clause.text
+        uses_daily_execution_proxy = bool(re.search(r"收盘前\s*10\s*分钟|分钟(?:级|数据)|盘前", text))
+        uses_daily_volume_proxy = bool(re.search(r"成交量[^。；;\n]*(?:96%|分钟|累计)", text))
         if re.search(r"(?:卖出|出场|止损|十字星|大阴线|高位|持仓管理|成交量)", text):
             paths = available("exit_rules", "persistent_states", "lifecycle_policy")
         elif re.search(r"(?:数据|周期|复权|执行|成交价格|手续费|滑点|日线)", text):
@@ -100,14 +102,36 @@ def _direct_dsl_fallback_coverage(raw: Mapping[str, object], request: StrategyIn
         # structurally total if future model variants broaden the recogniser.
         if not paths:
             paths = available("entry_condition", "exit_condition")
+        disposition = "assumption" if uses_daily_execution_proxy or uses_daily_volume_proxy else "mapped"
+        if uses_daily_volume_proxy:
+            explanation = "按已确认的日线研究政策，分钟级累计成交量不可得时以当日全天成交量直接替代；96% 折算不用于此日线回测。"
+        elif uses_daily_execution_proxy:
+            explanation = "按已确认的日线研究政策，收盘前 10 分钟成交统一以最终日线收盘价代理。"
+        else:
+            explanation = "提供者漏掉逐条映射；系统按已验证 DSL 的对应策略章节建立回退映射，请在解释审阅中核对。"
         coverage.append({
             "clause_id": clause.clause_id,
-            "disposition": "mapped",
+            "disposition": disposition,
             "dsl_paths": paths,
-            "explanation": "提供者漏掉逐条映射；系统按已验证 DSL 的对应策略章节建立回退映射，请在解释审阅中核对。",
+            "explanation": explanation,
         })
     repaired = dict(raw)
     repaired["coverage"] = coverage
+    assumptions = list(raw.get("assumptions", [])) if isinstance(raw.get("assumptions"), list) else []
+    if request.policy.execution_price_policy == "daily_close" and any(
+        re.search(r"收盘前\s*10\s*分钟|分钟(?:级|数据)|盘前", clause.text)
+        for clause in request.source_clauses
+    ):
+        assumptions.append({
+            "code": "daily_close_execution_proxy",
+            "message": "日线回测以最终收盘价代理原文中的收盘前 10 分钟成交价。",
+        })
+    if any(re.search(r"成交量[^。；;\n]*(?:96%|分钟|累计)", clause.text) for clause in request.source_clauses):
+        assumptions.append({
+            "code": "daily_volume_proxy",
+            "message": "分钟级累计成交量不可得时，按已确认口径以当日全天成交量直接替代。",
+        })
+    repaired["assumptions"] = assumptions
     return repaired
 
 

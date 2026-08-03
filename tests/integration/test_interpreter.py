@@ -84,6 +84,25 @@ def test_provider_bare_dsl_is_adapted_with_visible_section_level_coverage():
     assert any(item.dsl_paths == ["anchor", "entry"] for item in result.coverage)
 
 
+def test_bare_dsl_records_daily_execution_and_volume_proxy_assumptions():
+    bare = {
+        "schema_version": "0.3", "symbol": "AAON", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": cmp(f("close"), i("sma", 5)), "constraints": []},
+        "entry": {"mode": "fixed", "active_day": {"start_offset_days": 0, "end_offset_days": 0}, "execution": "close"},
+        "exit_rules": [{"rule_id": "exit", "priority": 1, "active_days": {"start_offset_days": 1}, "kind": "close_condition", "condition": cmp(f("close"), i("sma", 5), "less_than"), "execution": "close"}],
+        "lifecycle_policy": {"sample_end_open_position": "leave_open_excluded", "allow_reentry_after_exit": True},
+    }
+    text = "成交价为收盘前 10 分钟价格。成交量使用分钟级累计量，缺失时按 96% 折算。"
+    request = StrategyInterpretationRequest(strategy_text=text, source_clauses=segment_source_clauses(text))
+
+    result = StrategyInterpreterService(FakeModelClient([bare])).interpret(request)
+
+    assert isinstance(result, ParsedStrategy)
+    assert {note.code for note in result.assumptions} == {"daily_close_execution_proxy", "daily_volume_proxy"}
+    assert all(item.disposition == "assumption" for item in result.coverage)
+
+
 def test_malformed_and_client_failures_are_typed_and_monitored():
     monitor = InMemoryInterpreterMonitor(); request = StrategyInterpretationRequest(strategy_text="x")
     with pytest.raises(ModelResponseParsingFailure): StrategyInterpreterService(FakeModelClient([{"status":"parsed"}]), monitor=monitor).interpret(request)

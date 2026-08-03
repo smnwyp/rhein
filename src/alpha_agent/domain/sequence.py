@@ -48,6 +48,14 @@ class CurrentIndicatorOperand(DSLModel):
     indicator: IndicatorDefinition
 
 
+class LaggedIndicatorOperand(DSLModel):
+    """An indicator value on a prior bar, relative to the evaluated day."""
+
+    kind: Literal["lagged_indicator"]
+    offset_days: int = Field(lt=0)
+    indicator: IndicatorDefinition
+
+
 class TemporalScalarOperand(DSLModel):
     kind: Literal["scalar"]
     value: FiniteFloat
@@ -111,7 +119,7 @@ class RollingVolumeRankOperand(DSLModel):
 
 
 TemporalOperand = Annotated[
-    CurrentMarketOperand | LaggedMarketOperand | CurrentIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand | AnchorRunningVolumeRankOperand | RollingVolumeRankOperand,
+    CurrentMarketOperand | LaggedMarketOperand | CurrentIndicatorOperand | LaggedIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand | AnchorRunningVolumeRankOperand | RollingVolumeRankOperand,
     Field(discriminator="kind"),
 ]
 TemporalSeriesOperand = Annotated[

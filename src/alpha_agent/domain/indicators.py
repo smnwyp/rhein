@@ -12,7 +12,15 @@ class EMA(DSLModel): indicator: Literal["ema"]; field: PriceFieldName; window: P
 class RSI(DSLModel): indicator: Literal["rsi"]; field: PriceFieldName; window: PositiveInt
 class RollingReturn(DSLModel): indicator: Literal["rolling_return"]; field: PriceFieldName; window: PositiveInt
 class RollingMinimum(DSLModel): indicator: Literal["rolling_min"]; field: PriceFieldName; window: PositiveInt
+class RollingMaximum(DSLModel): indicator: Literal["rolling_max"]; field: PriceFieldName; window: PositiveInt
 class RollingMeanVolume(DSLModel): indicator: Literal["rolling_mean"]; field: Literal["volume"]; window: PositiveInt
+
+
+class ADX(DSLModel):
+    """Wilder Average Directional Index calculated from daily H/L/C."""
+
+    indicator: Literal["adx"]
+    window: PositiveInt
 
 
 class MACDLine(DSLModel):
@@ -37,4 +45,4 @@ class MACDSignal(MACDLine):
     indicator: Literal["macd_signal"]
 
 
-IndicatorDefinition = Annotated[SMA | EMA | RSI | RollingReturn | RollingMinimum | RollingMeanVolume | MACDLine | MACDSignal, Field(discriminator="indicator")]
+IndicatorDefinition = Annotated[SMA | EMA | RSI | RollingReturn | RollingMinimum | RollingMaximum | RollingMeanVolume | ADX | MACDLine | MACDSignal, Field(discriminator="indicator")]

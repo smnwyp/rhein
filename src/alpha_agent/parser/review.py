@@ -4,11 +4,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import EMA, MACDLine, MACDSignal, RSI, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
+from alpha_agent.domain.indicators import ADX, EMA, MACDLine, MACDSignal, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand, CandlestickPatternCondition,
-    CurrentIndicatorOperand, CurrentMarketOperand, LaggedMarketOperand, EntryPriceOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingVolumeRankOperand, ScaledEntryPriceOperand,
+    CurrentIndicatorOperand, CurrentMarketOperand, LaggedIndicatorOperand as TemporalLaggedIndicatorOperand, LaggedMarketOperand, EntryPriceOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingVolumeRankOperand, ScaledEntryPriceOperand,
     EntryRunningMaximumOperand,
     TemporalComparisonCondition, TemporalCondition, TemporalConditionGroup, TemporalCrossCondition, TemporalOperand,
     TemporalScalarOperand, TimedStrategyDefinition,
@@ -29,7 +29,9 @@ def _indicator(indicator: object) -> str:
     if isinstance(indicator, RSI): return f"RSI({indicator.window})"
     if isinstance(indicator, RollingReturn): return f"{indicator.window} 日滚动收益"
     if isinstance(indicator, RollingMinimum): return f"{indicator.field} {indicator.window} 日滚动最低值"
+    if isinstance(indicator, RollingMaximum): return f"{indicator.field} {indicator.window} 日滚动最高值"
     if isinstance(indicator, RollingMeanVolume): return f"成交量 MA({indicator.window})"
+    if isinstance(indicator, ADX): return f"ADX({indicator.window})"
     if isinstance(indicator, MACDSignal): return f"MACD 慢线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     if isinstance(indicator, MACDLine): return f"MACD 快线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     raise TypeError(f"unknown indicator: {type(indicator).__name__}")
@@ -48,6 +50,7 @@ def _temporal_operand(operand: TemporalOperand) -> str:
     if isinstance(operand, CurrentMarketOperand): return _operand(MarketFieldOperand(kind="market_field", field=operand.field))
     if isinstance(operand, LaggedMarketOperand): return f"前 {abs(operand.offset_days)} 日{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}"
     if isinstance(operand, CurrentIndicatorOperand): return _indicator(operand.indicator)
+    if isinstance(operand, TemporalLaggedIndicatorOperand): return f"前 {abs(operand.offset_days)} 日{_indicator(operand.indicator)}"
     if isinstance(operand, TemporalScalarOperand): return f"{operand.value:g}"
     if isinstance(operand, AnchorMarketOperand): return f"{operand.anchor} 日{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}"
     if isinstance(operand, EntryPriceOperand): return "入场价"

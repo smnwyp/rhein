@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from alpha_agent.domain.conditions import CrossCondition
-from alpha_agent.domain.indicators import MACDLine, MACDSignal, RollingMinimum, SMA
+from alpha_agent.domain.indicators import ADX, MACDLine, MACDSignal, RollingMaximum, RollingMinimum, SMA
 from alpha_agent.domain.operands import IndicatorOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand,
@@ -132,6 +132,44 @@ def test_v03_supports_macd_rolling_trend_count_and_wait_until_entry():
     # Anchor at a declining day waits for the first subsequent up-close.
     resolved = _resolve_entry(frame, strategy, 4)
     assert resolved is not None and resolved[0] == 6
+
+
+def test_v03_supports_adx_prior_window_breakout_and_two_day_ma_exit():
+    """Regression coverage for the complete 波段交易策略 V2 primitives."""
+    close = np.concatenate([np.linspace(10, 20, 70), np.linspace(20.1, 25, 20)])
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-01", periods=len(close), freq="B"),
+        "Open": close * .998, "High": close * 1.01, "Low": close * .99,
+        "Close": close, "Volume": np.linspace(100, 400, len(close)),
+    })
+    adx = ADX(indicator="adx", window=14)
+    # Populate the frame-local indicator cache first: ADX must remain valid
+    # when other indicators have already been evaluated on the same frame.
+    _indicator_values(frame, SMA(indicator="sma", field="close", window=5))
+    assert np.isfinite(_indicator_values(frame, adx)[-1])
+    assert _indicator_values(frame, RollingMaximum(indicator="rolling_max", field="close", window=20))[-1] == close[-1]
+
+    payload = _strategy().model_dump(mode="json")
+    payload["anchor"]["constraints"] = []
+    payload["anchor"]["condition"] = {
+        "node_type": "group", "operator": "and", "conditions": [
+            _cmp(_field("close"), {"kind": "lagged_indicator", "offset_days": -1, "indicator": {"indicator": "rolling_max", "field": "close", "window": 20}}),
+            _cmp({"kind": "indicator", "indicator": {"indicator": "adx", "window": 14}}, {"kind": "scalar", "value": 22}),
+            _cmp({"kind": "indicator", "indicator": {"indicator": "adx", "window": 14}}, {"kind": "lagged_indicator", "offset_days": -1, "indicator": {"indicator": "adx", "window": 14}}, "greater_than_or_equal"),
+        ],
+    }
+    payload["entry"] = {"mode": "fixed", "active_day": {"start_offset_days": 0, "end_offset_days": 0}, "execution": "close"}
+    payload["exit_rules"] = [{
+        "rule_id": "two_days_below_ma3", "priority": 1, "relative_to": "entry",
+        "active_days": {"start_offset_days": 1}, "kind": "close_condition", "execution": "close",
+        "condition": {"node_type": "group", "operator": "and", "conditions": [
+            _cmp(_field("close"), _sma(3), "less_than"),
+            _cmp({"kind": "lagged_market_field", "offset_days": -1, "field": "close"}, {"kind": "lagged_indicator", "offset_days": -1, "indicator": {"indicator": "sma", "field": "close", "window": 3}}, "less_than"),
+        ]},
+    }]
+    strategy = TimedStrategyDefinition.model_validate(payload)
+    validate_strategy(strategy)
+    assert _static_condition(frame, strategy.anchor.condition, len(frame) - 1)
 
 
 def test_v03_anchor_cross_requires_current_cross_and_prior_non_crossing_state():

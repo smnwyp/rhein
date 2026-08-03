@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import EMA, MACDLine, MACDSignal, RSI, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
+from alpha_agent.domain.indicators import ADX, EMA, MACDLine, MACDSignal, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorChangeConstraint, AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand,
-    CandlestickPatternCondition, CurrentIndicatorOperand, CurrentMarketOperand, LaggedMarketOperand, EntryPriceOperand,
+    CandlestickPatternCondition, CurrentIndicatorOperand, CurrentMarketOperand, LaggedIndicatorOperand as TemporalLaggedIndicatorOperand, LaggedMarketOperand, EntryPriceOperand,
     EntryRunningMaximumOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingLowAnchorConstraint,
     RollingVolumeRankOperand, ScaledEntryPriceOperand, TemporalComparisonCondition,
     TemporalCrossCondition,
@@ -44,7 +44,34 @@ def _indicator_values(df: pd.DataFrame, indicator: object) -> np.ndarray:
         values = (close / close.shift(indicator.window) - 1).to_numpy()
     elif isinstance(indicator, RollingMinimum):
         values = df[indicator.field.capitalize()].rolling(indicator.window).min().to_numpy()
+    elif isinstance(indicator, RollingMaximum):
+        values = df[indicator.field.capitalize()].rolling(indicator.window).max().to_numpy()
     elif isinstance(indicator, RollingMeanVolume): values = df["Volume"].rolling(indicator.window).mean().to_numpy()
+    elif isinstance(indicator, ADX):
+        high, low = df["High"], df["Low"]
+        previous_close = close.shift(1)
+        # Do not use ``pd.concat`` here.  This frame intentionally stores the
+        # indicator cache in ``attrs``; pandas tries to compare every input
+        # object's attrs during concat, and numpy cache values make that
+        # comparison ambiguous.  Numpy keeps the Wilder calculation pure and
+        # independent of cache implementation details.
+        true_range = pd.Series(
+            np.maximum.reduce([
+                (high - low).to_numpy(dtype=float),
+                (high - previous_close).abs().to_numpy(dtype=float),
+                (low - previous_close).abs().to_numpy(dtype=float),
+            ]),
+            index=df.index,
+        )
+        up_move, down_move = high.diff(), -low.diff()
+        plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+        minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
+        alpha = 1 / indicator.window
+        atr = true_range.ewm(alpha=alpha, adjust=False, min_periods=indicator.window).mean()
+        plus_di = 100 * plus_dm.ewm(alpha=alpha, adjust=False, min_periods=indicator.window).mean() / atr
+        minus_di = 100 * minus_dm.ewm(alpha=alpha, adjust=False, min_periods=indicator.window).mean() / atr
+        directional_index = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
+        values = directional_index.ewm(alpha=alpha, adjust=False, min_periods=indicator.window).mean().to_numpy()
     elif isinstance(indicator, RSI):
         delta = close.diff()
         gain = delta.clip(lower=0).ewm(alpha=1 / indicator.window, adjust=False, min_periods=indicator.window).mean()
@@ -193,6 +220,9 @@ def _temporal_operand(df: pd.DataFrame, operand: TemporalOperand, *, index: int,
         lagged_index = index + operand.offset_days
         return float(df[operand.field.capitalize()].iloc[lagged_index]) if lagged_index >= 0 else float("nan")
     if isinstance(operand, CurrentIndicatorOperand): return float(_indicator_values(df, operand.indicator)[index])
+    if isinstance(operand, TemporalLaggedIndicatorOperand):
+        lagged_index = index + operand.offset_days
+        return float(_indicator_values(df, operand.indicator)[lagged_index]) if lagged_index >= 0 else float("nan")
     if isinstance(operand, TemporalScalarOperand): return float(operand.value)
     if isinstance(operand, AnchorMarketOperand): return float(df[operand.field.capitalize()].iloc[anchor_index])
     if isinstance(operand, AnchorIndicatorOperand):

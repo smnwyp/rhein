@@ -55,6 +55,17 @@ For a direct rolling price floor such as `MinClose15[t] = min(Close[t-14],
 window=15)`. Compare Close directly against that price indicator (for example,
 Close <= rolling_min(Close,15) × 1.15). Never use `rolling_return` as a price
 level, and never multiply a return indicator to represent a rolling minimum.
+For a breakout above the *previous* N-day closing high, use
+`lagged_indicator(offset_days=-1, indicator=rolling_max(field="close", window=N))`;
+this explicitly excludes the current bar from the high window. For volume
+against the *previous* N-day average, likewise use
+`lagged_indicator(offset_days=-1, indicator=rolling_mean(field="volume", window=N))`.
+ADX(N) is a Wilder ADX calculated from daily High/Low/Close; encode it as
+`indicator=adx, window=N`. ADX trend comparisons to prior days use
+`lagged_indicator` with the same ADX indicator. For “two consecutive days
+below MA3” in a timed exit, use an AND group with today's `close < SMA3` and
+prior-day `lagged_market_field(close,-1) < lagged_indicator(SMA3,-1)`; do not
+weaken it to one day's condition.
 The `doji` `body_to_open_threshold` is user-configurable: preserve 0.5% as
 0.005 rather than changing it to 1%.
 Use `entry.mode: "conditional"` with explicit one-day `entry.branches` when
@@ -117,7 +128,7 @@ express it faithfully. Never invent a default parameter or execution assumption.
 The product policy uses final daily Close and Volume for every backtest order. A
 source request for a pre-close/minute price or volume must be normalized to this
 explicit daily-close proxy and reported as an assumption/warning, not unsupported.
-Current capabilities include daily-close comparisons, crosses, SMA/EMA/RSI/rolling return/rolling minimum/rolling mean volume,
+Current capabilities include daily-close comparisons, crosses, SMA/EMA/RSI/ADX/rolling return/rolling minimum/rolling maximum/rolling mean volume,
 MACD fast/signal lines, rolling comparison-count conditions, rolling close/low constraints,
 ordered A-to-B close drawdowns, close-executed conditional and wait-until entry rules,
 running maximum or tied top-two volume since anchor or in a fixed rolling window, persistent post-trigger state flags,
