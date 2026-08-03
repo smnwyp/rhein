@@ -1,3 +1,4 @@
+import json
 from uuid import uuid4
 
 import pandas as pd
@@ -8,6 +9,7 @@ from alpha_agent.backtest_history import JsonBacktestHistory, SavedBacktestRun, 
 def run(strategy_id, group_label: str = "组 A") -> SavedBacktestRun:
     return SavedBacktestRun(
         strategy_id=strategy_id,
+        strategy_name="测试策略",
         strategy_fingerprint=strategy_fingerprint('{"schema_version":"0.3"}'),
         schema_version="0.3",
         group_label=group_label,
@@ -26,6 +28,7 @@ def test_backtest_history_persists_results_by_strategy_identity(tmp_path):
 
     restored = JsonBacktestHistory(tmp_path / "saved_backtest_results.json").list_for_strategy(strategy_a)
     assert restored == [run_a]
+    assert restored[0].strategy_name == "测试策略"
     assert restored[0].kpis[0]["标的"] == "AAPL"
     assert restored[0].trades[0]["ret_pct"] == 1.2
 
@@ -42,6 +45,18 @@ def test_backtest_history_deletes_only_the_requested_run(tmp_path):
     history.delete(second.run_id)
 
     assert history.list_for_strategy(strategy_id) == [first]
+
+
+def test_old_backtest_record_without_a_strategy_name_remains_readable(tmp_path):
+    history = JsonBacktestHistory(tmp_path / "saved_backtest_results.json")
+    strategy_id = uuid4()
+    saved = history.save(run(strategy_id)).model_dump(mode="json")
+    saved.pop("strategy_name")
+    (tmp_path / "saved_backtest_results.json").write_text(json.dumps([saved]), encoding="utf-8")
+
+    restored = history.list_for_strategy(strategy_id)
+
+    assert restored[0].strategy_name == "未命名策略（旧记录）"
 
 
 def test_historical_view_recalculates_trade_kpis_without_mutating_saved_records() -> None:

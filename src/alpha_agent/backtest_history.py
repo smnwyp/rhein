@@ -21,6 +21,10 @@ class SavedBacktestRun(DSLModel):
 
     run_id: UUID = Field(default_factory=uuid4)
     strategy_id: UUID
+    # Kept alongside the stable UUID so a historical result remains legible
+    # even when it is exported or viewed outside the strategy library.
+    # The default makes previously saved JSON records backward compatible.
+    strategy_name: str = Field(default="未命名策略（旧记录）", min_length=1)
     strategy_fingerprint: str = Field(min_length=1)
     schema_version: str = Field(min_length=1)
     group_label: str = Field(min_length=1)

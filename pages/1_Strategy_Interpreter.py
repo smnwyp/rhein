@@ -516,7 +516,7 @@ if matching_result is not None:
             run_id = st.selectbox(
                 "已保存回测",
                 list(run_by_id),
-                format_func=lambda item: f"{run_by_id[item].created_at.astimezone().strftime('%Y-%m-%d %H:%M')} · {run_by_id[item].input_file_count} 个标的 · {len(run_by_id[item].trades)} 笔交易",
+                format_func=lambda item: f"{run_by_id[item].strategy_name} · {run_by_id[item].created_at.astimezone().strftime('%Y-%m-%d %H:%M')} · {run_by_id[item].input_file_count} 个标的 · {len(run_by_id[item].trades)} 笔交易",
                 key="saved_backtest_run",
             )
             if st.button("载入这次已保存回测", key="load_saved_backtest", width="stretch"):
@@ -565,8 +565,17 @@ if matching_result is not None:
                     loaded_run=None,
                 )
                 if saved_backtest_strategy_id is not None:
+                    saved_strategy_name = next(
+                        (
+                            item.strategy_name
+                            for item in library.list()
+                            if item.strategy_id == saved_backtest_strategy_id
+                        ),
+                        matching_result.strategy.strategy_name or "未命名策略",
+                    )
                     saved_run = SavedBacktestRun(
                         strategy_id=saved_backtest_strategy_id,
+                        strategy_name=saved_strategy_name,
                         strategy_fingerprint=strategy_fingerprint(timed_strategy.model_dump_json()),
                         schema_version=timed_strategy.schema_version,
                         group_label=selected_scope,
@@ -589,7 +598,7 @@ if matching_result is not None:
         st.subheader("回测结果")
         loaded_run = st.session_state.get("dsl_backtest_loaded_run")
         if loaded_run is not None:
-            st.caption(f"当前展示已保存运行：{loaded_run.created_at.astimezone().strftime('%Y-%m-%d %H:%M')} · {loaded_run.group_label} · 设置 {dict(loaded_run.settings)}")
+            st.caption(f"当前展示已保存运行：{loaded_run.strategy_name} · {loaded_run.created_at.astimezone().strftime('%Y-%m-%d %H:%M')} · {loaded_run.group_label} · 设置 {dict(loaded_run.settings)}")
         kpis = st.session_state.get("dsl_backtest_kpis", pd.DataFrame())
         if not kpis.empty:
             active = kpis[kpis["n_trades"] > 0]
