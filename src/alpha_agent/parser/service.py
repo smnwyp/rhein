@@ -24,6 +24,10 @@ _EXPLICIT_ONE_DAY_RETURN = re.compile(
     r"(?:大于\s*0|>\s*0|0\s*<).*?(?:不超过|小于等于|≤|<=)\s*(\d+(?:\.\d+)?)\s*%",
     flags=re.IGNORECASE,
 )
+_EXPLICIT_PRIOR_CLOSE_EXTREMUM = re.compile(
+    r"(?:此前|之前|前)\s*(\d+)\s*(?:个)?交易日.*?(最高|最低).*?收盘",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 
 def _normalize_provider_result(raw: Mapping[str, object]) -> dict[str, object]:
@@ -240,6 +244,93 @@ def _repair_explicit_one_day_return_encoding(raw: Mapping[str, object], strategy
     warnings.append({
         "code": "source_preserving_one_day_return_repair",
         "message": "已按原文明确的前一日涨幅区间，将不可能的 t0 自比较修复为 rolling_return(1)。",
+    })
+    result["warnings"] = warnings
+    return result
+
+
+def _repair_explicit_prior_window_extremum(raw: Mapping[str, object], strategy_text: str) -> dict[str, object]:
+    """Turn an explicit *prior* close-window extremum into a lagged series.
+
+    The rolling-extremum indicator includes its evaluation bar.  If the source
+    says "此前 N 个交易日" and the model emits ``Close[t] > Max_N[t]``, that
+    is provably impossible rather than a debatable interpretation.  The only
+    lossless representation is ``Close[t] > Max_N[t-1]``.  We repair exactly
+    that shape and exact source window; all other extrema remain for the LLM
+    repair/clarification path.
+    """
+    requested_windows = {
+        (int(window), "rolling_max" if direction == "最高" else "rolling_min")
+        for window, direction in _EXPLICIT_PRIOR_CLOSE_EXTREMUM.findall(strategy_text)
+    }
+    if not requested_windows:
+        return dict(raw)
+    result = dict(raw)
+    candidate = result.get("strategy") if result.get("status") == "parsed" else None
+    if not isinstance(candidate, Mapping) or candidate.get("schema_version") != "0.3":
+        return result
+    strategy = dict(candidate)
+    anchor = strategy.get("anchor")
+    if not isinstance(anchor, Mapping):
+        return result
+
+    changed = False
+
+    def is_current_close(value: object) -> bool:
+        return isinstance(value, Mapping) and value.get("kind") == "market_field" and value.get("field") == "close"
+
+    def matching_current_extremum(value: object, *, expected: str) -> Mapping[str, object] | None:
+        if not (isinstance(value, Mapping) and value.get("kind") == "indicator"):
+            return None
+        indicator = value.get("indicator")
+        if not (isinstance(indicator, Mapping) and indicator.get("indicator") == expected and indicator.get("field") == "close"):
+            return None
+        try:
+            window = int(indicator["window"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        return indicator if (window, expected) in requested_windows else None
+
+    def repair_condition(node: object) -> object:
+        nonlocal changed
+        if not isinstance(node, Mapping):
+            return node
+        repaired = dict(node)
+        if repaired.get("node_type") == "group" and isinstance(repaired.get("conditions"), list):
+            repaired["conditions"] = [repair_condition(child) for child in repaired["conditions"]]
+            return repaired
+        if repaired.get("node_type") != "comparison":
+            return repaired
+        left, right, operator = repaired.get("left"), repaired.get("right"), repaired.get("operator")
+        right_max = matching_current_extremum(right, expected="rolling_max")
+        left_max = matching_current_extremum(left, expected="rolling_max")
+        right_min = matching_current_extremum(right, expected="rolling_min")
+        left_min = matching_current_extremum(left, expected="rolling_min")
+        target: str | None = None
+        indicator: Mapping[str, object] | None = None
+        if is_current_close(left) and right_max is not None and operator == "greater_than":
+            target, indicator = "right", right_max
+        elif is_current_close(right) and left_max is not None and operator == "less_than":
+            target, indicator = "left", left_max
+        elif is_current_close(left) and right_min is not None and operator == "less_than":
+            target, indicator = "right", right_min
+        elif is_current_close(right) and left_min is not None and operator == "greater_than":
+            target, indicator = "left", left_min
+        if target is not None and indicator is not None:
+            repaired[target] = {"kind": "lagged_indicator", "offset_days": -1, "indicator": dict(indicator)}
+            changed = True
+        return repaired
+
+    anchor_copy = dict(anchor)
+    anchor_copy["condition"] = repair_condition(anchor_copy.get("condition"))
+    if not changed:
+        return result
+    strategy["anchor"] = anchor_copy
+    result["strategy"] = strategy
+    warnings = list(result.get("warnings", []))
+    warnings.append({
+        "code": "source_preserving_prior_window_extremum_repair",
+        "message": "已按原文明确的此前 N 日极值语义，将包含当日而不可能成立的滚动极值比较修复为前一日滚动极值。",
     })
     result["warnings"] = warnings
     return result
@@ -554,6 +645,7 @@ class StrategyInterpreterService:
                     raw = _discard_invalid_optional_partial_strategy(raw)
                     raw = _repair_explicit_cross_encoding(raw, request.strategy_text)
                     raw = _repair_explicit_one_day_return_encoding(raw, request.strategy_text)
+                    raw = _repair_explicit_prior_window_extremum(raw, request.strategy_text)
                     try:
                         self._report_progress("正在执行 Pydantic schema 校验…")
                         result = _RESULT_ADAPTER.validate_python(raw)

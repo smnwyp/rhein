@@ -30,7 +30,7 @@ from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHisto
 from alpha_agent.domain.sequence import TimedStrategyDefinition
 from alpha_agent.research.legacy_adapter import compile_timed_strategy
 from alpha_agent.research.v03_engine import run_v03_backtest
-from alpha_agent.research.reporting import aggregate_gross_pnl
+from alpha_agent.research.reporting import aggregate_gross_pnl, presentation_kpis
 from rhein.backtest import input_files as backtest_input_files, load_ohlc as backtest_load_ohlc, run_backtest as legacy_run_backtest
 from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
@@ -502,6 +502,18 @@ if matching_result is not None:
                 run for run in backtest_history.list_for_strategy(saved_backtest_strategy_id)
                 if same_data_scope(run.data_path, current_group_path, project_root=ROOT)
             ]
+            # A saved strategy can receive a source-preserving DSL correction.
+            # Never present a run calculated from a different DSL fingerprint
+            # as if it were evidence for the currently reviewed strategy.
+            current_fingerprint = strategy_fingerprint(matching_result.strategy.model_dump_json())
+            stale_strategy_runs = [
+                run for run in all_saved_runs
+                if run.strategy_fingerprint != current_fingerprint
+            ]
+            all_saved_runs = [
+                run for run in all_saved_runs
+                if run.strategy_fingerprint == current_fingerprint
+            ]
             # A previous engine-wide failure may have created an empty record
             # before the UI could surface its per-file errors.  That is not a
             # usable research result (unlike a normal zero-trade run, which
@@ -533,6 +545,8 @@ if matching_result is not None:
         else:
             if 'all_saved_runs' in locals() and all_saved_runs:
                 st.warning("已忽略一条没有任何标的 KPI 的失败回测记录；请重新运行当前组回测。")
+            elif 'stale_strategy_runs' in locals() and stale_strategy_runs:
+                st.info(f"发现 {len(stale_strategy_runs)} 条基于旧 DSL 版本的历史回测；为避免混淆，它们不会作为当前策略结果载入。")
             st.caption("此已保存策略尚未在当前数据组保存过回测。运行后会自动建立第一条记录。")
     else:
         st.caption("当前是未保存策略或已修改版本：仍可临时回测；先保存策略后，结果才会按“策略 × 数据组”持久化。")
@@ -599,7 +613,11 @@ if matching_result is not None:
         loaded_run = st.session_state.get("dsl_backtest_loaded_run")
         if loaded_run is not None:
             st.caption(f"当前展示已保存运行：{loaded_run.strategy_name} · {loaded_run.created_at.astimezone().strftime('%Y-%m-%d %H:%M')} · {loaded_run.group_label} · 设置 {dict(loaded_run.settings)}")
-        kpis = st.session_state.get("dsl_backtest_kpis", pd.DataFrame())
+        # Saved runs are immutable and may have been created before a newer
+        # KPI table column (such as profit_factor) existed.  Build a display
+        # view with missing metrics marked unavailable; never mutate the
+        # session's saved-result payload or force the user to rerun a backtest.
+        kpis = presentation_kpis(st.session_state.get("dsl_backtest_kpis", pd.DataFrame()))
         if not kpis.empty:
             active = kpis[kpis["n_trades"] > 0]
             limit = 15.0

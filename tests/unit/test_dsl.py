@@ -180,6 +180,22 @@ def test_timed_anchor_rejects_price_comparison_against_a_return_indicator():
     assert error.value.details["issues"][0]["rule"] == "compatible_operands"
 
 
+@pytest.mark.parametrize(
+    ("left", "right", "operator"),
+    [
+        (field("close"), indicator("rolling_max", 20), "greater_than"),
+        (field("close"), indicator("rolling_min", 20), "less_than"),
+    ],
+)
+def test_strict_current_rolling_extremum_comparison_is_rejected_as_impossible(left, right, operator):
+    model = StrategyDefinition.model_validate(strategy(comparison(left, right, operator)))
+
+    with pytest.raises(SemanticStrategyValidationFailure) as error:
+        validate_strategy(model)
+
+    assert error.value.details["issues"][0]["rule"] == "inclusive_rolling_extremum_strict_comparison"
+
+
 def test_review_items_are_deterministically_derived_from_validated_dsl():
     model = StrategyDefinition.model_validate(strategy())
     items = build_review_items(model)

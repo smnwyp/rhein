@@ -7,7 +7,7 @@ from alpha_agent.errors import ModelClientFailure, ModelResponseParsingFailure, 
 from alpha_agent.model.fake_client import FakeModelClient
 from alpha_agent.monitoring import InMemoryInterpreterMonitor, InterpretationEvaluation
 from alpha_agent.interpretation_cache import JsonParsedInterpretationCache
-from alpha_agent.parser.service import StrategyInterpreterService, _direct_dsl_fallback_coverage, _discard_invalid_optional_partial_strategy, _normalize_provider_result, _repair_explicit_cross_encoding, _repair_explicit_one_day_return_encoding
+from alpha_agent.parser.service import StrategyInterpreterService, _direct_dsl_fallback_coverage, _discard_invalid_optional_partial_strategy, _normalize_provider_result, _repair_explicit_cross_encoding, _repair_explicit_one_day_return_encoding, _repair_explicit_prior_window_extremum
 from alpha_agent.parser.completeness import segment_source_clauses
 from alpha_agent.parser.prompts import INVENTORY_SYSTEM_PROMPT, SYSTEM_PROMPT
 
@@ -472,3 +472,23 @@ def test_provider_coverage_paths_are_canonicalized_only_at_the_outer_envelope_bo
     response["coverage"][0]["dsl_paths"] = ["strategy.no_such_field"]
     with pytest.raises(ModelResponseParsingFailure, match="source-coverage"):
         StrategyInterpreterService(FakeModelClient([response])).interpret(StrategyInterpretationRequest(strategy_text="test", symbol="AAPL"))
+
+
+def test_explicit_prior_window_breakout_repairs_an_impossible_inclusive_rolling_maximum():
+    raw = {
+        "status": "parsed",
+        "strategy": {
+            "schema_version": "0.3", "symbol": "AAPL", "frequency": "1d", "direction": "long_only", "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+            "anchor": {"name": "t0", "condition": cmp(f("close"), {"kind": "indicator", "indicator": {"indicator": "rolling_max", "field": "close", "window": 20}}), "constraints": []},
+            "entry": {"mode": "fixed", "active_day": {"start_offset_days": 0, "end_offset_days": 0}, "execution": "close"},
+            "exit_rules": [{"rule_id": "exit", "priority": 1, "active_days": {"start_offset_days": 1}, "kind": "close_condition", "condition": cmp(f("close"), i("sma", 5), "less_than"), "execution": "close"}],
+            "lifecycle_policy": {"sample_end_open_position": "leave_open_excluded", "allow_reentry_after_exit": True},
+        },
+        "assumptions": [], "warnings": [],
+    }
+
+    repaired = _repair_explicit_prior_window_extremum(raw, "当日收盘价严格高于此前 20 个交易日的最高收盘价。")
+
+    right = repaired["strategy"]["anchor"]["condition"]["right"]
+    assert right == {"kind": "lagged_indicator", "offset_days": -1, "indicator": {"indicator": "rolling_max", "field": "close", "window": 20}}
+    assert repaired["warnings"][-1]["code"] == "source_preserving_prior_window_extremum_repair"

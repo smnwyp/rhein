@@ -1,6 +1,6 @@
 """Deterministic domain semantics, separate from schema parsing."""
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import ADX, RSI, RollingMeanVolume, RollingReturn
+from alpha_agent.domain.indicators import ADX, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorMarketOperand,
@@ -33,6 +33,22 @@ def _walk(c: Condition, path: str, issues: list[dict[str, str]]) -> None:
         if "scalar" not in (l, r) and l != r: issues.append(_issue(path, "compatible_operands", f"cannot compare {l} with {r}"))
         for scalar, other in ((c.left, c.right), (c.right, c.left)):
             if isinstance(scalar, ScalarOperand) and isinstance(other, IndicatorOperand) and isinstance(other.indicator, RSI) and not 0 <= scalar.value <= 100: issues.append(_issue(path, "rsi_threshold_range", "RSI thresholds must be between 0 and 100"))
+        # A rolling maximum/minimum is inclusive of the current bar.  Thus a
+        # strict close > current rolling_max (or close < current rolling_min)
+        # is mathematically impossible and silently turns every anchor false.
+        # A "prior N days" breakout must use lagged_indicator(offset=-1).
+        impossible_extremum_comparison = (
+            (isinstance(c.left, MarketFieldOperand) and c.left.field == "close" and isinstance(c.right, IndicatorOperand) and isinstance(c.right.indicator, RollingMaximum) and c.operator == "greater_than")
+            or (isinstance(c.right, MarketFieldOperand) and c.right.field == "close" and isinstance(c.left, IndicatorOperand) and isinstance(c.left.indicator, RollingMaximum) and c.operator == "less_than")
+            or (isinstance(c.left, MarketFieldOperand) and c.left.field == "close" and isinstance(c.right, IndicatorOperand) and isinstance(c.right.indicator, RollingMinimum) and c.operator == "less_than")
+            or (isinstance(c.right, MarketFieldOperand) and c.right.field == "close" and isinstance(c.left, IndicatorOperand) and isinstance(c.left.indicator, RollingMinimum) and c.operator == "greater_than")
+        )
+        if impossible_extremum_comparison:
+            issues.append(_issue(
+                path,
+                "inclusive_rolling_extremum_strict_comparison",
+                "a strict close comparison against a current inclusive rolling extremum is impossible; use a prior-bar lagged_indicator when the source says prior days",
+            ))
 
 
 def _walk_timed_condition(condition: TemporalCondition, path: str, issues: list[dict[str, str]], *, evaluated_on_anchor_day: bool) -> None:
