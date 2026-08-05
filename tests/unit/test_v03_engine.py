@@ -292,6 +292,26 @@ def test_v03_volume_rank_treats_tied_maximum_as_rank_one_and_next_value_as_rank_
     assert _temporal_operand(frame, rank, index=2, anchor_index=0, entry_index=0, entry_price=1.0) == 3
 
 
+def test_v03_supports_scaled_current_bar_operand_for_explicit_bearish_body_rule():
+    """``Open × 0.975 > Close`` is the typed 2.5% bearish-body predicate."""
+    condition = TemporalComparisonCondition.model_validate({
+        "node_type": "comparison",
+        "operator": "greater_than",
+        "left": {
+            "kind": "scaled_operand",
+            "operand": {"kind": "market_field", "field": "open"},
+            "multiplier": 0.975,
+        },
+        "right": {"kind": "market_field", "field": "close"},
+    })
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-01", periods=1),
+        "Open": [100.0], "High": [101.0], "Low": [96.0], "Close": [97.0], "Volume": [100.0],
+    })
+
+    assert _temporal_condition(frame, condition, index=0, anchor_index=0, entry_index=0, entry_price=100.0)
+
+
 def test_v03_persistent_state_activates_before_same_day_state_gated_exit():
     payload = {
         "schema_version": "0.3", "symbol": "TEST", "frequency": "1d", "direction": "long_only", "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",

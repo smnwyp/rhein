@@ -85,6 +85,27 @@ class AnchorIndicatorOperand(DSLModel):
     indicator: IndicatorDefinition
 
 
+TemporalScalableSeriesOperand = Annotated[
+    CurrentMarketOperand | LaggedMarketOperand | CurrentIndicatorOperand | LaggedIndicatorOperand | AnchorMarketOperand | AnchorIndicatorOperand,
+    Field(discriminator="kind"),
+]
+
+
+class TemporalScaledOperand(DSLModel):
+    """An explicit multiple of a time-aware series operand.
+
+    This represents algebraic price/indicator predicates such as
+    ``Close < Open × 0.975`` without flattening them into untyped text.  It is
+    intentionally distinct from ``scaled_entry_price``: this operand scales a
+    value evaluated on the current/relative bar, whereas the latter always
+    scales the fixed actual entry price.
+    """
+
+    kind: Literal["scaled_operand"]
+    operand: TemporalScalableSeriesOperand
+    multiplier: Annotated[FiniteFloat, Field(gt=0)]
+
+
 class AnchorRunningMaximumOperand(DSLModel):
     """Maximum value from the anchor day through the current relative day."""
 
@@ -119,7 +140,7 @@ class RollingVolumeRankOperand(DSLModel):
 
 
 TemporalOperand = Annotated[
-    CurrentMarketOperand | LaggedMarketOperand | CurrentIndicatorOperand | LaggedIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand | AnchorRunningVolumeRankOperand | RollingVolumeRankOperand,
+    CurrentMarketOperand | LaggedMarketOperand | CurrentIndicatorOperand | LaggedIndicatorOperand | TemporalScalarOperand | AnchorMarketOperand | EntryPriceOperand | ScaledEntryPriceOperand | AnchorIndicatorOperand | TemporalScaledOperand | AnchorRunningMaximumOperand | EntryRunningMaximumOperand | AnchorRunningVolumeRankOperand | RollingVolumeRankOperand,
     Field(discriminator="kind"),
 ]
 TemporalSeriesOperand = Annotated[

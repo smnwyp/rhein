@@ -3,11 +3,24 @@ from alpha_agent.domain.conditions import ComparisonCondition, Condition, Condit
 from alpha_agent.domain.indicators import ADX, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
+    AnchorIndicatorOperand,
     AnchorMarketOperand,
+    AnchorRunningMaximumOperand,
+    AnchorRunningVolumeRankOperand,
     CurrentMarketOperand,
+    CurrentIndicatorOperand,
+    EntryPriceOperand,
+    EntryRunningMaximumOperand,
+    LaggedIndicatorOperand as TemporalLaggedIndicatorOperand,
+    LaggedMarketOperand,
+    RollingVolumeRankOperand,
+    ScaledEntryPriceOperand,
     TemporalComparisonCondition,
     TemporalCondition,
     TemporalConditionGroup,
+    TemporalOperand,
+    TemporalScalarOperand,
+    TemporalScaledOperand,
     TimedStrategyDefinition,
 )
 from alpha_agent.domain.strategy import AnyStrategyDefinition, StrategyDefinition
@@ -23,6 +36,38 @@ def _series_dimension(o: MarketFieldOperand | IndicatorOperand | LaggedIndicator
 def _dimension(o: Operand) -> str:
     if isinstance(o, ScalarOperand): return "scalar"
     return _series_dimension(o.operand) if isinstance(o, ScaledOperand) else _series_dimension(o)
+
+
+def _temporal_dimension(operand: TemporalOperand) -> str:
+    """Return the unit-like dimension of a relative-day operand.
+
+    Timed conditions used to skip the price/volume/return compatibility check
+    applied to anchor conditions.  Keeping this deterministic prevents a
+    newly accepted algebraic operand from becoming a way to compare unrelated
+    quantities.
+    """
+    if isinstance(operand, TemporalScalarOperand):
+        return "scalar"
+    if isinstance(operand, TemporalScaledOperand):
+        return _temporal_dimension(operand.operand)
+    if isinstance(operand, (EntryPriceOperand, ScaledEntryPriceOperand)):
+        return "price"
+    if isinstance(operand, (AnchorRunningMaximumOperand, EntryRunningMaximumOperand, AnchorRunningVolumeRankOperand, RollingVolumeRankOperand)):
+        return "volume"
+    if isinstance(operand, (CurrentMarketOperand, LaggedMarketOperand, AnchorMarketOperand)):
+        return "volume" if operand.field == "volume" else "price"
+    if isinstance(operand, (CurrentIndicatorOperand, TemporalLaggedIndicatorOperand, AnchorIndicatorOperand)):
+        indicator = operand.indicator
+        if isinstance(indicator, RollingMeanVolume):
+            return "volume"
+        if isinstance(indicator, RSI):
+            return "rsi"
+        if isinstance(indicator, RollingReturn):
+            return "return"
+        if isinstance(indicator, ADX):
+            return "adx"
+        return "price"
+    raise TypeError(f"unsupported temporal operand: {type(operand).__name__}")
 def _walk(c: Condition, path: str, issues: list[dict[str, str]]) -> None:
     if isinstance(c, ConditionGroup):
         for i, child in enumerate(c.conditions): _walk(child, f"{path}.conditions[{i}]", issues)
@@ -56,7 +101,12 @@ def _walk_timed_condition(condition: TemporalCondition, path: str, issues: list[
         for index, child in enumerate(condition.conditions):
             _walk_timed_condition(child, f"{path}.conditions[{index}]", issues, evaluated_on_anchor_day=evaluated_on_anchor_day)
         return
-    if not isinstance(condition, TemporalComparisonCondition) or not evaluated_on_anchor_day:
+    if not isinstance(condition, TemporalComparisonCondition):
+        return
+    left_dimension, right_dimension = _temporal_dimension(condition.left), _temporal_dimension(condition.right)
+    if "scalar" not in (left_dimension, right_dimension) and left_dimension != right_dimension:
+        issues.append(_issue(path, "compatible_operands", f"cannot compare {left_dimension} with {right_dimension}"))
+    if not evaluated_on_anchor_day:
         return
     pairs = ((condition.left, condition.right), (condition.right, condition.left))
     for current, anchor in pairs:

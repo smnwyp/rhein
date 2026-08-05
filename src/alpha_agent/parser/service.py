@@ -12,7 +12,7 @@ from alpha_agent.errors import AlphaAgentError, ModelClientFailure, ModelRespons
 from alpha_agent.model.client import SemanticInventoryModelClient, StrategyModelClient
 from alpha_agent.monitoring import InterpretationMonitoringEvent, InterpreterMonitor, fingerprint
 from alpha_agent.parser.validation import validate_strategy
-from alpha_agent.parser.completeness import enrich_request, preflight_clarifications, validate_coverage
+from alpha_agent.parser.completeness import _resolve_dsl_path, enrich_request, preflight_clarifications, validate_coverage
 from alpha_agent.parser.conformance import validate_source_conformance
 from alpha_agent.parser.inventory import inventory_clarification, raise_inventory_unsupported, validate_inventory
 from alpha_agent.interpretation_cache import ParsedInterpretationCache
@@ -26,6 +26,10 @@ _EXPLICIT_ONE_DAY_RETURN = re.compile(
 )
 _EXPLICIT_PRIOR_CLOSE_EXTREMUM = re.compile(
     r"(?:此前|之前|前)\s*(\d+)\s*(?:个)?交易日.*?(最高|最低).*?收盘",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+_EXPLICIT_NONOPERATIVE_CLAUSE = re.compile(
+    r"(?:尚可补充|不影响当前规则运行|不影响.*?(?:当前)?规则|后续(?:再)?补充)",
     flags=re.IGNORECASE | re.DOTALL,
 )
 
@@ -136,6 +140,108 @@ def _direct_dsl_fallback_coverage(raw: Mapping[str, object], request: StrategyIn
             "message": "分钟级累计成交量不可得时，按已确认口径以当日全天成交量直接替代。",
         })
     repaired["assumptions"] = assumptions
+    return repaired
+
+
+def _repair_explicit_nonoperative_coverage(raw: Mapping[str, object], request: StrategyInterpretationRequest) -> dict[str, object]:
+    """Preserve explicitly deferred prose without inventing a false DSL path.
+
+    A formal strategy often closes with a section explicitly labelled as
+    optional future research settings (universe filters, listing-age screens,
+    cost policies).  Such text is not an unresolved trading rule, yet a model
+    may incorrectly label it ``mapped`` while emitting no path.  This repair
+    is intentionally narrow: it only applies when the source itself states
+    that the clause does not affect the current executable rules.
+    """
+    if raw.get("status") != "parsed" or not isinstance(raw.get("coverage"), list):
+        return dict(raw)
+    clause_text = {clause.clause_id: clause.text for clause in request.source_clauses}
+    repaired_coverage: list[object] = []
+    changed = False
+    for item in raw["coverage"]:
+        if not isinstance(item, Mapping):
+            repaired_coverage.append(item)
+            continue
+        coverage = dict(item)
+        no_paths = coverage.get("dsl_paths") in (None, [])
+        is_deferred_source = _EXPLICIT_NONOPERATIVE_CLAUSE.search(str(clause_text.get(coverage.get("clause_id"), ""))) is not None
+        if coverage.get("disposition") in {"mapped", "assumption"} and no_paths and is_deferred_source:
+            coverage["disposition"] = "not_applicable"
+            coverage["dsl_paths"] = []
+            coverage["explanation"] = "原文明确标注为不影响当前规则运行的后续研究设置；已保留在审阅映射中，未伪造 DSL 字段。"
+            changed = True
+        repaired_coverage.append(coverage)
+    if not changed:
+        return dict(raw)
+    repaired = dict(raw)
+    repaired["coverage"] = repaired_coverage
+    warnings = list(raw.get("warnings", [])) if isinstance(raw.get("warnings"), list) else []
+    warnings.append({
+        "code": "explicit_nonoperative_source_clause",
+        "message": "原文明确标为后续补充且不影响当前规则的项目已保留为非执行审阅项，未写入策略 DSL。",
+    })
+    repaired["warnings"] = warnings
+    return repaired
+
+
+def _nearest_existing_dsl_path(strategy_payload: Mapping[str, object], path: str) -> str | None:
+    """Return a path's closest existing ancestor without evaluating code."""
+    candidate = path
+    while candidate:
+        try:
+            _resolve_dsl_path(strategy_payload, candidate)
+            return candidate
+        except (KeyError, IndexError, ValueError):
+            # Remove exactly one final field or list index.  The coverage-path
+            # grammar is deliberately narrow and validated by `_resolve_dsl_path`.
+            shortened = re.sub(r"(?:\[[0-9]+\]|\.[A-Za-z_][A-Za-z0-9_]*)$", "", candidate)
+            if shortened == candidate:
+                return None
+            candidate = shortened
+    return None
+
+
+def _repair_coverage_paths_to_existing_ancestors(raw: Mapping[str, object]) -> dict[str, object]:
+    """Repair only stale provider locator suffixes, never a strategy field.
+
+    A provider can correctly identify a rule while pointing into a former
+    leaf-shaped version of a condition that is now a group.  The DSL remains
+    valid; only the audit pointer is stale.  Retaining the nearest existing
+    ancestor is safer than silently dropping the coverage entry, and the
+    accompanying warning keeps the reduced granularity visible for review.
+    """
+    if raw.get("status") != "parsed" or not isinstance(raw.get("strategy"), Mapping) or not isinstance(raw.get("coverage"), list):
+        return dict(raw)
+    repaired_coverage: list[object] = []
+    repaired_count = 0
+    for item in raw["coverage"]:
+        if not isinstance(item, Mapping) or item.get("disposition") not in {"mapped", "assumption"} or not isinstance(item.get("dsl_paths"), list):
+            repaired_coverage.append(item)
+            continue
+        coverage = dict(item)
+        paths: list[object] = []
+        for path in coverage["dsl_paths"]:
+            if not isinstance(path, str):
+                paths.append(path)
+                continue
+            ancestor = _nearest_existing_dsl_path(raw["strategy"], path)
+            if ancestor is None:
+                paths.append(path)
+            else:
+                paths.append(ancestor)
+                repaired_count += ancestor != path
+        coverage["dsl_paths"] = paths
+        repaired_coverage.append(coverage)
+    if not repaired_count:
+        return dict(raw)
+    repaired = dict(raw)
+    repaired["coverage"] = repaired_coverage
+    warnings = list(raw.get("warnings", [])) if isinstance(raw.get("warnings"), list) else []
+    warnings.append({
+        "code": "coverage_path_ancestor_repair",
+        "message": f"已将 {repaired_count} 个模型生成的失效映射路径收敛到存在的父节点；DSL 未被修改，请在解释审阅中核对该章节。",
+    })
+    repaired["warnings"] = warnings
     return repaired
 
 
@@ -642,6 +748,8 @@ class StrategyInterpreterService:
                     self._report_progress("正在将语义清单编译为策略 DSL…" if attempt == 0 else "DSL 未通过本地校验；正在请求仅修复受影响条款…")
                     raw = _normalize_provider_result(self._client.interpret_strategy(request))
                     raw = _direct_dsl_fallback_coverage(raw, request)
+                    raw = _repair_explicit_nonoperative_coverage(raw, request)
+                    raw = _repair_coverage_paths_to_existing_ancestors(raw)
                     raw = _discard_invalid_optional_partial_strategy(raw)
                     raw = _repair_explicit_cross_encoding(raw, request.strategy_text)
                     raw = _repair_explicit_one_day_return_encoding(raw, request.strategy_text)

@@ -13,7 +13,7 @@ from alpha_agent.domain.sequence import (
     AnchorIndicatorChangeConstraint, AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand,
     CandlestickPatternCondition, CurrentIndicatorOperand, CurrentMarketOperand, LaggedIndicatorOperand as TemporalLaggedIndicatorOperand, LaggedMarketOperand, EntryPriceOperand,
     EntryRunningMaximumOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingLowAnchorConstraint,
-    RollingVolumeRankOperand, ScaledEntryPriceOperand, TemporalComparisonCondition,
+    RollingVolumeRankOperand, ScaledEntryPriceOperand, TemporalComparisonCondition, TemporalScaledOperand,
     TemporalCrossCondition,
     TemporalCondition, TemporalConditionGroup, TemporalOperand, TemporalScalarOperand, TimedStrategyDefinition,
 )
@@ -230,6 +230,15 @@ def _temporal_operand(df: pd.DataFrame, operand: TemporalOperand, *, index: int,
         return float(_indicator_values(df, operand.indicator)[anchored_index]) if anchored_index >= 0 else float("nan")
     if isinstance(operand, EntryPriceOperand): return entry_price
     if isinstance(operand, ScaledEntryPriceOperand): return entry_price * operand.multiplier
+    if isinstance(operand, TemporalScaledOperand):
+        return _temporal_operand(
+            df,
+            operand.operand,
+            index=index,
+            anchor_index=anchor_index,
+            entry_index=entry_index,
+            entry_price=entry_price,
+        ) * operand.multiplier
     if isinstance(operand, AnchorRunningMaximumOperand): return float(df["Volume"].iloc[anchor_index:index + 1].max())
     if isinstance(operand, EntryRunningMaximumOperand):
         start = anchor_index if entry_index is None else entry_index

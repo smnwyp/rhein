@@ -8,7 +8,7 @@ from alpha_agent.domain.indicators import ADX, EMA, MACDLine, MACDSignal, RSI, R
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand, CandlestickPatternCondition,
-    CurrentIndicatorOperand, CurrentMarketOperand, LaggedIndicatorOperand as TemporalLaggedIndicatorOperand, LaggedMarketOperand, EntryPriceOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingVolumeRankOperand, ScaledEntryPriceOperand,
+    CurrentIndicatorOperand, CurrentMarketOperand, LaggedIndicatorOperand as TemporalLaggedIndicatorOperand, LaggedMarketOperand, EntryPriceOperand, ExitRule, OrderedExtremaDrawdownConstraint, RollingVolumeRankOperand, ScaledEntryPriceOperand, TemporalScaledOperand,
     EntryRunningMaximumOperand,
     TemporalComparisonCondition, TemporalCondition, TemporalConditionGroup, TemporalCrossCondition, TemporalOperand,
     TemporalScalarOperand, TimedStrategyDefinition,
@@ -55,6 +55,7 @@ def _temporal_operand(operand: TemporalOperand) -> str:
     if isinstance(operand, AnchorMarketOperand): return f"{operand.anchor} 日{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}"
     if isinstance(operand, EntryPriceOperand): return "入场价"
     if isinstance(operand, ScaledEntryPriceOperand): return f"入场价 × {operand.multiplier:g}"
+    if isinstance(operand, TemporalScaledOperand): return f"{_temporal_operand(operand.operand)} × {operand.multiplier:g}"
     if isinstance(operand, AnchorIndicatorOperand): return f"{operand.anchor}{operand.offset_days:+d} 日{_indicator(operand.indicator)}"
     if isinstance(operand, AnchorRunningMaximumOperand): return f"自 t0 起至当日的最大{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}（并列取最早）"
     if isinstance(operand, EntryRunningMaximumOperand): return f"自实际入场日起至当日的最大{_operand(MarketFieldOperand(kind='market_field', field=operand.field))}（并列取{('最晚' if operand.tie_break == 'latest' else '最早')}）"

@@ -165,7 +165,7 @@ def validate_coverage(source_clauses: Iterable[SourceClause], coverage: list[Cla
         issues.append({"path": "coverage", "rule": "complete_source_coverage", "message": "coverage must contain every source clause exactly once"})
     for index, entry in enumerate(coverage):
         path = f"coverage[{index}]"
-        if parsed and entry.disposition not in {"mapped", "assumption"}:
+        if parsed and entry.disposition not in {"mapped", "assumption", "not_applicable"}:
             issues.append({"path": path, "rule": "parsed_requires_resolved_clauses", "message": "a parsed result cannot retain unresolved or unsupported source clauses"})
         if entry.disposition in {"mapped", "assumption"}:
             if not entry.dsl_paths:

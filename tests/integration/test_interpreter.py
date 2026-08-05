@@ -7,7 +7,7 @@ from alpha_agent.errors import ModelClientFailure, ModelResponseParsingFailure, 
 from alpha_agent.model.fake_client import FakeModelClient
 from alpha_agent.monitoring import InMemoryInterpreterMonitor, InterpretationEvaluation
 from alpha_agent.interpretation_cache import JsonParsedInterpretationCache
-from alpha_agent.parser.service import StrategyInterpreterService, _direct_dsl_fallback_coverage, _discard_invalid_optional_partial_strategy, _normalize_provider_result, _repair_explicit_cross_encoding, _repair_explicit_one_day_return_encoding, _repair_explicit_prior_window_extremum
+from alpha_agent.parser.service import StrategyInterpreterService, _direct_dsl_fallback_coverage, _discard_invalid_optional_partial_strategy, _normalize_provider_result, _repair_coverage_paths_to_existing_ancestors, _repair_explicit_cross_encoding, _repair_explicit_nonoperative_coverage, _repair_explicit_one_day_return_encoding, _repair_explicit_prior_window_extremum
 from alpha_agent.parser.completeness import segment_source_clauses
 from alpha_agent.parser.prompts import INVENTORY_SYSTEM_PROMPT, SYSTEM_PROMPT
 
@@ -101,6 +101,40 @@ def test_bare_dsl_records_daily_execution_and_volume_proxy_assumptions():
     assert isinstance(result, ParsedStrategy)
     assert {note.code for note in result.assumptions} == {"daily_close_execution_proxy", "daily_volume_proxy"}
     assert all(item.disposition == "assumption" for item in result.coverage)
+
+
+def test_explicitly_deferred_source_clause_is_audited_without_a_fake_dsl_path():
+    request = StrategyInterpretationRequest(
+        strategy_text="当前规则：收盘价高于均线买入。\n尚可补充但不影响当前规则运行的项目：股票范围与手续费。",
+        source_clauses=segment_source_clauses("当前规则：收盘价高于均线买入。\n尚可补充但不影响当前规则运行的项目：股票范围与手续费。"),
+    )
+    raw = parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))
+    raw["coverage"] = [
+        {"clause_id": "C01", "disposition": "mapped", "dsl_paths": ["entry_condition"], "explanation": "入场条件已映射。"},
+        {"clause_id": "C02", "disposition": "mapped", "dsl_paths": [], "explanation": "待补充。"},
+    ]
+
+    repaired = _repair_explicit_nonoperative_coverage(raw, request)
+    result = StrategyInterpreterService(FakeModelClient([repaired])).interpret(request)
+
+    assert isinstance(result, ParsedStrategy)
+    assert result.coverage[1].disposition == "not_applicable"
+    assert result.coverage[1].dsl_paths == []
+    assert any(note.code == "explicit_nonoperative_source_clause" for note in result.warnings)
+
+
+def test_stale_coverage_leaf_path_is_repaired_to_its_existing_parent_without_changing_dsl():
+    raw = parsed(
+        cmp(f("close"), i("sma", 20)),
+        group("and", cmp(f("close"), i("sma", 20), "less_than"), cmp(f("volume"), s(1))),
+    )
+    raw["coverage"][0]["dsl_paths"] = ["exit_condition.left.indicator"]
+
+    repaired = _repair_coverage_paths_to_existing_ancestors(raw)
+
+    assert repaired["coverage"][0]["dsl_paths"] == ["exit_condition"]
+    assert repaired["strategy"] == raw["strategy"]
+    assert any(note["code"] == "coverage_path_ancestor_repair" for note in repaired["warnings"])
 
 
 def test_malformed_and_client_failures_are_typed_and_monitored():

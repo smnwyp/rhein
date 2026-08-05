@@ -27,7 +27,11 @@ class ClauseCoverage(DSLModel):
     """The interpreter's audit trail for one source clause."""
 
     clause_id: str = Field(pattern=r"^C[0-9]{2,}$")
-    disposition: Literal["mapped", "assumption", "clarification_required", "unsupported"]
+    # ``not_applicable`` is reserved for source prose that explicitly says it
+    # is outside the current executable strategy (for example, a future
+    # universe filter).  It remains visible in the audit trail but does not
+    # pretend to map to an unrelated DSL field.
+    disposition: Literal["mapped", "assumption", "not_applicable", "clarification_required", "unsupported"]
     dsl_paths: list[str] = Field(default_factory=list)
     explanation: str = Field(min_length=1)
 

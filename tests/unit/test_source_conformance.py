@@ -46,6 +46,24 @@ def test_source_conformance_accepts_explicit_cross_and_one_day_rolling_return():
     validate_source_conformance(source, coverage, payload)
 
 
+def test_source_conformance_accepts_touch_inclusive_macd_dead_cross_as_two_day_comparison_pair():
+    source = [SourceClause(
+        clause_id="C01",
+        text="DIF 下穿 DEA，形成死叉：前一日：DIF > DEA；当日：DIF ≤ DEA。",
+    )]
+    coverage = [ClauseCoverage(
+        clause_id="C01", disposition="mapped", dsl_paths=["exit_rules[0].condition"], explanation="DIF/DEA 的等号包含死叉已映射。",
+    )]
+    line = {"indicator": "macd_line", "field": "close", "fast_window": 10, "slow_window": 24, "signal_window": 8}
+    signal = {"indicator": "macd_signal", "field": "close", "fast_window": 10, "slow_window": 24, "signal_window": 8}
+    payload = {"exit_rules": [{"condition": {"node_type": "group", "operator": "and", "conditions": [
+        {"node_type": "comparison", "operator": "less_than_or_equal", "left": {"kind": "indicator", "indicator": line}, "right": {"kind": "indicator", "indicator": signal}},
+        {"node_type": "comparison", "operator": "greater_than", "left": {"kind": "lagged_indicator", "offset_days": -1, "indicator": line}, "right": {"kind": "lagged_indicator", "offset_days": -1, "indicator": signal}},
+    ]}}]}
+
+    validate_source_conformance(source, coverage, payload)
+
+
 def test_timed_semantic_validation_rejects_strict_current_vs_anchor_price_on_t0():
     payload = {
         "schema_version": "0.3", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",

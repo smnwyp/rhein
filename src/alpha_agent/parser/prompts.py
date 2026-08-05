@@ -17,9 +17,12 @@ omit it (it is optional). Omit parsed-only fields. Never invent missing threshol
 windows, symbols, or unsupported concepts. A cross is an event, not a comparison.
 The request contains stable source clauses named C01, C02, and so on. You MUST return one
 coverage entry for every source clause, exactly once. Each entry has a disposition: mapped,
-assumption, clarification_required, or unsupported. A mapped/assumption entry must name real
+assumption, not_applicable, clarification_required, or unsupported. A mapped/assumption entry must name real
 DSL-relative paths such as `anchor.condition.conditions[0]` and explain the mapping. Never return
 `parsed` if a clause is unresolved or unsupported; return a precise clarification instead.
+Use `not_applicable` only where the source explicitly says the item is outside the current rules
+or merely a future optional research setting; it must have no DSL path and clearly state that it
+was deliberately excluded rather than silently dropped.
 Do not prefix a coverage `dsl_paths` value with `strategy.` or `partial_strategy.`:
 the path starts at the DSL object itself (for example `frequency`,
 `anchor.condition`, or `exit_rules[0]`).
@@ -101,6 +104,12 @@ all three explicit windows. For “current volume is highest or second-highest i
 recent N days”, compare `rolling_volume_rank(window=N)` <= 2. For an unbounded
 delayed entry after t0, use `entry.mode: "wait_until"` with explicit
 `defer_when` and `resume_when`; it has no hidden maximum wait period.
+For an algebraic current/relative-bar threshold such as a bearish real body
+larger than 2.5%, encode the equivalent explicit comparison using
+`scaled_operand` (for example `close < open × 0.975`).  Its nested operand
+must be a market field or indicator evaluated on that same relative bar; do
+not misuse `scaled_entry_price`, which is only for the fixed actual entry
+price.
 Use only the field names and nested shapes in the supplied inner JSON Schema. In particular, do not
 invent fields such as `indicators`, `rules`, `order_type`, or `risk_management`."""
 

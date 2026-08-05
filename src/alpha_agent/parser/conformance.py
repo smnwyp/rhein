@@ -32,6 +32,61 @@ def _mapped_subtrees(clause_id: str, coverage: Iterable[ClauseCoverage], strateg
     return values
 
 
+def _macd_operand(operand: object, *, component: str, lagged: bool) -> bool:
+    if not isinstance(operand, Mapping):
+        return False
+    if lagged:
+        if operand.get("kind") != "lagged_indicator" or operand.get("offset_days") != -1:
+            return False
+    elif operand.get("kind") != "indicator":
+        return False
+    indicator = operand.get("indicator")
+    return isinstance(indicator, Mapping) and indicator.get("indicator") == component
+
+
+def _comparison_nodes(node: object) -> list[Mapping[str, object]]:
+    if isinstance(node, Mapping):
+        current = [node] if node.get("node_type") == "comparison" else []
+        return current + [item for value in node.values() for item in _comparison_nodes(value)]
+    if isinstance(node, list):
+        return [item for value in node for item in _comparison_nodes(value)]
+    return []
+
+
+def _has_explicit_inclusive_macd_pair(node: object, *, direction: str) -> bool:
+    """Recognise the source's equality-inclusive DIF/DEA two-day definition.
+
+    A generic ``cross_*`` node is intentionally strict on the current bar.
+    When the source instead explicitly defines a touch-inclusive crossover
+    (prior DIF > DEA and current DIF <= DEA, or vice versa), a pair of typed
+    comparisons preserves the requested semantics more faithfully.
+    """
+    comparisons = _comparison_nodes(node)
+    if direction == "below":
+        current_operator, prior_operator = "less_than_or_equal", "greater_than"
+    else:
+        current_operator, prior_operator = "greater_than_or_equal", "less_than"
+    current_found = any(
+        item.get("operator") == current_operator
+        and _macd_operand(item.get("left"), component="macd_line", lagged=False)
+        and _macd_operand(item.get("right"), component="macd_signal", lagged=False)
+        for item in comparisons
+    )
+    prior_found = any(
+        item.get("operator") == prior_operator
+        and _macd_operand(item.get("left"), component="macd_line", lagged=True)
+        and _macd_operand(item.get("right"), component="macd_signal", lagged=True)
+        for item in comparisons
+    )
+    return current_found and prior_found
+
+
+def _source_defines_inclusive_macd_pair(text: str, *, direction: str) -> bool:
+    if "DIF" not in text or "DEA" not in text or "前一日" not in text or "当日" not in text:
+        return False
+    return ("≤" in text or "<=" in text) if direction == "below" else ("≥" in text or ">=" in text)
+
+
 def validate_source_conformance(source_clauses: Iterable[SourceClause], coverage: list[ClauseCoverage], strategy_payload: dict[str, Any]) -> None:
     """Enforce a small set of explicit source-to-DSL semantic invariants.
 
@@ -44,10 +99,18 @@ def validate_source_conformance(source_clauses: Iterable[SourceClause], coverage
         mapped = _mapped_subtrees(clause.clause_id, coverage, strategy_payload)
         text = clause.text
         if re.search(r"(?:上穿|向上穿越)", text):
-            if not any(_has(value, "operator", "cross_above") for value in mapped):
+            has_strict_cross = any(_has(value, "operator", "cross_above") for value in mapped)
+            has_inclusive_pair = _source_defines_inclusive_macd_pair(text, direction="above") and any(
+                _has_explicit_inclusive_macd_pair(value, direction="above") for value in mapped
+            )
+            if not has_strict_cross and not has_inclusive_pair:
                 issues.append({"path": f"source.{clause.clause_id}", "rule": "cross_requires_cross_node", "message": "an ‘上穿’ source clause must map to a cross_above node"})
         if re.search(r"(?:下穿|向下穿越)", text):
-            if not any(_has(value, "operator", "cross_below") for value in mapped):
+            has_strict_cross = any(_has(value, "operator", "cross_below") for value in mapped)
+            has_inclusive_pair = _source_defines_inclusive_macd_pair(text, direction="below") and any(
+                _has_explicit_inclusive_macd_pair(value, direction="below") for value in mapped
+            )
+            if not has_strict_cross and not has_inclusive_pair:
                 issues.append({"path": f"source.{clause.clause_id}", "rule": "cross_requires_cross_node", "message": "a ‘下穿’ source clause must map to a cross_below node"})
         if re.search(r"(?:相对(?:前一|上一)(?:个)?交易日(?:收盘价)?|单日).*?(?:涨幅|收益|回报)", text):
             if not any(_has(value, "indicator", "rolling_return") and _has(value, "window", 1) for value in mapped):
