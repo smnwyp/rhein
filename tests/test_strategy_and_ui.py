@@ -197,11 +197,6 @@ def test_interpreter_loads_saved_run_and_renders_the_trade_chart() -> None:
     saved_strategy.select("周四策略 · 已验证").run(timeout=45)
     next(widget for widget in app.button if widget.label == "载入这次已保存回测").click().run(timeout=90)
 
-    kpis = app.session_state["dsl_backtest_kpis"]
-    app.session_state["dsl_chart_result_scope"] = app.session_state["dsl_backtest_view_scope"]
-    app.session_state["dsl_chart_selected_symbol"] = str(kpis.iloc[0]["标的"])
-    app.run(timeout=90)
-
     assert not app.exception
     assert any(widget.value.endswith("：交易 K 线") for widget in app.subheader)
     # The first Vega-Lite chart is the trade chart; the second is the review

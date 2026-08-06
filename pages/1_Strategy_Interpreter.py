@@ -713,6 +713,16 @@ if matching_result is not None:
                 # Keep showing the chart for the symbol chosen in this exact
                 # result set instead of making the user reload the strategy.
                 selected_symbol = str(st.session_state["dsl_chart_selected_symbol"])
+            else:
+                # A loaded historical result starts with no transient table
+                # selection.  Show the first ranked symbol with a completed
+                # trade immediately, so the chart does not appear to vanish
+                # until the user happens to click a row.
+                tradable_symbols = display.loc[display["交易次数"] > 0, "标的"]
+                if not tradable_symbols.empty:
+                    selected_symbol = str(tradable_symbols.iloc[0])
+                    st.session_state["dsl_chart_result_scope"] = current_backtest_view_scope
+                    st.session_state["dsl_chart_selected_symbol"] = selected_symbol
             if selected_symbol is not None:
                 symbol_trades = st.session_state.get("dsl_backtest_trades", pd.DataFrame())
                 symbol_trades = symbol_trades[symbol_trades["symbol"] == selected_symbol].reset_index(drop=True)
