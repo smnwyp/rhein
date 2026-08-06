@@ -975,6 +975,33 @@ if matching_result is not None:
                                     st.success("最终 C/t0 入场判定：通过。AND 组合要求全部子条件通过；OR 组合只要求至少一个分支通过。")
                                     st.caption("表中“未通过”可能是 OR 的另一条候选分支；请以标有“组合条件（AND/OR）”的结果行为准。")
                                     st.dataframe(pd.DataFrame(checks), hide_index=True, width="stretch")
+                            if matching_result.strategy.schema_version == "0.3":
+                                try:
+                                    timed_for_exit_audit = TimedStrategyDefinition.model_validate(
+                                        matching_result.strategy.model_dump(mode="json")
+                                    )
+                                    exit_audit = build_trade_event_audit(
+                                        source_chart,
+                                        strategy=timed_for_exit_audit,
+                                        signal_date=str(trade["signal"]),
+                                        entry_date=str(trade["entry"]),
+                                        exit_date=str(trade["exit"]),
+                                        reason=str(trade["reason"]),
+                                        event="exit",
+                                    )
+                                    exit_checks = event_audit_rows(exit_audit)
+                                    with st.expander("出场条件核对", expanded=False):
+                                        st.success(str(exit_audit["summary"]))
+                                        st.caption(
+                                            "每条退出规则均按实际出场日重新计算：先核对生效日范围与状态门槛，"
+                                            "再核对所有技术条件和 AND/OR 组合结果。只有“规则最终结果”为通过的规则可触发出场。"
+                                        )
+                                        if exit_checks:
+                                            st.dataframe(pd.DataFrame(exit_checks), hide_index=True, width="stretch")
+                                        else:
+                                            st.info("该笔交易没有可逐项展示的技术出场条件。")
+                                except (ValueError, UnsupportedStrategyFeature) as error:
+                                    st.warning(f"无法生成本笔交易的出场条件核对：{error}")
                             if audit_rows:
                                 with st.expander("标注核对", expanded=False):
                                     st.caption("A/B/C 等点直接来自本笔交易的确定性回测 artifact；A/B 均按 DSL 指定的最早并列规则计算。")

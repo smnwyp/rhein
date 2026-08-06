@@ -471,6 +471,130 @@ def _state_values_at(df: pd.DataFrame, strategy: TimedStrategyDefinition, *, anc
     return values
 
 
+def _exit_rule_audit_rows(
+    df: pd.DataFrame,
+    rule: ExitRule,
+    *,
+    anchor_index: int,
+    entry_index: int,
+    entry_price: float,
+    exit_index: int,
+    states: dict[str, bool],
+) -> list[dict[str, object]]:
+    """Explain one exit rule at the actual exit date.
+
+    The backtest selects the lowest-priority-number rule only after checking
+    its activation window, persistent-state gate, and condition.  This helper
+    writes those exact gates out for *every* rule, including rules which were
+    not eligible that day.  It prevents the audit view from mistaking an
+    unlisted rule for a rule that was silently ignored.
+    """
+    section = f"出场规则：{rule.rule_id}（优先级 {rule.priority}）"
+    relative_day = exit_index - (entry_index if rule.relative_to == "entry" else anchor_index)
+    active = _rule_active(rule, relative_day)
+    rows = [
+        _audit_row(
+            section=section,
+            dsl_path=f"exit_rules.{rule.rule_id}.active_days",
+            left="相对持仓日",
+            left_value=relative_day,
+            operator="范围",
+            right=f"{rule.active_days.start_offset_days} 至 {rule.active_days.end_offset_days if rule.active_days.end_offset_days is not None else '∞'}",
+            right_value=None,
+            passed=active,
+        )
+    ]
+    state_gate = True
+    if rule.requires_state is not None:
+        state_value = states.get(rule.requires_state, False)
+        state_gate = state_gate and state_value
+        rows.append(_audit_row(
+            section=section,
+            dsl_path=f"exit_rules.{rule.rule_id}.requires_state",
+            left=f"状态 {rule.requires_state}",
+            left_value=int(state_value),
+            operator="equal",
+            right="已激活",
+            right_value=1,
+            passed=state_value,
+        ))
+    if rule.forbids_state is not None:
+        state_value = states.get(rule.forbids_state, False)
+        state_gate = state_gate and not state_value
+        rows.append(_audit_row(
+            section=section,
+            dsl_path=f"exit_rules.{rule.rule_id}.forbids_state",
+            left=f"状态 {rule.forbids_state}",
+            left_value=int(state_value),
+            operator="equal",
+            right="未激活",
+            right_value=0,
+            passed=not state_value,
+        ))
+
+    if rule.condition is not None:
+        rows.extend(_temporal_condition_checks(
+            df,
+            rule.condition,
+            index=exit_index,
+            anchor_index=anchor_index,
+            entry_index=entry_index,
+            entry_price=entry_price,
+            section=section,
+            path=f"exit_rules.{rule.rule_id}.condition",
+        ))
+        condition_passed = _temporal_condition(
+            df,
+            rule.condition,
+            index=exit_index,
+            anchor_index=anchor_index,
+            entry_index=entry_index,
+            entry_price=entry_price,
+        )
+    elif rule.kind == "forced_close":
+        # A forced close has no technical trigger.  Its activation window and
+        # state gate are the complete execution rule.
+        condition_passed = True
+        rows.append(_audit_row(
+            section=section,
+            dsl_path=f"exit_rules.{rule.rule_id}.condition",
+            left="强制平仓规则",
+            left_value=1,
+            operator="equal",
+            right="无额外技术条件",
+            right_value=1,
+            passed=True,
+        ))
+    else:
+        # v0.3's daily engine rejects intraday triggers before this point.
+        # Keep the audit honest rather than pretending it has calculated an
+        # unsupported price trigger from daily OHLC data.
+        condition_passed = False
+        rows.append(_audit_row(
+            section=section,
+            dsl_path=f"exit_rules.{rule.rule_id}.condition",
+            left="条件",
+            left_value=0,
+            operator="结果",
+            right="当前日线引擎不可审计",
+            right_value=1,
+            passed=False,
+        ))
+
+    rule_passed = active and state_gate and condition_passed
+    rows.append(_audit_row(
+        section=section,
+        dsl_path=f"exit_rules.{rule.rule_id}.result",
+        left="规则最终结果",
+        left_value=int(rule_passed),
+        operator="结果",
+        right="触发出场",
+        right_value=1,
+        passed=rule_passed,
+    ))
+    return rows
+
+
 def build_trade_event_audit(
     df: pd.DataFrame,
     *,
@@ -513,19 +637,41 @@ def build_trade_event_audit(
 
     rule_id = reason.removeprefix("v03:")
     if rule_id == "sample_end_force_close":
-        return {"event": "exit", "event_date": exit_date, "summary": "该笔交易因样本结束按 lifecycle_policy 强制平仓，不是技术条件触发。", "rows": []}
-    rule = next((candidate for candidate in strategy.exit_rules if candidate.rule_id == rule_id), None)
-    if rule is None or rule.condition is None:
+        rows = [_audit_row(
+            section="样本末尾处理",
+            dsl_path="lifecycle_policy.sample_end_open_position",
+            left="样本结束",
+            left_value=1,
+            operator="结果",
+            right="按 lifecycle_policy 强制平仓",
+            right_value=1,
+            passed=True,
+        )]
+        return {"event": "exit", "event_date": exit_date, "summary": "该笔交易因样本结束按 lifecycle_policy 强制平仓，不是技术条件触发。", "rows": rows}
+    winner = next((candidate for candidate in strategy.exit_rules if candidate.rule_id == rule_id), None)
+    if winner is None:
         return {"event": "exit", "event_date": exit_date, "summary": f"未找到出场原因 {reason} 对应的 DSL 规则。", "rows": []}
     states = _state_values_at(df, strategy, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, index=exit_index)
-    relative_day = exit_index - (entry_index if rule.relative_to == "entry" else anchor_index)
-    rows = [_audit_row(section="出场规则门槛", dsl_path=f"exit_rules.{rule.rule_id}.active_days", left="相对持仓日", left_value=relative_day, operator="范围", right=f"{rule.active_days.start_offset_days} 至 {rule.active_days.end_offset_days if rule.active_days.end_offset_days is not None else '∞'}", right_value=None, passed=_rule_active(rule, relative_day))]
-    if rule.requires_state is not None:
-        rows.append(_audit_row(section="出场规则门槛", dsl_path=f"exit_rules.{rule.rule_id}.requires_state", left=f"状态 {rule.requires_state}", left_value=int(states[rule.requires_state]), operator="equal", right="已激活", right_value=1, passed=states[rule.requires_state]))
-    if rule.forbids_state is not None:
-        rows.append(_audit_row(section="出场规则门槛", dsl_path=f"exit_rules.{rule.rule_id}.forbids_state", left=f"状态 {rule.forbids_state}", left_value=int(states[rule.forbids_state]), operator="equal", right="未激活", right_value=0, passed=not states[rule.forbids_state]))
-    rows.extend(_temporal_condition_checks(df, rule.condition, index=exit_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, section=f"触发出场：{rule.rule_id}", path=f"exit_rules.{rule.rule_id}.condition"))
-    return {"event": "exit", "event_date": exit_date, "summary": f"{exit_date} 因规则 {rule.rule_id} 按收盘价出场。", "rows": rows}
+    rows: list[dict[str, object]] = []
+    for rule in sorted(strategy.exit_rules, key=lambda candidate: candidate.priority):
+        rows.extend(_exit_rule_audit_rows(
+            df,
+            rule,
+            anchor_index=anchor_index,
+            entry_index=entry_index,
+            entry_price=entry_price,
+            exit_index=exit_index,
+            states=states,
+        ))
+    return {
+        "event": "exit",
+        "event_date": exit_date,
+        "summary": (
+            f"{exit_date} 因规则 {winner.rule_id}（优先级 {winner.priority}）按收盘价出场。"
+            "下表同时核对全部出场规则；只有“规则最终结果”为通过的规则具备触发资格。"
+        ),
+        "rows": rows,
+    }
 
 
 def _anchor_constraints_hold(df: pd.DataFrame, strategy: TimedStrategyDefinition, index: int) -> tuple[bool, list[dict[str, object]]]:

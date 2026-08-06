@@ -199,6 +199,7 @@ def test_interpreter_loads_saved_run_and_renders_the_trade_chart() -> None:
 
     assert not app.exception
     assert any(widget.value.endswith("：交易 K 线") for widget in app.subheader)
+    assert any(widget.label == "出场条件核对" for widget in app.get("expander"))
     # The first Vega-Lite chart is the trade chart; the second is the review
     # timeline. Both must survive loading a saved result.
     assert len(app.get("vega_lite_chart")) >= 2

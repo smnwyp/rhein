@@ -78,7 +78,18 @@ def test_v03_event_audit_replays_entry_and_clicked_exit_with_actual_values():
     assert any(row["section"] == "C 点结构约束" and row["passed"] for row in entry_audit["rows"])
     assert exit_audit["event"] == "exit"
     assert "high_volume_reversal" in exit_audit["summary"]
-    assert any(row["section"] == "触发出场：high_volume_reversal" and row["passed"] for row in exit_audit["rows"])
+    # Exit audits are intentionally complete: users can see both the winning
+    # rule and why every other rule was not eligible on the same day.
+    assert any(row["section"].startswith("出场规则：high_volume_reversal") and row["passed"] for row in exit_audit["rows"])
+    assert any(row["section"].startswith("出场规则：protect_ma20") for row in exit_audit["rows"])
+    assert any(
+        row["dsl_path"] == "exit_rules.high_volume_reversal.result" and row["passed"]
+        for row in exit_audit["rows"]
+    )
+    assert any(
+        row["dsl_path"] == "exit_rules.protect_ma20.result" and not row["passed"]
+        for row in exit_audit["rows"]
+    )
 
 
 def test_v03_engine_enters_on_a_qualified_anchor_without_duplicate_entry_condition():
