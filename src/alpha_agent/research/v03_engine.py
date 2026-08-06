@@ -171,6 +171,18 @@ def _anchor_condition_checks(df: pd.DataFrame, condition: Condition, index: int,
         checks: list[dict[str, object]] = []
         for child_index, child in enumerate(condition.conditions):
             checks.extend(_anchor_condition_checks(df, child, index, f"{path}.conditions[{child_index}]"))
+        # A false leaf inside an OR is expected when another branch is true.
+        # Persist the group result alongside leaves so audit UIs never imply
+        # that every printed leaf is independently required for entry.
+        checks.append({
+            "dsl_path": path,
+            "left": f"组合条件（{condition.operator.upper()}）",
+            "left_value": None,
+            "operator": "group_result",
+            "right": "全部子条件" if condition.operator == "and" else "任一子条件",
+            "right_value": None,
+            "passed": _static_condition(df, condition, index),
+        })
         return checks
     if isinstance(condition, ComparisonCondition):
         left, right = _static_operand(df, condition.left, index), _static_operand(df, condition.right, index)

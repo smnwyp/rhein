@@ -198,7 +198,7 @@ def anchor_check_rows(trade: pd.Series) -> list[dict[str, object]]:
     raw_checks = trade.get("anchor_checks")
     if not isinstance(raw_checks, list):
         return []
-    operator_labels = {"greater_than": ">", "less_than": "<", "greater_than_or_equal": "≥", "less_than_or_equal": "≤", "equal": "="}
+    operator_labels = {"greater_than": ">", "less_than": "<", "greater_than_or_equal": "≥", "less_than_or_equal": "≤", "equal": "=", "group_result": "结果"}
     return [
         {
             "DSL 路径": str(check["dsl_path"]),
@@ -950,9 +950,30 @@ if matching_result is not None:
                                     except (ValueError, UnsupportedStrategyFeature) as error:
                                         st.warning(f"无法生成该点的确定性审计：{error}")
                             checks = anchor_check_rows(trade)
+                            # Historical runs predate group-level snapshots.
+                            # Rebuild the audit from the exact same source
+                            # data and deterministic engine so OR/AND results
+                            # are visible instead of looking like every false
+                            # alternative invalidated this accepted C point.
+                            if matching_result.strategy.schema_version == "0.3":
+                                try:
+                                    timed_for_c_point_audit = TimedStrategyDefinition.model_validate(matching_result.strategy.model_dump(mode="json"))
+                                    c_point_audit = build_trade_event_audit(
+                                        source_chart,
+                                        strategy=timed_for_c_point_audit,
+                                        signal_date=str(trade["signal"]),
+                                        entry_date=str(trade["entry"]),
+                                        exit_date=str(trade["exit"]),
+                                        reason=str(trade["reason"]),
+                                        event="entry",
+                                    )
+                                    checks = event_audit_rows(c_point_audit)
+                                except (ValueError, UnsupportedStrategyFeature):
+                                    pass
                             if checks:
                                 with st.expander("C 点入场条件核对", expanded=True):
-                                    st.caption("这是一笔实际被接受的 C/t0 的逐项计算快照；全部条件必须为“通过”。")
+                                    st.success("最终 C/t0 入场判定：通过。AND 组合要求全部子条件通过；OR 组合只要求至少一个分支通过。")
+                                    st.caption("表中“未通过”可能是 OR 的另一条候选分支；请以标有“组合条件（AND/OR）”的结果行为准。")
                                     st.dataframe(pd.DataFrame(checks), hide_index=True, width="stretch")
                             if audit_rows:
                                 with st.expander("标注核对", expanded=False):

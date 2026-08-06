@@ -57,7 +57,8 @@ def test_v03_engine_uses_earliest_ordered_extrema_and_high_volume_doji_exit():
     assert trades.iloc[0].event_points[1]["label"].startswith("B：")
     assert any(point["label"] == "C：t0 基准点" for point in trades.iloc[0].event_points)
     assert all(check["passed"] for check in trades.iloc[0].anchor_checks)
-    assert {check["left"] for check in trades.iloc[0].anchor_checks} == {"Close", "SMA(5)", "SMA(10)"}
+    assert {check["left"] for check in trades.iloc[0].anchor_checks if not str(check["left"]).startswith("组合条件")} == {"Close", "SMA(5)", "SMA(10)"}
+    assert any(check["left"] == "组合条件（AND）" and check["passed"] for check in trades.iloc[0].anchor_checks)
     assert stats["n_trades"] == 1
 
 
@@ -118,6 +119,7 @@ def test_v03_engine_allows_false_leaf_inside_a_satisfied_anchor_or_group():
     assert len(trades) == 1
     assert any(not check["passed"] for check in trades.iloc[0].anchor_checks)
     assert any(check["passed"] for check in trades.iloc[0].anchor_checks)
+    assert any(check["left"] == "组合条件（OR）" and check["passed"] for check in trades.iloc[0].anchor_checks)
 
 
 def test_v03_supports_macd_rolling_trend_count_and_wait_until_entry():
