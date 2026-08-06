@@ -43,3 +43,12 @@ def selected_event_id(chart_state: object, *, selection_name: str = "trade_event
     if isinstance(candidate, list):
         candidate = candidate[0] if candidate else None
     return str(candidate) if candidate in {"entry", "exit"} else None
+
+
+def event_text_layer(layers: list[dict[str, object]]) -> dict[str, object]:
+    """Find the annotation text layer without relying on layer order."""
+    for layer in layers:
+        mark = layer.get("mark")
+        if isinstance(mark, dict) and mark.get("type") == "text":
+            return layer
+    raise ValueError("trade chart does not contain an event annotation text layer")

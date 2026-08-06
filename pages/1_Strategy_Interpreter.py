@@ -35,7 +35,7 @@ from rhein.backtest import input_files as backtest_input_files, load_ohlc as bac
 from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.summaries import style_by_drawdown
-from rhein.ui.trade_chart import selected_event_id, trade_selector_options
+from rhein.ui.trade_chart import event_text_layer, selected_event_id, trade_selector_options
 from rhein.ui.chart_theme import event_annotation_style
 from rhein.ui.macd import add_display_macd
 from rhein.ui.history_paths import portable_data_path, resolve_history_data_path, same_data_scope
@@ -914,9 +914,10 @@ if matching_result is not None:
                                 y_encoding = layer["encoding"].get("y")
                                 if isinstance(y_encoding, dict):
                                     y_encoding["scale"] = price_scale
-                            text_mark = price_layers[-1]["mark"]
+                            annotation_text_layer = event_text_layer(price_layers)
+                            text_mark = annotation_text_layer["mark"]
                             text_mark.update({"fontSize": 13, "stroke": annotation_style["halo_color"], "strokeWidth": annotation_style["halo_width"], "align": "left", "dx": 4, "baseline": "bottom"})
-                            price_layers[-1]["encoding"]["text"]["type"] = "nominal"
+                            annotation_text_layer["encoding"]["text"]["type"] = "nominal"
                             chart_state = st.vega_lite_chart(
                                 chart,
                                 spec,

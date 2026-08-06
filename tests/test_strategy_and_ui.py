@@ -6,7 +6,7 @@ from rhein.paths import GROUP_ROOT
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
 from rhein.ui.strategy_text import params_to_text, strategy_narrative
-from rhein.ui.trade_chart import selected_event_id, trade_selector_options
+from rhein.ui.trade_chart import event_text_layer, selected_event_id, trade_selector_options
 from rhein.engine.eligibility import baseline_is_eligible
 
 
@@ -93,6 +93,13 @@ def test_trade_chart_event_selection_accepts_vega_list_and_mapping_payloads() ->
     assert selected_event_id({"selection": {"trade_event": [{"EventId": "entry"}]}}) == "entry"
     assert selected_event_id({"selection": {"trade_event": {"EventId": ["exit"]}}}) == "exit"
     assert selected_event_id({"selection": {"trade_event": [{"EventId": "anchor"}]}}) is None
+
+
+def test_trade_chart_finds_annotation_layer_after_clickable_marker_is_added() -> None:
+    text_layer = {"mark": {"type": "text"}, "encoding": {"text": {"field": "Label"}}}
+    layers = [{"mark": {"type": "point"}}, text_layer, {"mark": {"type": "point"}}]
+
+    assert event_text_layer(layers) is text_layer
 
 
 def test_current_settings_updates_when_t0_09_is_toggled() -> None:
