@@ -35,7 +35,7 @@ from rhein.backtest import input_files as backtest_input_files, load_ohlc as bac
 from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.summaries import style_by_drawdown
-from rhein.ui.trade_chart import event_text_layer, selected_event_id, trade_selector_options
+from rhein.ui.trade_chart import event_text_layer, trade_selector_options
 from rhein.ui.chart_theme import event_annotation_style
 from rhein.ui.macd import add_display_macd
 from rhein.ui.history_paths import portable_data_path, resolve_history_data_path, same_data_scope
@@ -801,7 +801,6 @@ if matching_result is not None:
                             chart["Index"] = range(len(chart))
                             marker_labels: dict[int, list[str]] = {}
                             marker_prices: dict[int, list[float]] = {}
-                            clickable_markers: list[dict[str, object]] = []
                             chart_dates_for_markers = pd.to_datetime(chart["Date"], errors="coerce").dt.normalize()
                             audit_rows: list[dict[str, object]] = []
                             for event_point in event_points:
@@ -813,14 +812,6 @@ if matching_result is not None:
                                     price = event_point.get("price")
                                     event_price = float(price) if isinstance(price, (int, float)) else float(chart.loc[position, "Close"])
                                     marker_prices.setdefault(position, []).append(event_price)
-                                    if event_point["event_id"] in {"entry", "exit"}:
-                                        clickable_markers.append({
-                                            "Index": position,
-                                            "EventId": event_point["event_id"],
-                                            "EventPrice": event_price,
-                                            "Label": event_point["label"],
-                                            "Date": date.strftime("%Y-%m-%d"),
-                                        })
                                     audit_rows.append({
                                         "事件": event_point["label"],
                                         "日期": date.strftime("%Y-%m-%d"),
@@ -890,10 +881,6 @@ if matching_result is not None:
                             annotation_style = event_annotation_style(st.context.theme.type)
                             event_color = annotation_style["color"]
                             spec = {
-                                "params": [{
-                                    "name": "trade_event",
-                                    "select": {"type": "point", "fields": ["EventId"], "on": "click", "clear": "dblclick"},
-                                }],
                                 "vconcat": [
                                     {
                                         "height": 360,
@@ -905,7 +892,6 @@ if matching_result is not None:
                                             {"data": {"values": markers}, "mark": {"type": "rule", "color": event_color, "strokeWidth": 1.2}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "y2": {"field": "LabelPrice"}, "tooltip": event_tooltip}},
                                             {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 90, "color": event_color}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "tooltip": event_tooltip}},
                                             {"data": {"values": markers}, "mark": {"type": "text", "fontWeight": "bold", "color": event_color}, "encoding": {"x": x, "y": {"field": "LabelPrice", "type": "quantitative"}, "text": {"field": "ShortLabel"}, "tooltip": event_tooltip}},
-                                            {"data": {"values": clickable_markers}, "mark": {"type": "point", "filled": True, "size": 185, "color": "#f43f5e", "cursor": "pointer"}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "detail": {"field": "EventId", "type": "nominal"}, "tooltip": event_tooltip}},
                                         ],
                                     },
                                     {"height": 100, "mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Volume", "type": "quantitative"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
@@ -928,18 +914,13 @@ if matching_result is not None:
                             text_mark = annotation_text_layer["mark"]
                             text_mark.update({"fontSize": 13, "stroke": annotation_style["halo_color"], "strokeWidth": annotation_style["halo_width"], "align": "left", "dx": 4, "baseline": "bottom"})
                             annotation_text_layer["encoding"]["text"]["type"] = "nominal"
-                            chart_state = st.vega_lite_chart(
-                                chart,
-                                spec,
-                                width="stretch",
-                                key=f"dsl_chart_{selected_symbol}_{trade_id}",
-                                on_select="rerun",
-                                selection_mode="trade_event",
-                            )
+                            st.vega_lite_chart(chart, spec, width="stretch", key=f"dsl_chart_{selected_symbol}_{trade_id}")
                             event_detail_key = f"dsl_chart_event_detail::{current_backtest_view_scope}::{selected_symbol}::{trade_id}"
-                            clicked_event_id = selected_event_id(chart_state)
-                            if clicked_event_id is not None:
-                                st.session_state[event_detail_key] = clicked_event_id
+                            entry_control, exit_control = st.columns(2)
+                            if entry_control.button("查看入场点条件", key=f"{event_detail_key}::entry", width="stretch"):
+                                st.session_state[event_detail_key] = "entry"
+                            if exit_control.button("查看出场点条件", key=f"{event_detail_key}::exit", width="stretch"):
+                                st.session_state[event_detail_key] = "exit"
                             selected_event_id_for_detail = st.session_state.get(event_detail_key)
                             if selected_event_id_for_detail in {"entry", "exit"}:
                                 if matching_result.strategy.schema_version != "0.3":
