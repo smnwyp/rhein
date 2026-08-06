@@ -37,6 +37,7 @@ from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.summaries import style_by_drawdown
 from rhein.ui.trade_chart import trade_selector_options
 from rhein.ui.chart_theme import event_annotation_style
+from rhein.ui.macd import add_display_macd
 from rhein.ui.history_paths import portable_data_path, resolve_history_data_path, same_data_scope
 
 # The project-local file is the explicit source of truth for this local app.
@@ -499,7 +500,7 @@ if matching_result is not None:
         current_group_path = str(Path(data_path).resolve())
         try:
             all_saved_runs = [
-                run for run in backtest_history.list_for_strategy(saved_backtest_strategy_id)
+                run for run in backtest_history.list_summaries_for_strategy(saved_backtest_strategy_id)
                 if same_data_scope(run.data_path, current_group_path, project_root=ROOT)
             ]
             # A saved strategy can receive a source-preserving DSL correction.
@@ -518,7 +519,7 @@ if matching_result is not None:
             # before the UI could surface its per-file errors.  That is not a
             # usable research result (unlike a normal zero-trade run, which
             # still has one KPI row per symbol), so do not offer it for load.
-            saved_runs = [run for run in all_saved_runs if run.kpis]
+            saved_runs = [run for run in all_saved_runs if run.kpi_count]
         except BacktestHistoryError as error:
             st.warning(f"无法读取此策略的已保存回测：{error.message}")
             saved_runs = []
@@ -528,20 +529,23 @@ if matching_result is not None:
             run_id = st.selectbox(
                 "已保存回测",
                 list(run_by_id),
-                format_func=lambda item: f"{run_by_id[item].strategy_name} · {run_by_id[item].created_at.astimezone().strftime('%Y-%m-%d %H:%M')} · {run_by_id[item].input_file_count} 个标的 · {len(run_by_id[item].trades)} 笔交易",
+                format_func=lambda item: f"{run_by_id[item].strategy_name} · {run_by_id[item].created_at.astimezone().strftime('%Y-%m-%d %H:%M')} · {run_by_id[item].input_file_count} 个标的 · {run_by_id[item].trade_count} 笔交易",
                 key="saved_backtest_run",
             )
             if st.button("载入这次已保存回测", key="load_saved_backtest", width="stretch"):
-                selected_run = run_by_id[run_id]
-                assert current_backtest_view_scope is not None
-                replace_backtest_view(
-                    kpis=recalculated_trade_level_kpis(selected_run.kpis, selected_run.trades, selected_run.settings),
-                    trades=pd.DataFrame(selected_run.trades),
-                    strategy_text=strategy_text,
-                    view_scope=current_backtest_view_scope,
-                    loaded_run=selected_run,
-                )
-                st.rerun()
+                try:
+                    selected_run = backtest_history.load(run_by_id[run_id].run_id)
+                    assert current_backtest_view_scope is not None
+                    replace_backtest_view(
+                        kpis=recalculated_trade_level_kpis(selected_run.kpis, selected_run.trades, selected_run.settings),
+                        trades=pd.DataFrame(selected_run.trades),
+                        strategy_text=strategy_text,
+                        view_scope=current_backtest_view_scope,
+                        loaded_run=selected_run,
+                    )
+                    st.rerun()
+                except BacktestHistoryError as error:
+                    st.error(f"无法载入这次已保存回测：{error.message}")
         else:
             if 'all_saved_runs' in locals() and all_saved_runs:
                 st.warning("已忽略一条没有任何标的 KPI 的失败回测记录；请重新运行当前组回测。")
@@ -716,6 +720,10 @@ if matching_result is not None:
                         # trigger a group backtest rerun.
                         for window in (5, 10, 20, 60):
                             chart[f"MA{window}"] = chart["Close"].rolling(window).mean()
+                        # This is a display overlay, deliberately fixed to
+                        # MACD(12, 24, 8), and is calculated before slicing so
+                        # it retains the preceding price history for EMA warmup.
+                        chart = add_display_macd(chart)
                         signal, entry, exit_ = (pd.Timestamp(trade[column]).normalize() for column in ("signal", "entry", "exit"))
                         chart_dates = pd.to_datetime(chart["Date"], errors="coerce").dt.normalize()
                         signal_positions = chart.index[chart_dates == signal]
@@ -826,6 +834,12 @@ if matching_result is not None:
                                 {"field":"EventPrice","type":"quantitative","title":"事件价格","format":".4f"},
                                 {"field":"Index","type":"quantitative","title":"图内零基索引","format":"d"},
                             ]
+                            macd_tooltip = [
+                                {"field":"Date","type":"nominal","title":"日期"},
+                                {"field":"MACD_DIF","type":"quantitative","title":"DIF (12,24)","format":".4f"},
+                                {"field":"MACD_DEA","type":"quantitative","title":"DEA (8)","format":".4f"},
+                                {"field":"MACD_HIST","type":"quantitative","title":"MACD 柱（×2）","format":".4f"},
+                            ]
                             annotation_style = event_annotation_style(st.context.theme.type)
                             event_color = annotation_style["color"]
                             spec = {
@@ -843,6 +857,14 @@ if matching_result is not None:
                                         ],
                                     },
                                     {"height": 100, "mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Volume", "type": "quantitative"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
+                                    {
+                                        "height": 145,
+                                        "layer": [
+                                            {"mark": {"type": "rule", "color": "#94a3b8", "strokeWidth": 1}, "encoding": {"y": {"datum": 0, "type": "quantitative"}}},
+                                            {"mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "MACD_HIST", "type": "quantitative", "title": "MACD"}, "color": {"condition": {"test": "datum.MACD_HIST >= 0", "value": "#ef4444"}, "value": "#16a34a"}, "tooltip": macd_tooltip}},
+                                            {"transform": [{"fold": ["MACD_DIF", "MACD_DEA"], "as": ["Line", "Value"]}], "mark": {"type": "line", "strokeWidth": 1.5}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative", "title": "MACD"}, "color": {"field": "Line", "type": "nominal", "scale": {"domain": ["MACD_DIF", "MACD_DEA"], "range": ["#2563eb", "#f59e0b"]}, "legend": {"title": "MACD (12,24,8)", "labelExpr": "datum.label === 'MACD_DIF' ? 'DIF' : 'DEA'"}}, "tooltip": macd_tooltip}},
+                                        ],
+                                    },
                                 ],
                             }
                             price_layers = spec["vconcat"][0]["layer"]

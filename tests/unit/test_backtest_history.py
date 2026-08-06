@@ -50,13 +50,49 @@ def test_backtest_history_deletes_only_the_requested_run(tmp_path):
 def test_old_backtest_record_without_a_strategy_name_remains_readable(tmp_path):
     history = JsonBacktestHistory(tmp_path / "saved_backtest_results.json")
     strategy_id = uuid4()
-    saved = history.save(run(strategy_id)).model_dump(mode="json")
+    saved = run(strategy_id).model_dump(mode="json")
     saved.pop("strategy_name")
     (tmp_path / "saved_backtest_results.json").write_text(json.dumps([saved]), encoding="utf-8")
 
     restored = history.list_for_strategy(strategy_id)
 
     assert restored[0].strategy_name == "未命名策略（旧记录）"
+
+
+def test_backtest_selector_reads_only_small_index_until_a_run_is_selected(tmp_path) -> None:
+    path = tmp_path / "saved_backtest_results.json"
+    history = JsonBacktestHistory(path)
+    strategy_id = uuid4()
+    saved = history.save(run(strategy_id))
+
+    index_path = tmp_path / "saved_backtest_results_index.json"
+    artifact_path = tmp_path / "saved_backtest_artifacts" / f"{saved.run_id}.json.gz"
+    assert index_path.exists()
+    assert artifact_path.exists()
+    assert not path.exists()
+
+    reloaded = JsonBacktestHistory(path)
+    summary = reloaded.list_summaries_for_strategy(strategy_id)
+    assert len(summary) == 1
+    assert summary[0].trade_count == 1
+    assert summary[0].kpi_count == 1
+
+    loaded = reloaded.load(summary[0].run_id)
+    assert loaded.kpis[0]["标的"] == "AAPL"
+    assert loaded.trades[0]["ret_pct"] == 1.2
+
+
+def test_legacy_history_migrates_to_index_and_gzip_artifacts(tmp_path) -> None:
+    path = tmp_path / "saved_backtest_results.json"
+    strategy_id = uuid4()
+    legacy = run(strategy_id)
+    path.write_text(json.dumps([legacy.model_dump(mode="json")]), encoding="utf-8")
+
+    history = JsonBacktestHistory(path)
+    assert history.migrate_legacy_to_artifacts() == 1
+    summary = history.list_summaries_for_strategy(strategy_id)[0]
+
+    assert history.load(summary.run_id) == legacy
 
 
 def test_historical_view_recalculates_trade_kpis_without_mutating_saved_records() -> None:

@@ -1,0 +1,382 @@
+[
+  {
+    "run_id": "20e33bc8-6eed-401c-a03b-8798bb62e37b",
+    "strategy_id": "722d2a8a-9474-4b93-b848-be7091751a24",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "0845bf7c3e5be5e578088e8d2aa341453d183870f75669fc68afb28f6a23d99b",
+    "schema_version": "0.3",
+    "group_label": "01 高流动性 低波动（443 个标的）",
+    "data_path": "data/nasdaq_10y/groups/01_高流动性_低波动",
+    "input_file_count": 443,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 443,
+    "trade_count": 317,
+    "artifact_file": "20e33bc8-6eed-401c-a03b-8798bb62e37b.json.gz",
+    "created_at": "2026-07-31T16:24:04.303644Z"
+  },
+  {
+    "run_id": "ec540f75-9dc3-4586-80cb-8364cb3fc987",
+    "strategy_id": "1e00d677-cabf-49f8-9466-fd163968fb78",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "693dbecbbf44951a5efb4e4066e0516f292c55989ba514dce365c067b1fb693c",
+    "schema_version": "0.3",
+    "group_label": "01 高流动性 低波动（443 个标的）",
+    "data_path": "data/nasdaq_10y/groups/01_高流动性_低波动",
+    "input_file_count": 443,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 0,
+    "trade_count": 0,
+    "artifact_file": "ec540f75-9dc3-4586-80cb-8364cb3fc987.json.gz",
+    "created_at": "2026-07-31T17:50:01.102588Z"
+  },
+  {
+    "run_id": "5e073aed-c894-41ed-a509-f617c349b903",
+    "strategy_id": "1e00d677-cabf-49f8-9466-fd163968fb78",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "693dbecbbf44951a5efb4e4066e0516f292c55989ba514dce365c067b1fb693c",
+    "schema_version": "0.3",
+    "group_label": "01 高流动性 低波动（443 个标的）",
+    "data_path": "data/nasdaq_10y/groups/01_高流动性_低波动",
+    "input_file_count": 443,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 0,
+    "trade_count": 0,
+    "artifact_file": "5e073aed-c894-41ed-a509-f617c349b903.json.gz",
+    "created_at": "2026-07-31T17:50:40.285558Z"
+  },
+  {
+    "run_id": "9c27eb15-29e4-415f-8c98-6c817e2dd494",
+    "strategy_id": "1e00d677-cabf-49f8-9466-fd163968fb78",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "693dbecbbf44951a5efb4e4066e0516f292c55989ba514dce365c067b1fb693c",
+    "schema_version": "0.3",
+    "group_label": "01 高流动性 低波动（443 个标的）",
+    "data_path": "data/nasdaq_10y/groups/01_高流动性_低波动",
+    "input_file_count": 443,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 443,
+    "trade_count": 120,
+    "artifact_file": "9c27eb15-29e4-415f-8c98-6c817e2dd494.json.gz",
+    "created_at": "2026-07-31T18:12:28.425610Z"
+  },
+  {
+    "run_id": "45171a9c-2e26-4444-af6e-631b17fe8ceb",
+    "strategy_id": "2c132e40-eba0-44c9-acc0-08a0c4b64b4f",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "108bbab9012ced53fddbb19038893836819a098ad384aad2a870e7704ae7295f",
+    "schema_version": "0.3",
+    "group_label": "01 高流动性 低波动（443 个标的）",
+    "data_path": "data/nasdaq_10y/groups/01_高流动性_低波动",
+    "input_file_count": 443,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 443,
+    "trade_count": 157,
+    "artifact_file": "45171a9c-2e26-4444-af6e-631b17fe8ceb.json.gz",
+    "created_at": "2026-07-31T20:33:06.579399Z"
+  },
+  {
+    "run_id": "953e82dd-a473-46a3-a7a8-84f0bdfe413e",
+    "strategy_id": "2c132e40-eba0-44c9-acc0-08a0c4b64b4f",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "108bbab9012ced53fddbb19038893836819a098ad384aad2a870e7704ae7295f",
+    "schema_version": "0.3",
+    "group_label": "01 高流动性 低波动（443 个标的）",
+    "data_path": "data/nasdaq_10y/groups/01_高流动性_低波动",
+    "input_file_count": 443,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 443,
+    "trade_count": 157,
+    "artifact_file": "953e82dd-a473-46a3-a7a8-84f0bdfe413e.json.gz",
+    "created_at": "2026-07-31T21:11:12.117410Z"
+  },
+  {
+    "run_id": "df5a83a4-3616-48ca-bf4f-630be1264b25",
+    "strategy_id": "b2bfd8d4-c91b-42d9-a057-eb7e1e7efb7e",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "d4bc8399054673c23fbf16b4ef734242c457b9e90a17b22ee3eb5cb001390fea",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 204,
+    "artifact_file": "df5a83a4-3616-48ca-bf4f-630be1264b25.json.gz",
+    "created_at": "2026-08-01T14:30:25.762191Z"
+  },
+  {
+    "run_id": "5b13f517-c1b9-41f1-91aa-a0f513a00dc6",
+    "strategy_id": "1ab47cfd-47fe-4386-8f4b-5703c7283a1b",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "75cf534166493ff6de9f141662636c9b7c96a09dd0235a74db40f0a543a37fc4",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 1934,
+    "artifact_file": "5b13f517-c1b9-41f1-91aa-a0f513a00dc6.json.gz",
+    "created_at": "2026-08-01T15:22:37.398597Z"
+  },
+  {
+    "run_id": "7899c2a3-eac0-465c-8ec5-7fe79edc60f4",
+    "strategy_id": "268d9bfc-4e96-481f-87d6-8c871c7740c4",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "afe25e7ee9432ddc938b50ece7336d55dca647e4c938ebad80e1d41edc59f661",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 3715,
+    "artifact_file": "7899c2a3-eac0-465c-8ec5-7fe79edc60f4.json.gz",
+    "created_at": "2026-08-02T15:20:32.889772Z"
+  },
+  {
+    "run_id": "c3c9838f-dd5b-4eca-955d-4b1d219f3bf1",
+    "strategy_id": "88879377-aa56-4b4d-a86b-48b302e8acb0",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "7c5d7920e0c6a9554f8a0193043f00d5705fffc6fa313a20a3cdca4433262712",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 0,
+    "artifact_file": "c3c9838f-dd5b-4eca-955d-4b1d219f3bf1.json.gz",
+    "created_at": "2026-08-02T17:32:49.085048Z"
+  },
+  {
+    "run_id": "88be33a8-08c5-425e-ab21-096be1a969cc",
+    "strategy_id": "88879377-aa56-4b4d-a86b-48b302e8acb0",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "7f0f93ce411d58acff5cf61f2fb817f81752153b419fd4952ec51ce3ab54eac7",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 919,
+    "artifact_file": "88be33a8-08c5-425e-ab21-096be1a969cc.json.gz",
+    "created_at": "2026-08-02T17:48:05.889788Z"
+  },
+  {
+    "run_id": "8e0711d4-0d61-42ae-b1c8-41548865c79c",
+    "strategy_id": "0e39326b-e7c6-4d08-84cf-d5bea8dd965a",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "eada09f79311d6292a8c45fc0e1def7b2bac82473935b6586f17e23303d805fd",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 0,
+    "trade_count": 0,
+    "artifact_file": "8e0711d4-0d61-42ae-b1c8-41548865c79c.json.gz",
+    "created_at": "2026-08-02T18:09:53.106506Z"
+  },
+  {
+    "run_id": "02d2cfe2-553d-4ee9-a3f8-5adbacf776dc",
+    "strategy_id": "0e39326b-e7c6-4d08-84cf-d5bea8dd965a",
+    "strategy_name": "未命名策略（旧记录）",
+    "strategy_fingerprint": "eada09f79311d6292a8c45fc0e1def7b2bac82473935b6586f17e23303d805fd",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 7487,
+    "artifact_file": "02d2cfe2-553d-4ee9-a3f8-5adbacf776dc.json.gz",
+    "created_at": "2026-08-02T18:14:18.334952Z"
+  },
+  {
+    "run_id": "deee7b62-ff0a-4b36-8b62-eaa4a9821a53",
+    "strategy_id": "1a070eab-2ad2-4738-8a9a-a6058d73d642",
+    "strategy_name": "波段交易策略 V2（完整版本）",
+    "strategy_fingerprint": "d86127d0f4c29f0bf8f3c188f773b5f1ff7c995c5d6a33d6b551ce8bb78277c0",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 0,
+    "artifact_file": "deee7b62-ff0a-4b36-8b62-eaa4a9821a53.json.gz",
+    "created_at": "2026-08-03T20:00:08.265305Z"
+  },
+  {
+    "run_id": "522ca2e1-206a-4bfd-b21f-68dbfaa71327",
+    "strategy_id": "1a070eab-2ad2-4738-8a9a-a6058d73d642",
+    "strategy_name": "波段交易策略 V2（完整版本）",
+    "strategy_fingerprint": "d86127d0f4c29f0bf8f3c188f773b5f1ff7c995c5d6a33d6b551ce8bb78277c0",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 0,
+    "artifact_file": "522ca2e1-206a-4bfd-b21f-68dbfaa71327.json.gz",
+    "created_at": "2026-08-05T14:40:00.131553Z"
+  },
+  {
+    "run_id": "33e02931-6d9a-47b9-bf27-44904b3dfb2f",
+    "strategy_id": "1a070eab-2ad2-4738-8a9a-a6058d73d642",
+    "strategy_name": "波段交易策略 V2（完整版本）",
+    "strategy_fingerprint": "a12a39af501a42b515777a4e644711b57463df7b4441711e3faa2274b0891a2b",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 42,
+    "artifact_file": "33e02931-6d9a-47b9-bf27-44904b3dfb2f.json.gz",
+    "created_at": "2026-08-05T14:51:36.119702Z"
+  },
+  {
+    "run_id": "76b6ab48-623a-4d53-b79c-8039c880da68",
+    "strategy_id": "5575b8e3-2d1d-4ad9-b076-b9bec2d2436a",
+    "strategy_name": "均线趋势 MACD 突破策略",
+    "strategy_fingerprint": "aef9e584be19de0e2e246ce2bf7cbbcdd81afe824b37cd6ae7d6402e2af8531c",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 54955,
+    "artifact_file": "76b6ab48-623a-4d53-b79c-8039c880da68.json.gz",
+    "created_at": "2026-08-05T18:08:12.192888Z"
+  },
+  {
+    "run_id": "e4a466bd-1d5e-4082-b059-33518dfa3fa5",
+    "strategy_id": "d266a137-daf5-4e0e-96ae-e2d72a839ad4",
+    "strategy_name": "周四策略",
+    "strategy_fingerprint": "ad205850cf125221fec618e55fa00a3531151f1c186eaae5e75eef3c81c86f1b",
+    "schema_version": "0.3",
+    "group_label": "示例数据（NVDA、TSLA）",
+    "data_path": "data",
+    "input_file_count": 2,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 2,
+    "trade_count": 112,
+    "artifact_file": "e4a466bd-1d5e-4082-b059-33518dfa3fa5.json.gz",
+    "created_at": "2026-08-06T14:55:59.338691Z"
+  },
+  {
+    "run_id": "024f6a53-ab5b-45e6-88af-76e4966c4eb4",
+    "strategy_id": "d266a137-daf5-4e0e-96ae-e2d72a839ad4",
+    "strategy_name": "周四策略",
+    "strategy_fingerprint": "ad205850cf125221fec618e55fa00a3531151f1c186eaae5e75eef3c81c86f1b",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 6523,
+    "artifact_file": "024f6a53-ab5b-45e6-88af-76e4966c4eb4.json.gz",
+    "created_at": "2026-08-06T15:02:20.423720Z"
+  }
+]
