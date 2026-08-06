@@ -1,7 +1,7 @@
 """Deterministic daily execution for the supported Strategy DSL v0.3 subset."""
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Literal
 
 import numpy as np
 import pandas as pd
@@ -292,6 +292,228 @@ def _temporal_condition(df: pd.DataFrame, condition: TemporalCondition, *, index
         outcomes = [_temporal_condition(df, child, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price) for child in condition.conditions]
         return all(outcomes) if condition.operator == "and" else any(outcomes)
     raise UnsupportedStrategyFeature("v0.3 daily engine cannot evaluate this temporal condition")
+
+
+def _temporal_operand_label(operand: TemporalOperand) -> str:
+    """Human-readable labels for an auditable temporal-condition snapshot."""
+    if isinstance(operand, CurrentMarketOperand): return operand.field.capitalize()
+    if isinstance(operand, LaggedMarketOperand): return f"{operand.field.capitalize()}[t{operand.offset_days:+d}]"
+    if isinstance(operand, CurrentIndicatorOperand): return _indicator_label(operand.indicator)
+    if isinstance(operand, TemporalLaggedIndicatorOperand): return f"{_indicator_label(operand.indicator)}[t{operand.offset_days:+d}]"
+    if isinstance(operand, TemporalScalarOperand): return f"{operand.value:g}"
+    if isinstance(operand, AnchorMarketOperand): return f"t0 {operand.field.capitalize()}"
+    if isinstance(operand, AnchorIndicatorOperand): return f"t0{operand.offset_days:+d} {_indicator_label(operand.indicator)}"
+    if isinstance(operand, EntryPriceOperand): return "实际入场价"
+    if isinstance(operand, ScaledEntryPriceOperand): return f"实际入场价 × {operand.multiplier:g}"
+    if isinstance(operand, TemporalScaledOperand): return f"{_temporal_operand_label(operand.operand)} × {operand.multiplier:g}"
+    if isinstance(operand, AnchorRunningMaximumOperand): return "t0 至今成交量最大值"
+    if isinstance(operand, EntryRunningMaximumOperand): return "入场至今成交量最大值"
+    if isinstance(operand, AnchorRunningVolumeRankOperand): return "t0 至今成交量排名"
+    if isinstance(operand, RollingVolumeRankOperand): return f"{operand.window} 日成交量排名"
+    raise UnsupportedStrategyFeature("v0.3 daily engine cannot describe this temporal operand")
+
+
+def _audit_row(
+    *,
+    section: str,
+    dsl_path: str,
+    left: str,
+    left_value: float | int | None,
+    operator: str,
+    right: str,
+    right_value: float | int | None,
+    passed: bool,
+    prior_left_value: float | int | None = None,
+    prior_right_value: float | int | None = None,
+) -> dict[str, object]:
+    return {
+        "section": section,
+        "dsl_path": dsl_path,
+        "left": left,
+        "left_value": round(float(left_value), 6) if left_value is not None and np.isfinite(left_value) else None,
+        "operator": operator,
+        "right": right,
+        "right_value": round(float(right_value), 6) if right_value is not None and np.isfinite(right_value) else None,
+        "prior_left_value": round(float(prior_left_value), 6) if prior_left_value is not None and np.isfinite(prior_left_value) else None,
+        "prior_right_value": round(float(prior_right_value), 6) if prior_right_value is not None and np.isfinite(prior_right_value) else None,
+        "passed": passed,
+    }
+
+
+def _temporal_condition_checks(
+    df: pd.DataFrame,
+    condition: TemporalCondition,
+    *,
+    index: int,
+    anchor_index: int,
+    entry_index: int,
+    entry_price: float,
+    section: str,
+    path: str,
+) -> list[dict[str, object]]:
+    """Materialize actual values for each temporal condition leaf and group."""
+    if isinstance(condition, TemporalConditionGroup):
+        rows: list[dict[str, object]] = []
+        for child_index, child in enumerate(condition.conditions):
+            rows.extend(_temporal_condition_checks(
+                df, child, index=index, anchor_index=anchor_index, entry_index=entry_index,
+                entry_price=entry_price, section=section, path=f"{path}.conditions[{child_index}]",
+            ))
+        group_passed = _temporal_condition(
+            df, condition, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price,
+        )
+        rows.append(_audit_row(
+            section=section, dsl_path=path, left=f"组合条件（{condition.operator.upper()}）", left_value=None,
+            operator="结果", right="所有子条件" if condition.operator == "and" else "任一子条件", right_value=None,
+            passed=group_passed,
+        ))
+        return rows
+    if isinstance(condition, TemporalComparisonCondition):
+        left = _temporal_operand(df, condition.left, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price)
+        right = _temporal_operand(df, condition.right, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price)
+        return [_audit_row(
+            section=section, dsl_path=path, left=_temporal_operand_label(condition.left), left_value=left,
+            operator=condition.operator, right=_temporal_operand_label(condition.right), right_value=right,
+            passed=_compare(left, right, condition.operator),
+        )]
+    if isinstance(condition, TemporalCrossCondition):
+        left = _temporal_operand(df, condition.left, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price)
+        right = _temporal_operand(df, condition.right, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price)
+        prior_left = _temporal_operand(df, condition.left, index=index - 1, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price) if index else float("nan")
+        prior_right = _temporal_operand(df, condition.right, index=index - 1, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price) if index else float("nan")
+        return [_audit_row(
+            section=section, dsl_path=path, left=_temporal_operand_label(condition.left), left_value=left,
+            operator=condition.operator, right=_temporal_operand_label(condition.right), right_value=right,
+            prior_left_value=prior_left, prior_right_value=prior_right,
+            passed=_temporal_condition(df, condition, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price),
+        )]
+    if isinstance(condition, CandlestickPatternCondition):
+        open_, close = float(df["Open"].iloc[index]), float(df["Close"].iloc[index])
+        if not np.isfinite(open_) or open_ == 0 or not np.isfinite(close):
+            body_ratio = float("nan")
+        else:
+            body_ratio = abs(close - open_) / open_
+        if condition.pattern == "doji":
+            return [_audit_row(
+                section=section, dsl_path=path, left="|收盘−开盘|/开盘", left_value=body_ratio,
+                operator="less_than_or_equal", right="十字星实体阈值", right_value=condition.body_to_open_threshold,
+                passed=_temporal_condition(df, condition, index=index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price),
+            )]
+        bearish_ratio = (open_ - close) / open_ if np.isfinite(open_) and open_ else float("nan")
+        return [
+            _audit_row(section=section, dsl_path=f"{path}.bearish", left="收盘", left_value=close, operator="less_than", right="开盘", right_value=open_, passed=close < open_),
+            _audit_row(section=section, dsl_path=f"{path}.body", left="(开盘−收盘)/开盘", left_value=bearish_ratio, operator="greater_than", right="大阴线实体阈值", right_value=condition.body_to_open_threshold, passed=bearish_ratio > condition.body_to_open_threshold),
+        ]
+    raise UnsupportedStrategyFeature("v0.3 daily engine cannot materialize this temporal condition")
+
+
+def _anchor_constraint_checks(df: pd.DataFrame, strategy: TimedStrategyDefinition, index: int) -> list[dict[str, object]]:
+    """Show the numerical evidence for structural C/t0 constraints."""
+    rows: list[dict[str, object]] = []
+    for constraint_index, constraint in enumerate(strategy.anchor.constraints):
+        path = f"anchor.constraints[{constraint_index}]"
+        if isinstance(constraint, RollingLowAnchorConstraint):
+            start, end = index - constraint.lookback_days, index + 1 if constraint.include_anchor else index
+            values = df[constraint.reference_field.capitalize()].iloc[max(0, start):end].to_numpy(dtype=float)
+            low = float(np.min(values)) if start >= 0 and len(values) and np.isfinite(values).all() else float("nan")
+            gain = (float(df["Close"].iloc[index]) - low) / low if np.isfinite(low) and low else float("nan")
+            rows.append(_audit_row(
+                section="C 点结构约束", dsl_path=path, left=f"C 点相对前 {constraint.lookback_days} 日最低{constraint.reference_field}涨幅", left_value=gain,
+                operator="less_than_or_equal", right="允许上限", right_value=constraint.maximum_anchor_close_gain,
+                passed=np.isfinite(gain) and gain <= constraint.maximum_anchor_close_gain,
+            ))
+        elif isinstance(constraint, AnchorIndicatorChangeConstraint):
+            prior = index + constraint.comparison_offset_days
+            values = _indicator_values(df, constraint.indicator)
+            change = values[index] / values[prior] - 1 if prior >= 0 and np.isfinite(values[index]) and np.isfinite(values[prior]) and values[prior] else float("nan")
+            rows.append(_audit_row(
+                section="C 点结构约束", dsl_path=path, left=f"{_indicator_label(constraint.indicator)} 相对 t{constraint.comparison_offset_days:+d}变化", left_value=change,
+                operator=constraint.operator, right="最小变化", right_value=constraint.minimum_relative_change,
+                passed=np.isfinite(change) and _compare(change, constraint.minimum_relative_change, constraint.operator),
+            ))
+        elif isinstance(constraint, OrderedExtremaDrawdownConstraint):
+            start = index - constraint.lookback_days + 1
+            values = df["Close"].iloc[max(0, start):index + 1].to_numpy(dtype=float)
+            drawdown = recovery = float("nan")
+            if start >= 0 and len(values) == constraint.lookback_days and np.isfinite(values).all():
+                peak_relative = _extremum_index(values, kind="maximum", tie_break=constraint.peak_tie_break)
+                if peak_relative < len(values) - 1:
+                    trough_relative = peak_relative + 1 + _extremum_index(values[peak_relative + 1:], kind="minimum", tie_break=constraint.trough_tie_break)
+                    peak, trough = values[peak_relative], values[trough_relative]
+                    drawdown = (peak - trough) / peak if peak else float("nan")
+                    recovery = (values[-1] - trough) / trough if trough else float("nan")
+            rows.append(_audit_row(section="C 点结构约束", dsl_path=f"{path}.drawdown", left="A→B 回撤", left_value=drawdown, operator="greater_than_or_equal", right="最小回撤", right_value=constraint.minimum_peak_to_trough_drawdown, passed=np.isfinite(drawdown) and drawdown >= constraint.minimum_peak_to_trough_drawdown))
+            if constraint.maximum_anchor_recovery_from_trough is not None:
+                rows.append(_audit_row(section="C 点结构约束", dsl_path=f"{path}.recovery", left="C 点相对 B 点反弹", left_value=recovery, operator="less_than_or_equal", right="最大反弹", right_value=constraint.maximum_anchor_recovery_from_trough, passed=np.isfinite(recovery) and recovery <= constraint.maximum_anchor_recovery_from_trough))
+    return rows
+
+
+def _state_values_at(df: pd.DataFrame, strategy: TimedStrategyDefinition, *, anchor_index: int, entry_index: int, entry_price: float, index: int) -> dict[str, bool]:
+    """Replay only persistent-state transitions up to one known event day."""
+    values = {state.state_id: False for state in strategy.persistent_states}
+    for day in range(entry_index + 1, index + 1):
+        for state in strategy.persistent_states:
+            if values[state.state_id] or not _state_active(state, anchor_index=anchor_index, entry_index=entry_index, day=day):
+                continue
+            values[state.state_id] = _temporal_condition(df, state.activate_when, index=day, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price)
+    return values
+
+
+def build_trade_event_audit(
+    df: pd.DataFrame,
+    *,
+    strategy: TimedStrategyDefinition,
+    signal_date: str,
+    entry_date: str,
+    exit_date: str,
+    reason: str,
+    event: Literal["entry", "exit"],
+) -> dict[str, object]:
+    """Build an evidence table for a clicked v0.3 entry or exit marker.
+
+    It deliberately reuses the deterministic execution primitives rather than
+    trusting an LLM summary or a chart-derived approximation.
+    """
+    dates = pd.to_datetime(df["Date"], errors="coerce").dt.normalize()
+
+    def locate(date: str) -> int:
+        matches = df.index[dates == pd.Timestamp(date).normalize()]
+        if not len(matches):
+            raise ValueError(f"trade date is not present in source data: {date}")
+        return int(matches[0])
+
+    anchor_index, entry_index, exit_index = locate(signal_date), locate(entry_date), locate(exit_date)
+    entry_price = float(df["Close"].iloc[entry_index])
+    if event == "entry":
+        rows = [{**row, "section": "C 点入场条件"} for row in _anchor_condition_checks(df, strategy.anchor.condition, anchor_index)]
+        rows.extend(_anchor_constraint_checks(df, strategy, anchor_index))
+        if strategy.entry.mode == "wait_until":
+            assert strategy.entry.defer_when is not None and strategy.entry.resume_when is not None
+            rows.extend(_temporal_condition_checks(df, strategy.entry.defer_when, index=anchor_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, section="延后买入判断（t0）", path="entry.defer_when"))
+            if entry_index > anchor_index:
+                rows.extend(_temporal_condition_checks(df, strategy.entry.resume_when, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, section="实际入场确认", path="entry.resume_when"))
+        elif strategy.entry.mode == "conditional":
+            assert strategy.entry.branches is not None
+            for branch_index, branch in enumerate(strategy.entry.branches):
+                if anchor_index + branch.active_day.start_offset_days == entry_index:
+                    rows.extend(_temporal_condition_checks(df, branch.condition, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, section="实际入场确认", path=f"entry.branches[{branch_index}].condition"))
+        return {"event": "entry", "event_date": entry_date, "summary": f"t0 为 {signal_date}；实际入场为 {entry_date}，成交价 {entry_price:.4f}。", "rows": rows}
+
+    rule_id = reason.removeprefix("v03:")
+    if rule_id == "sample_end_force_close":
+        return {"event": "exit", "event_date": exit_date, "summary": "该笔交易因样本结束按 lifecycle_policy 强制平仓，不是技术条件触发。", "rows": []}
+    rule = next((candidate for candidate in strategy.exit_rules if candidate.rule_id == rule_id), None)
+    if rule is None or rule.condition is None:
+        return {"event": "exit", "event_date": exit_date, "summary": f"未找到出场原因 {reason} 对应的 DSL 规则。", "rows": []}
+    states = _state_values_at(df, strategy, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, index=exit_index)
+    relative_day = exit_index - (entry_index if rule.relative_to == "entry" else anchor_index)
+    rows = [_audit_row(section="出场规则门槛", dsl_path=f"exit_rules.{rule.rule_id}.active_days", left="相对持仓日", left_value=relative_day, operator="范围", right=f"{rule.active_days.start_offset_days} 至 {rule.active_days.end_offset_days if rule.active_days.end_offset_days is not None else '∞'}", right_value=None, passed=_rule_active(rule, relative_day))]
+    if rule.requires_state is not None:
+        rows.append(_audit_row(section="出场规则门槛", dsl_path=f"exit_rules.{rule.rule_id}.requires_state", left=f"状态 {rule.requires_state}", left_value=int(states[rule.requires_state]), operator="equal", right="已激活", right_value=1, passed=states[rule.requires_state]))
+    if rule.forbids_state is not None:
+        rows.append(_audit_row(section="出场规则门槛", dsl_path=f"exit_rules.{rule.rule_id}.forbids_state", left=f"状态 {rule.forbids_state}", left_value=int(states[rule.forbids_state]), operator="equal", right="未激活", right_value=0, passed=not states[rule.forbids_state]))
+    rows.extend(_temporal_condition_checks(df, rule.condition, index=exit_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, section=f"触发出场：{rule.rule_id}", path=f"exit_rules.{rule.rule_id}.condition"))
+    return {"event": "exit", "event_date": exit_date, "summary": f"{exit_date} 因规则 {rule.rule_id} 按收盘价出场。", "rows": rows}
 
 
 def _anchor_constraints_hold(df: pd.DataFrame, strategy: TimedStrategyDefinition, index: int) -> tuple[bool, list[dict[str, object]]]:

@@ -17,7 +17,7 @@ from rhein.data.discovery import input_files
 from rhein.ui.presets import available_data_scopes
 from alpha_agent.domain.interpretation import ClarificationAnswer, StrategyInterpretationRequest
 from alpha_agent.domain.interpretation import ParsedStrategy
-from alpha_agent.errors import AlphaAgentError
+from alpha_agent.errors import AlphaAgentError, UnsupportedStrategyFeature
 from alpha_agent.model.bedrock_client import BedrockStrategyModelClient
 from alpha_agent.monitoring import InMemoryInterpreterMonitor
 from alpha_agent.parser.review import build_review_items
@@ -29,13 +29,13 @@ from alpha_agent.strategy_library import JsonStrategyLibrary, SavedStrategy, Str
 from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHistory, SavedBacktestRun, dataframe_records, recalculated_trade_level_kpis, strategy_fingerprint
 from alpha_agent.domain.sequence import TimedStrategyDefinition
 from alpha_agent.research.legacy_adapter import compile_timed_strategy
-from alpha_agent.research.v03_engine import run_v03_backtest
+from alpha_agent.research.v03_engine import build_trade_event_audit, run_v03_backtest
 from alpha_agent.research.reporting import aggregate_gross_pnl, presentation_kpis
 from rhein.backtest import input_files as backtest_input_files, load_ohlc as backtest_load_ohlc, run_backtest as legacy_run_backtest
 from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.summaries import style_by_drawdown
-from rhein.ui.trade_chart import trade_selector_options
+from rhein.ui.trade_chart import selected_event_id, trade_selector_options
 from rhein.ui.chart_theme import event_annotation_style
 from rhein.ui.macd import add_display_macd
 from rhein.ui.history_paths import portable_data_path, resolve_history_data_path, same_data_scope
@@ -212,6 +212,33 @@ def anchor_check_rows(trade: pd.Series) -> list[dict[str, object]]:
             "结果": "通过" if check.get("passed") else "未通过",
         }
         for check in raw_checks
+        if isinstance(check, dict) and {"dsl_path", "left", "operator", "right"}.issubset(check)
+    ]
+
+
+def event_audit_rows(audit: dict[str, object]) -> list[dict[str, object]]:
+    """Translate deterministic engine audit records for the user-facing box."""
+    operator_labels = {
+        "greater_than": ">", "less_than": "<", "greater_than_or_equal": "≥",
+        "less_than_or_equal": "≤", "equal": "=", "范围": "范围", "结果": "结果",
+    }
+    raw_rows = audit.get("rows")
+    if not isinstance(raw_rows, list):
+        return []
+    return [
+        {
+            "规则区段": str(check.get("section", "规则")),
+            "DSL 路径": str(check["dsl_path"]),
+            "左侧": str(check["left"]),
+            "左侧数值": check.get("left_value"),
+            "比较": operator_labels.get(str(check["operator"]), str(check["operator"])),
+            "右侧": str(check["right"]),
+            "右侧数值": check.get("right_value"),
+            "前一日左侧": check.get("prior_left_value"),
+            "前一日右侧": check.get("prior_right_value"),
+            "结果": "通过" if check.get("passed") else "未通过",
+        }
+        for check in raw_rows
         if isinstance(check, dict) and {"dsl_path", "left", "operator", "right"}.issubset(check)
     ]
 
@@ -724,6 +751,7 @@ if matching_result is not None:
                         # MACD(12, 24, 8), and is calculated before slicing so
                         # it retains the preceding price history for EMA warmup.
                         chart = add_display_macd(chart)
+                        source_chart = chart.copy()
                         signal, entry, exit_ = (pd.Timestamp(trade[column]).normalize() for column in ("signal", "entry", "exit"))
                         chart_dates = pd.to_datetime(chart["Date"], errors="coerce").dt.normalize()
                         signal_positions = chart.index[chart_dates == signal]
@@ -763,6 +791,7 @@ if matching_result is not None:
                             chart["Index"] = range(len(chart))
                             marker_labels: dict[int, list[str]] = {}
                             marker_prices: dict[int, list[float]] = {}
+                            clickable_markers: list[dict[str, object]] = []
                             chart_dates_for_markers = pd.to_datetime(chart["Date"], errors="coerce").dt.normalize()
                             audit_rows: list[dict[str, object]] = []
                             for event_point in event_points:
@@ -774,6 +803,14 @@ if matching_result is not None:
                                     price = event_point.get("price")
                                     event_price = float(price) if isinstance(price, (int, float)) else float(chart.loc[position, "Close"])
                                     marker_prices.setdefault(position, []).append(event_price)
+                                    if event_point["event_id"] in {"entry", "exit"}:
+                                        clickable_markers.append({
+                                            "Index": position,
+                                            "EventId": event_point["event_id"],
+                                            "EventPrice": event_price,
+                                            "Label": event_point["label"],
+                                            "Date": date.strftime("%Y-%m-%d"),
+                                        })
                                     audit_rows.append({
                                         "事件": event_point["label"],
                                         "日期": date.strftime("%Y-%m-%d"),
@@ -843,6 +880,10 @@ if matching_result is not None:
                             annotation_style = event_annotation_style(st.context.theme.type)
                             event_color = annotation_style["color"]
                             spec = {
+                                "params": [{
+                                    "name": "trade_event",
+                                    "select": {"type": "point", "fields": ["EventId"], "on": "click", "clear": "dblclick"},
+                                }],
                                 "vconcat": [
                                     {
                                         "height": 360,
@@ -854,6 +895,7 @@ if matching_result is not None:
                                             {"data": {"values": markers}, "mark": {"type": "rule", "color": event_color, "strokeWidth": 1.2}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "y2": {"field": "LabelPrice"}, "tooltip": event_tooltip}},
                                             {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 90, "color": event_color}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "tooltip": event_tooltip}},
                                             {"data": {"values": markers}, "mark": {"type": "text", "fontWeight": "bold", "color": event_color}, "encoding": {"x": x, "y": {"field": "LabelPrice", "type": "quantitative"}, "text": {"field": "ShortLabel"}, "tooltip": event_tooltip}},
+                                            {"data": {"values": clickable_markers}, "mark": {"type": "point", "filled": True, "size": 185, "color": "#f43f5e", "cursor": "pointer"}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "detail": {"field": "EventId", "type": "nominal"}, "tooltip": event_tooltip}},
                                         ],
                                     },
                                     {"height": 100, "mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Volume", "type": "quantitative"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
@@ -875,7 +917,46 @@ if matching_result is not None:
                             text_mark = price_layers[-1]["mark"]
                             text_mark.update({"fontSize": 13, "stroke": annotation_style["halo_color"], "strokeWidth": annotation_style["halo_width"], "align": "left", "dx": 4, "baseline": "bottom"})
                             price_layers[-1]["encoding"]["text"]["type"] = "nominal"
-                            st.vega_lite_chart(chart, spec, width="stretch", key=f"dsl_chart_{selected_symbol}_{trade_id}")
+                            chart_state = st.vega_lite_chart(
+                                chart,
+                                spec,
+                                width="stretch",
+                                key=f"dsl_chart_{selected_symbol}_{trade_id}",
+                                on_select="rerun",
+                                selection_mode="trade_event",
+                            )
+                            event_detail_key = f"dsl_chart_event_detail::{current_backtest_view_scope}::{selected_symbol}::{trade_id}"
+                            clicked_event_id = selected_event_id(chart_state)
+                            if clicked_event_id is not None:
+                                st.session_state[event_detail_key] = clicked_event_id
+                            selected_event_id_for_detail = st.session_state.get(event_detail_key)
+                            if selected_event_id_for_detail in {"entry", "exit"}:
+                                if matching_result.strategy.schema_version != "0.3":
+                                    st.info("此历史结果没有 v0.3 的逐点条件审计；请重新以 v0.3 DSL 运行回测后查看。")
+                                else:
+                                    try:
+                                        timed_for_audit = TimedStrategyDefinition.model_validate(matching_result.strategy.model_dump(mode="json"))
+                                        event_audit = build_trade_event_audit(
+                                            source_chart,
+                                            strategy=timed_for_audit,
+                                            signal_date=str(trade["signal"]),
+                                            entry_date=str(trade["entry"]),
+                                            exit_date=str(trade["exit"]),
+                                            reason=str(trade["reason"]),
+                                            event=selected_event_id_for_detail,
+                                        )
+                                        event_title = "入场条件核对" if selected_event_id_for_detail == "entry" else "出场条件核对"
+                                        with st.container(border=True):
+                                            st.markdown(f"#### {event_title}")
+                                            st.caption("来自确定性回测引擎的同一套计算；绿色“通过”说明该数值满足该规则。AND/OR 组合会额外显示组合结果。")
+                                            st.write(str(event_audit["summary"]))
+                                            rows_for_event = event_audit_rows(event_audit)
+                                            if rows_for_event:
+                                                st.dataframe(pd.DataFrame(rows_for_event), hide_index=True, width="stretch")
+                                            else:
+                                                st.info("此点没有可逐项展示的技术条件（例如样本末尾强制平仓）。")
+                                    except (ValueError, UnsupportedStrategyFeature) as error:
+                                        st.warning(f"无法生成该点的确定性审计：{error}")
                             checks = anchor_check_rows(trade)
                             if checks:
                                 with st.expander("C 点入场条件核对", expanded=True):

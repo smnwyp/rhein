@@ -6,7 +6,7 @@ from rhein.paths import GROUP_ROOT
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
 from rhein.ui.strategy_text import params_to_text, strategy_narrative
-from rhein.ui.trade_chart import trade_selector_options
+from rhein.ui.trade_chart import selected_event_id, trade_selector_options
 from rhein.engine.eligibility import baseline_is_eligible
 
 
@@ -87,6 +87,12 @@ def test_trade_chart_selector_uses_trade_identity_not_just_row_number() -> None:
     assert option_ids[0] != option_ids[1]
     assert "t0 2022-12-02" in labels[option_ids[0]]
     assert "出场 2022-12-21" in labels[option_ids[1]]
+
+
+def test_trade_chart_event_selection_accepts_vega_list_and_mapping_payloads() -> None:
+    assert selected_event_id({"selection": {"trade_event": [{"EventId": "entry"}]}}) == "entry"
+    assert selected_event_id({"selection": {"trade_event": {"EventId": ["exit"]}}}) == "exit"
+    assert selected_event_id({"selection": {"trade_event": [{"EventId": "anchor"}]}}) is None
 
 
 def test_current_settings_updates_when_t0_09_is_toggled() -> None:

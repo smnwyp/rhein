@@ -12,7 +12,7 @@ from alpha_agent.domain.sequence import (
     TemporalScalarOperand,
     TimedStrategyDefinition,
 )
-from alpha_agent.research.v03_engine import _anchor_condition_checks, _anchor_constraints_hold, _indicator_values, _resolve_entry, _static_condition, _temporal_condition, _temporal_operand, run_v03_backtest
+from alpha_agent.research.v03_engine import build_trade_event_audit, _anchor_condition_checks, _anchor_constraints_hold, _indicator_values, _resolve_entry, _static_condition, _temporal_condition, _temporal_operand, run_v03_backtest
 from alpha_agent.parser.validation import validate_strategy
 
 
@@ -59,6 +59,25 @@ def test_v03_engine_uses_earliest_ordered_extrema_and_high_volume_doji_exit():
     assert all(check["passed"] for check in trades.iloc[0].anchor_checks)
     assert {check["left"] for check in trades.iloc[0].anchor_checks} == {"Close", "SMA(5)", "SMA(10)"}
     assert stats["n_trades"] == 1
+
+
+def test_v03_event_audit_replays_entry_and_clicked_exit_with_actual_values():
+    close = np.concatenate([np.linspace(100, 70, 20), np.linspace(70, 80, 31), np.linspace(81, 90, 11), [90.2, 90.5, 90.8]])
+    open_ = close.copy(); open_[61] = close[61] * 1.004
+    volume = np.full(len(close), 100.0); volume[61] = 1_000.0
+    frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=len(close), freq="B"), "Open": open_, "High": close + 1, "Low": close - 1, "Close": close, "Volume": volume})
+    trades, _ = run_v03_backtest(frame, strategy=_strategy(), capital=10_000, compound=False)
+    trade = trades.iloc[0]
+
+    entry_audit = build_trade_event_audit(frame, strategy=_strategy(), signal_date=trade.signal, entry_date=trade.entry, exit_date=trade.exit, reason=trade.reason, event="entry")
+    exit_audit = build_trade_event_audit(frame, strategy=_strategy(), signal_date=trade.signal, entry_date=trade.entry, exit_date=trade.exit, reason=trade.reason, event="exit")
+
+    assert entry_audit["event"] == "entry"
+    assert any(row["section"] == "C 点入场条件" and row["passed"] for row in entry_audit["rows"])
+    assert any(row["section"] == "C 点结构约束" and row["passed"] for row in entry_audit["rows"])
+    assert exit_audit["event"] == "exit"
+    assert "high_volume_reversal" in exit_audit["summary"]
+    assert any(row["section"] == "触发出场：high_volume_reversal" and row["passed"] for row in exit_audit["rows"])
 
 
 def test_v03_engine_enters_on_a_qualified_anchor_without_duplicate_entry_condition():
