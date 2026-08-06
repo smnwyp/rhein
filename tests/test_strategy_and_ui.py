@@ -182,3 +182,28 @@ def test_old_cached_kpis_remain_displayable_after_risk_metrics_are_added() -> No
 
     assert not app.exception
     assert any("更新前的缓存" in info.value for info in app.info)
+
+
+def test_interpreter_loads_saved_run_and_renders_the_trade_chart() -> None:
+    """Regression path for a historical-result load hiding the entire K chart."""
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file("pages/1_Strategy_Interpreter.py")
+    app.run(timeout=45)
+    scope = next(widget for widget in app.selectbox if widget.label == "标的分组")
+    scope.select(next(option for option in scope.options if str(option).startswith("02 "))).run(timeout=45)
+    app.radio[0].set_value("已保存策略").run(timeout=45)
+    saved_strategy = next(widget for widget in app.selectbox if widget.label == "选择已保存策略")
+    saved_strategy.select("周四策略 · 已验证").run(timeout=45)
+    next(widget for widget in app.button if widget.label == "载入这次已保存回测").click().run(timeout=90)
+
+    kpis = app.session_state["dsl_backtest_kpis"]
+    app.session_state["dsl_chart_result_scope"] = app.session_state["dsl_backtest_view_scope"]
+    app.session_state["dsl_chart_selected_symbol"] = str(kpis.iloc[0]["标的"])
+    app.run(timeout=90)
+
+    assert not app.exception
+    assert any(widget.value.endswith("：交易 K 线") for widget in app.subheader)
+    # The first Vega-Lite chart is the trade chart; the second is the review
+    # timeline. Both must survive loading a saved result.
+    assert len(app.get("vega_lite_chart")) >= 2
