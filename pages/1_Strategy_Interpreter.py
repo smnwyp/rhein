@@ -37,6 +37,7 @@ from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.summaries import style_by_drawdown
 from rhein.ui.trade_chart import event_text_layer, trade_selector_options
 from rhein.ui.chart_theme import event_annotation_style
+from rhein.ui.dmi import add_display_dmi
 from rhein.ui.macd import add_display_macd
 from rhein.ui.history_paths import portable_data_path, resolve_history_data_path, same_data_scope
 
@@ -761,6 +762,10 @@ if matching_result is not None:
                         # MACD(12, 24, 8), and is calculated before slicing so
                         # it retains the preceding price history for EMA warmup.
                         chart = add_display_macd(chart)
+                        # DMI(10, 6) is likewise a display-only overlay. It
+                        # is calculated before slicing, never changes trade
+                        # execution, and does not require a group rerun.
+                        chart = add_display_dmi(chart)
                         source_chart = chart.copy()
                         signal, entry, exit_ = (pd.Timestamp(trade[column]).normalize() for column in ("signal", "entry", "exit"))
                         chart_dates = pd.to_datetime(chart["Date"], errors="coerce").dt.normalize()
@@ -878,6 +883,13 @@ if matching_result is not None:
                                 {"field":"MACD_DEA","type":"quantitative","title":"DEA (8)","format":".4f"},
                                 {"field":"MACD_HIST","type":"quantitative","title":"MACD 柱（×2）","format":".4f"},
                             ]
+                            dmi_tooltip = [
+                                {"field":"Date","type":"nominal","title":"日期"},
+                                {"field":"DMI_PDI","type":"quantitative","title":"PDI (10)","format":".2f"},
+                                {"field":"DMI_MDI","type":"quantitative","title":"MDI (10)","format":".2f"},
+                                {"field":"DMI_ADX","type":"quantitative","title":"ADX (6)","format":".2f"},
+                                {"field":"DMI_ADXR","type":"quantitative","title":"ADXR (6)","format":".2f"},
+                            ]
                             annotation_style = event_annotation_style(st.context.theme.type)
                             event_color = annotation_style["color"]
                             spec = {
@@ -901,6 +913,12 @@ if matching_result is not None:
                                             {"mark": {"type": "rule", "color": "#94a3b8", "strokeWidth": 1}, "encoding": {"y": {"datum": 0, "type": "quantitative"}}},
                                             {"mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "MACD_HIST", "type": "quantitative", "title": "MACD"}, "color": {"condition": {"test": "datum.MACD_HIST >= 0", "value": "#ef4444"}, "value": "#16a34a"}, "tooltip": macd_tooltip}},
                                             {"transform": [{"fold": ["MACD_DIF", "MACD_DEA"], "as": ["Line", "Value"]}], "mark": {"type": "line", "strokeWidth": 1.5}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative", "title": "MACD"}, "color": {"field": "Line", "type": "nominal", "scale": {"domain": ["MACD_DIF", "MACD_DEA"], "range": ["#2563eb", "#f59e0b"]}, "legend": {"title": "MACD (12,24,8)", "labelExpr": "datum.label === 'MACD_DIF' ? 'DIF' : 'DEA'"}}, "tooltip": macd_tooltip}},
+                                        ],
+                                    },
+                                    {
+                                        "height": 135,
+                                        "layer": [
+                                            {"transform": [{"fold": ["DMI_PDI", "DMI_MDI", "DMI_ADX", "DMI_ADXR"], "as": ["Line", "Value"]}], "mark": {"type": "line", "strokeWidth": 1.5}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative", "title": "DMI"}, "color": {"field": "Line", "type": "nominal", "scale": {"domain": ["DMI_PDI", "DMI_MDI", "DMI_ADX", "DMI_ADXR"], "range": ["#dc2626", "#16a34a", "#2563eb", "#7c3aed"]}, "legend": {"title": "DMI (10,6)", "labelExpr": "datum.label === 'DMI_PDI' ? 'PDI' : datum.label === 'DMI_MDI' ? 'MDI' : datum.label === 'DMI_ADX' ? 'ADX' : 'ADXR'"}}, "tooltip": dmi_tooltip}},
                                         ],
                                     },
                                 ],
