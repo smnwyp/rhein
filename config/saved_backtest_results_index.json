@@ -378,5 +378,25 @@
     "trade_count": 6523,
     "artifact_file": "024f6a53-ab5b-45e6-88af-76e4966c4eb4.json.gz",
     "created_at": "2026-08-06T15:02:20.423720Z"
+  },
+  {
+    "run_id": "f4e1b85d-2e4f-472a-a1b8-e72656b416c6",
+    "strategy_id": "b6bce31a-3b4a-4879-8e30-e1b33be18958",
+    "strategy_name": "macd+dmi",
+    "strategy_fingerprint": "f11e65d3517f3fa100c10e436da2f2dc0daf633f71ef99bdf35395baf694768b",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 2619,
+    "artifact_file": "f4e1b85d-2e4f-472a-a1b8-e72656b416c6.json.gz",
+    "created_at": "2026-08-07T16:08:03.959893Z"
   }
 ]

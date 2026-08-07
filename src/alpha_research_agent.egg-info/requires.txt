@@ -1,0 +1,7 @@
+pydantic<3,>=2.10
+openai<3,>=2
+python-dotenv<2,>=1
+streamlit<2,>=1.59
+
+[dev]
+pytest<10,>=9
