@@ -922,6 +922,11 @@ if matching_result is not None:
                                         ],
                                     },
                                 ],
+                                # Price moving averages, MACD, and DMI all
+                                # encode colour differently. Vega-Lite would
+                                # otherwise merge their nominal colour scales
+                                # into one nonsensical, duplicated legend.
+                                "resolve": {"scale": {"color": "independent"}},
                             }
                             price_layers = spec["vconcat"][0]["layer"]
                             for layer in price_layers:

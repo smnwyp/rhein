@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 from rhein.paths import GROUP_ROOT
@@ -203,3 +205,10 @@ def test_interpreter_loads_saved_run_and_renders_the_trade_chart() -> None:
     # The first Vega-Lite chart is the trade chart; the second is the review
     # timeline. Both must survive loading a saved result.
     assert len(app.get("vega_lite_chart")) >= 2
+
+
+def test_trade_chart_keeps_price_macd_and_dmi_legends_independent() -> None:
+    """Regression: Vega-Lite must not merge unrelated colour legends."""
+    page = Path("pages/1_Strategy_Interpreter.py").read_text()
+
+    assert '"resolve": {"scale": {"color": "independent"}}' in page
