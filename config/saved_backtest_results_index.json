@@ -398,5 +398,25 @@
     "trade_count": 2619,
     "artifact_file": "f4e1b85d-2e4f-472a-a1b8-e72656b416c6.json.gz",
     "created_at": "2026-08-07T16:08:03.959893Z"
+  },
+  {
+    "run_id": "1603928d-816c-4684-8761-da5824a41f46",
+    "strategy_id": "7106c7a1-6f19-4ab2-b7cc-657d594c755e",
+    "strategy_name": "叠加大盘指数",
+    "strategy_fingerprint": "d21a830acfa64cfc716fc3a362940da8801cf9ec7a3fae0f9a031a202612ec46",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 1715,
+    "artifact_file": "1603928d-816c-4684-8761-da5824a41f46.json.gz",
+    "created_at": "2026-08-08T12:17:13.890829Z"
   }
 ]

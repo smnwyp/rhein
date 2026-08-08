@@ -256,7 +256,7 @@ class EntryRule(DSLModel):
     mode: Literal["fixed", "conditional", "wait_until"] = "fixed"
     active_day: RelativeDayRange | None = None
     condition: TemporalCondition | None = None
-    execution: Literal["close"]
+    execution: Literal["close", "open"]
     branches: list[EntryBranch] | None = None
     defer_when: TemporalCondition | None = None
     resume_when: TemporalCondition | None = None
@@ -335,7 +335,7 @@ class TimedStrategyDefinition(DSLModel):
     frequency: Literal["1d"]
     direction: Literal["long_only"]
     position_mode: Literal["fully_invested_or_flat"]
-    data_requirement: Literal["daily_ohlcv", "intraday_ohlcv"]
+    data_requirement: Literal["daily_ohlcv", "daily_ohlcv_with_market_index", "intraday_ohlcv"]
     anchor: AnchorDefinition
     entry: EntryRule
     exit_rules: list[ExitRule] = Field(min_length=1)
@@ -368,8 +368,8 @@ class TimedStrategyDefinition(DSLModel):
             raise ValueError("intraday exit rules require intraday_ohlcv data")
         if self.schema_version == "0.3" and self.lifecycle_policy is None:
             raise ValueError("v0.3 strategies require an explicit lifecycle_policy")
-        if self.schema_version == "0.3" and self.data_requirement != "daily_ohlcv":
-            raise ValueError("v0.3 currently defines daily-close execution only")
+        if self.schema_version == "0.3" and self.data_requirement not in {"daily_ohlcv", "daily_ohlcv_with_market_index"}:
+            raise ValueError("v0.3 supports daily OHLCV execution only")
         if self.schema_version == "0.3" and any(rule.kind == "intraday_price_trigger" for rule in self.exit_rules):
             raise ValueError("v0.3 does not permit intraday price triggers")
         return self

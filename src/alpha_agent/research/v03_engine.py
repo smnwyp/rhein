@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import ADX, EMA, MACDLine, MACDSignal, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
+from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorChangeConstraint, AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand,
@@ -19,6 +19,38 @@ from alpha_agent.domain.sequence import (
 )
 from alpha_agent.errors import UnsupportedStrategyFeature
 from rhein.engine.kpis import calculate_kpis
+
+
+def attach_market_index_context(df: pd.DataFrame, market_index: pd.DataFrame) -> pd.DataFrame:
+    """Return an asset frame with its external market index aligned by date.
+
+    The alignment is deliberately exact: silently forward-filling a missing
+    index close would turn a data-quality problem into a different trading
+    rule.  The aligned series lives only in dataframe ``attrs`` for the
+    duration of deterministic execution and is never persisted in a strategy.
+    """
+    if "Date" not in df or not {"Date", "Close"}.issubset(market_index):
+        raise ValueError("asset and market-index inputs must contain Date; market index must contain Close")
+    asset_dates = pd.to_datetime(df["Date"], errors="coerce").dt.normalize()
+    index_frame = market_index.loc[:, ["Date", "Close"]].copy()
+    index_frame["Date"] = pd.to_datetime(index_frame["Date"], errors="coerce").dt.normalize()
+    index_close = pd.to_numeric(index_frame["Close"], errors="coerce")
+    by_date = pd.Series(index_close.to_numpy(dtype=float), index=index_frame["Date"])
+    by_date = by_date[~by_date.index.duplicated(keep="last")]
+    aligned = by_date.reindex(asset_dates)
+    # ``reindex(asset_dates)`` uses dates as the resulting Series index,
+    # while ``asset_dates`` retains the input frame's RangeIndex.  Select by
+    # position to keep the missing-date audit aligned to the asset rows.
+    missing = asset_dates.loc[aligned.isna().to_numpy()]
+    if len(missing):
+        raise UnsupportedStrategyFeature(
+            "configured market-index series is missing trading dates required by this asset",
+            details={"missing_date_count": int(len(missing)), "sample_missing_dates": [str(value.date()) for value in missing[:5]]},
+        )
+    result = df.copy()
+    result.attrs["_alpha_market_index_close"] = aligned.to_numpy(dtype=float)
+    result.attrs["_alpha_market_index_symbol"] = market_index.attrs.get("_alpha_market_index_symbol")
+    return result
 
 
 def _indicator_values(df: pd.DataFrame, indicator: object) -> np.ndarray:
@@ -72,6 +104,31 @@ def _indicator_values(df: pd.DataFrame, indicator: object) -> np.ndarray:
         minus_di = 100 * minus_dm.ewm(alpha=alpha, adjust=False, min_periods=indicator.window).mean() / atr
         directional_index = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
         values = directional_index.ewm(alpha=alpha, adjust=False, min_periods=indicator.window).mean().to_numpy()
+    elif isinstance(indicator, DMIADX):
+        # Chinese charting DMI(N, M): rolling sums for DI, then MA(DX, M)
+        # for ADX. Keep it distinct from Wilder ADX(N); the source language
+        # explicitly supplies two parameters and they are not interchangeable.
+        high, low = df["High"], df["Low"]
+        previous_close = close.shift(1)
+        # Keep this numpy-based for the same reason as the Wilder ADX branch:
+        # an index-gated frame carries array-valued attrs, and pandas concat
+        # attempts to compare those attrs while finalising its result.
+        true_range = pd.Series(
+            np.maximum.reduce([
+                (high - low).to_numpy(dtype=float),
+                (high - previous_close).abs().to_numpy(dtype=float),
+                (low - previous_close).abs().to_numpy(dtype=float),
+            ]),
+            index=df.index,
+        ).fillna(high - low)
+        up_move, down_move = high.diff(), -low.diff()
+        plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+        minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
+        tr_sum = true_range.rolling(indicator.directional_window, min_periods=1).sum()
+        plus_di = 100 * plus_dm.rolling(indicator.directional_window, min_periods=1).sum() / tr_sum
+        minus_di = 100 * minus_dm.rolling(indicator.directional_window, min_periods=1).sum() / tr_sum
+        dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
+        values = dx.replace([np.inf, -np.inf], np.nan).fillna(0.0).rolling(indicator.adx_window, min_periods=1).mean().to_numpy()
     elif isinstance(indicator, RSI):
         delta = close.diff()
         gain = delta.clip(lower=0).ewm(alpha=1 / indicator.window, adjust=False, min_periods=indicator.window).mean()
@@ -85,6 +142,29 @@ def _indicator_values(df: pd.DataFrame, indicator: object) -> np.ndarray:
             values = line.ewm(span=indicator.signal_window, adjust=False, min_periods=indicator.signal_window).mean().to_numpy()
         else:
             values = line.to_numpy()
+    elif isinstance(indicator, MarketIndexMACDLine):
+        index_close = df.attrs.get("_alpha_market_index_close")
+        if index_close is None:
+            raise UnsupportedStrategyFeature(
+                "v0.3 daily engine needs the configured market-index series before it can evaluate market-index DIF",
+                details={"index_symbol": indicator.index_symbol},
+            )
+        configured_symbol = df.attrs.get("_alpha_market_index_symbol")
+        if configured_symbol != indicator.index_symbol:
+            raise UnsupportedStrategyFeature(
+                "configured market-index series does not match the strategy's declared index symbol",
+                details={"required_symbol": indicator.index_symbol, "configured_symbol": configured_symbol},
+            )
+        index_close = np.asarray(index_close, dtype=float)
+        if len(index_close) != len(df):
+            raise UnsupportedStrategyFeature(
+                "configured market-index series is not aligned to the asset trading dates",
+                details={"index_symbol": indicator.index_symbol, "asset_rows": len(df), "index_rows": len(index_close)},
+            )
+        series = pd.Series(index_close, index=df.index)
+        fast = series.ewm(span=indicator.fast_window, adjust=False, min_periods=indicator.slow_window).mean()
+        slow = series.ewm(span=indicator.slow_window, adjust=False, min_periods=indicator.slow_window).mean()
+        values = (fast - slow).to_numpy()
     else:
         raise UnsupportedStrategyFeature("v0.3 daily engine does not support this indicator", details={"indicator": type(indicator).__name__})
     if cache is not None:
@@ -162,6 +242,10 @@ def _indicator_label(indicator: object) -> str:
     if isinstance(indicator, (MACDLine, MACDSignal)):
         component = "慢线" if isinstance(indicator, MACDSignal) else "快线"
         return f"MACD{component}({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
+    if isinstance(indicator, DMIADX):
+        return f"DMI ADX({indicator.directional_window},{indicator.adx_window})"
+    if isinstance(indicator, MarketIndexMACDLine):
+        return f"指数 {indicator.index_symbol} DIF({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     return f"{indicator.indicator.upper()}({indicator.window})"  # type: ignore[union-attr]
 
 
@@ -604,12 +688,20 @@ def build_trade_event_audit(
     exit_date: str,
     reason: str,
     event: Literal["entry", "exit"],
+    market_index: pd.DataFrame | None = None,
 ) -> dict[str, object]:
     """Build an evidence table for a clicked v0.3 entry or exit marker.
 
     It deliberately reuses the deterministic execution primitives rather than
     trusting an LLM summary or a chart-derived approximation.
     """
+    if strategy.data_requirement == "daily_ohlcv_with_market_index":
+        if market_index is None:
+            raise UnsupportedStrategyFeature(
+                "this strategy's event audit requires the configured market-index series",
+                details={"data_requirement": strategy.data_requirement},
+            )
+        df = attach_market_index_context(df, market_index)
     dates = pd.to_datetime(df["Date"], errors="coerce").dt.normalize()
 
     def locate(date: str) -> int:
@@ -619,7 +711,7 @@ def build_trade_event_audit(
         return int(matches[0])
 
     anchor_index, entry_index, exit_index = locate(signal_date), locate(entry_date), locate(exit_date)
-    entry_price = float(df["Close"].iloc[entry_index])
+    entry_price = _entry_price_at(df, strategy, entry_index)
     if event == "entry":
         rows = [{**row, "section": "C 点入场条件"} for row in _anchor_condition_checks(df, strategy.anchor.condition, anchor_index)]
         rows.extend(_anchor_constraint_checks(df, strategy, anchor_index))
@@ -633,7 +725,8 @@ def build_trade_event_audit(
             for branch_index, branch in enumerate(strategy.entry.branches):
                 if anchor_index + branch.active_day.start_offset_days == entry_index:
                     rows.extend(_temporal_condition_checks(df, branch.condition, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, section="实际入场确认", path=f"entry.branches[{branch_index}].condition"))
-        return {"event": "entry", "event_date": entry_date, "summary": f"t0 为 {signal_date}；实际入场为 {entry_date}，成交价 {entry_price:.4f}。", "rows": rows}
+        execution_name = "开盘价" if strategy.entry.execution == "open" else "收盘价"
+        return {"event": "entry", "event_date": entry_date, "summary": f"t0 为 {signal_date}；实际入场为 {entry_date}，按{execution_name}成交 {entry_price:.4f}。", "rows": rows}
 
     rule_id = reason.removeprefix("v03:")
     if rule_id == "sample_end_force_close":
@@ -749,6 +842,10 @@ def _state_active(state, *, anchor_index: int, entry_index: int, day: int) -> bo
     )
 
 
+def _entry_price_at(df: pd.DataFrame, strategy: TimedStrategyDefinition, index: int) -> float:
+    return float(df["Open" if strategy.entry.execution == "open" else "Close"].iloc[index])
+
+
 def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_index: int) -> tuple[int, float] | None:
     """Resolve fixed or conditional E-day entry without guessing a branch."""
     if strategy.entry.mode == "fixed":
@@ -759,11 +856,11 @@ def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_i
         candidates = [(branch.active_day.start_offset_days, branch.condition) for branch in strategy.entry.branches]
     else:
         assert strategy.entry.defer_when is not None and strategy.entry.resume_when is not None
-        anchor_price = float(df["Close"].iloc[anchor_index])
+        anchor_price = _entry_price_at(df, strategy, anchor_index)
         if not _temporal_condition(df, strategy.entry.defer_when, index=anchor_index, anchor_index=anchor_index, entry_index=anchor_index, entry_price=anchor_price):
             return anchor_index, anchor_price
         for entry_index in range(anchor_index + 1, len(df)):
-            entry_price = float(df["Close"].iloc[entry_index])
+            entry_price = _entry_price_at(df, strategy, entry_index)
             if _temporal_condition(df, strategy.entry.resume_when, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price):
                 return entry_index, entry_price
         return None
@@ -771,7 +868,7 @@ def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_i
         entry_index = anchor_index + offset
         if entry_index >= len(df):
             continue
-        entry_price = float(df["Close"].iloc[entry_index])
+        entry_price = _entry_price_at(df, strategy, entry_index)
         # An omitted fixed-entry condition means “enter whenever the anchor
         # qualifies”. It is not a permissive fallback for branch entries.
         if condition is None or _temporal_condition(df, condition, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price):
@@ -779,12 +876,38 @@ def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_i
     return None
 
 
-def run_v03_backtest(df: pd.DataFrame, *, strategy: TimedStrategyDefinition, capital: float, compound: bool, cost_bps: float = 0.0) -> tuple[pd.DataFrame, dict]:
+def run_v03_backtest(
+    df: pd.DataFrame,
+    *,
+    strategy: TimedStrategyDefinition,
+    capital: float,
+    compound: bool,
+    cost_bps: float = 0.0,
+    market_index: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, dict]:
     """Run v0.3 exactly at daily closes; never approximate its stateful rules."""
     if strategy.schema_version != "0.3" or strategy.lifecycle_policy is None:
         raise UnsupportedStrategyFeature("v0.3 daily engine requires a v0.3 strategy with lifecycle_policy")
-    required = {"Date", "Open", "High", "Low", "Close", "Volume"}
-    if not required.issubset(df): raise ValueError("OHLCV input is missing required columns")
+    if strategy.data_requirement not in {"daily_ohlcv", "daily_ohlcv_with_market_index"}:
+        raise UnsupportedStrategyFeature(
+            "v0.3 daily engine does not support this strategy data requirement",
+            details={"data_requirement": strategy.data_requirement},
+        )
+    if strategy.data_requirement == "daily_ohlcv_with_market_index":
+        if market_index is None:
+            raise UnsupportedStrategyFeature(
+                "v0.3 daily engine needs the configured market-index series before it can execute this strategy",
+                details={"data_requirement": strategy.data_requirement},
+            )
+        df = attach_market_index_context(df, market_index)
+    elif market_index is not None:
+        # Avoid attaching unrelated data to ordinary daily strategies.  This
+        # keeps their calculation path and cached indicators unchanged.
+        df = df.copy()
+    if not {"Date", "Open", "High", "Low", "Close", "Volume"}.issubset(df):
+        raise UnsupportedStrategyFeature(
+            "v0.3 daily engine requires daily OHLCV columns",
+        )
     equity, trades, open_positions, index = capital, [], [], 0
     n = len(df)
     while index < n:

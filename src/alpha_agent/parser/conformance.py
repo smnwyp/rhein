@@ -81,6 +81,32 @@ def _has_explicit_inclusive_macd_pair(node: object, *, direction: str) -> bool:
     return current_found and prior_found
 
 
+def _has_macd_zero_axis_cross_pair(node: object) -> bool:
+    """Recognise DIF crossing zero, which cannot be a CrossCondition.
+
+    Cross nodes require two series operands. Zero is a scalar, so the faithful
+    form is the explicit two-day pair: prior DIF <= 0 and current DIF > 0.
+    """
+    comparisons = _comparison_nodes(node)
+    current_found = any(
+        item.get("operator") == "greater_than"
+        and _macd_operand(item.get("left"), component="macd_line", lagged=False)
+        and isinstance(item.get("right"), Mapping)
+        and item["right"].get("kind") == "scalar"
+        and item["right"].get("value") == 0
+        for item in comparisons
+    )
+    prior_found = any(
+        item.get("operator") == "less_than_or_equal"
+        and _macd_operand(item.get("left"), component="macd_line", lagged=True)
+        and isinstance(item.get("right"), Mapping)
+        and item["right"].get("kind") == "scalar"
+        and item["right"].get("value") == 0
+        for item in comparisons
+    )
+    return current_found and prior_found
+
+
 def _source_defines_inclusive_macd_pair(text: str, *, direction: str) -> bool:
     if "DIF" not in text or "DEA" not in text or "前一日" not in text or "当日" not in text:
         return False
@@ -103,7 +129,8 @@ def validate_source_conformance(source_clauses: Iterable[SourceClause], coverage
             has_inclusive_pair = _source_defines_inclusive_macd_pair(text, direction="above") and any(
                 _has_explicit_inclusive_macd_pair(value, direction="above") for value in mapped
             )
-            if not has_strict_cross and not has_inclusive_pair:
+            has_zero_axis_pair = "零轴" in text and any(_has_macd_zero_axis_cross_pair(value) for value in mapped)
+            if not has_strict_cross and not has_inclusive_pair and not has_zero_axis_pair:
                 issues.append({"path": f"source.{clause.clause_id}", "rule": "cross_requires_cross_node", "message": "an ‘上穿’ source clause must map to a cross_above node"})
         if re.search(r"(?:下穿|向下穿越)", text):
             has_strict_cross = any(_has(value, "operator", "cross_below") for value in mapped)

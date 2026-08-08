@@ -1,6 +1,6 @@
 """Deterministic domain semantics, separate from schema parsing."""
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import ADX, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn
+from alpha_agent.domain.indicators import ADX, DMIADX, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand,
@@ -31,7 +31,8 @@ def _series_dimension(o: MarketFieldOperand | IndicatorOperand | LaggedIndicator
     if isinstance(o.indicator, RollingMeanVolume): return "volume"
     if isinstance(o.indicator, RSI): return "rsi"
     if isinstance(o.indicator, RollingReturn): return "return"
-    if isinstance(o.indicator, ADX): return "adx"
+    if isinstance(o.indicator, (ADX, DMIADX)): return "adx"
+    if isinstance(o.indicator, MarketIndexMACDLine): return "macd"
     return "price"
 def _dimension(o: Operand) -> str:
     if isinstance(o, ScalarOperand): return "scalar"
@@ -64,8 +65,10 @@ def _temporal_dimension(operand: TemporalOperand) -> str:
             return "rsi"
         if isinstance(indicator, RollingReturn):
             return "return"
-        if isinstance(indicator, ADX):
+        if isinstance(indicator, (ADX, DMIADX)):
             return "adx"
+        if isinstance(indicator, MarketIndexMACDLine):
+            return "macd"
         return "price"
     raise TypeError(f"unsupported temporal operand: {type(operand).__name__}")
 def _walk(c: Condition, path: str, issues: list[dict[str, str]]) -> None:

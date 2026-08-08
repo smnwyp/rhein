@@ -46,11 +46,6 @@ class BedrockStrategyModelClient:
                 # exceed 4k tokens.  A truncation is worse than a larger upper bound:
                 # it costs a full failed request and cannot be safely recovered.
                 "inferenceConfig": {"maxTokens": self._max_tokens, "temperature": 0},
-                "outputConfig": {"textFormat": {"type": "json_schema", "structure": {"jsonSchema": {
-                    "name": "strategy_interpretation",
-                    "description": "A StrategyInterpretationResult conforming to the supplied schema.",
-                    "schema": json.dumps(_bedrock_transport_schema(), ensure_ascii=False, separators=(",", ":")),
-                }}}},
             }
             try:
                 return self._extract_interpretation(self._post_payload(payload))
@@ -59,7 +54,14 @@ class BedrockStrategyModelClient:
                     continue
                 raise
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-                raise ModelClientFailure("Bedrock returned invalid structured output", details={"exception_type": type(error).__name__, "model": self._model}) from error
+                # A decoder failure is a format failure, not a strategy
+                # failure. Give the provider one bounded, format-only retry.
+                if format_attempt == 0:
+                    continue
+                raise ModelClientFailure(
+                    "Bedrock returned malformed JSON for the strategy interpretation",
+                    details={"exception_type": type(error).__name__, "model": self._model, "attempts": format_attempt + 1},
+                ) from error
         raise ModelClientFailure(
             "Bedrock interpretation completed without a usable result",
             details={"model": self._model, "phase": "interpretation_format_retry", "attempts": 2},
@@ -91,7 +93,12 @@ class BedrockStrategyModelClient:
                     continue
                 raise
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-                raise ModelClientFailure("Bedrock returned invalid structured output", details={"exception_type": type(error).__name__, "model": self._model}) from error
+                if format_attempt == 0:
+                    continue
+                raise ModelClientFailure(
+                    "Bedrock returned malformed JSON for the semantic inventory",
+                    details={"exception_type": type(error).__name__, "model": self._model, "attempts": format_attempt + 1},
+                ) from error
         raise ModelClientFailure(
             "Bedrock semantic inventory completed without a usable result",
             details={"model": self._model, "phase": "inventory_format_retry", "attempts": 2},
@@ -278,10 +285,10 @@ class BedrockStrategyModelClient:
         schema = json.dumps(ModelInterpretationEnvelope.model_json_schema(), ensure_ascii=False, separators=(",", ":"))
         return (
             f"{SYSTEM_PROMPT}\n\n"
-            "Bedrock transports your answer in an outer object with one field named "
-            "`interpretation_json`. Put the complete inner StrategyInterpretationResult "
-            "JSON object, and nothing else, in that field. The following JSON Schema "
-            f"describes that INNER object exactly:\n{schema}"
+            "Return the complete StrategyInterpretationResult JSON object directly. "
+            "Do not wrap it in `interpretation_json`, do not encode it as a JSON string, "
+            "and do not add Markdown or prose. The following JSON Schema describes the "
+            f"object that local validation will enforce exactly:\n{schema}"
         )
 
     @staticmethod

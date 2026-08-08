@@ -99,6 +99,31 @@ def test_open_ended_technical_exit_does_not_require_or_create_a_forced_close():
     assert all(rule.kind != "forced_close" for rule in model.exit_rules)
 
 
+def test_timed_dsl_can_preserve_market_index_dif_requirement_without_claiming_single_asset_data():
+    timed = {
+        "schema_version": "0.3", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv_with_market_index",
+        "anchor": {"name": "t0", "condition": {"node_type": "group", "operator": "and", "conditions": [
+            comparison(
+                {"kind": "indicator", "indicator": {"indicator": "market_index_macd_line", "index_symbol": "^IXIC", "fast_window": 10, "slow_window": 24, "signal_window": 8}},
+                scalar(0),
+            ),
+            comparison(
+                {"kind": "indicator", "indicator": {"indicator": "dmi_adx", "directional_window": 10, "adx_window": 6}},
+                scalar(26),
+            ),
+        ]}, "constraints": []},
+        "entry": {"mode": "fixed", "active_day": {"start_offset_days": 1, "end_offset_days": 1}, "execution": "open"},
+        "exit_rules": [{"rule_id": "exit", "priority": 1, "active_days": {"start_offset_days": 1}, "kind": "close_condition", "condition": comparison(field("close"), indicator("sma", 5), "less_than"), "execution": "close"}],
+        "lifecycle_policy": {"sample_end_open_position": "leave_open_excluded", "allow_reentry_after_exit": True},
+    }
+
+    parsed = TimedStrategyDefinition.model_validate(timed)
+    validate_strategy(parsed)
+    assert parsed.entry.execution == "open"
+    assert parsed.data_requirement == "daily_ohlcv_with_market_index"
+
+
 def test_same_exit_priority_is_allowed_only_for_non_overlapping_relative_day_ranges():
     timed = {
         "schema_version": "0.3", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",

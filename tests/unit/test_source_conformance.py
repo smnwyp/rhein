@@ -64,6 +64,18 @@ def test_source_conformance_accepts_touch_inclusive_macd_dead_cross_as_two_day_c
     validate_source_conformance(source, coverage, payload)
 
 
+def test_source_conformance_accepts_dif_zero_axis_cross_as_current_prior_scalar_pair():
+    source = [SourceClause(clause_id="C01", text="DIF 从零轴下方上穿零轴。")]
+    coverage = [ClauseCoverage(clause_id="C01", disposition="mapped", dsl_paths=["anchor.condition"], explanation="DIF 零轴上穿以相邻两日比较表示。")]
+    line = {"indicator": "macd_line", "field": "close", "fast_window": 10, "slow_window": 24, "signal_window": 8}
+    payload = {"anchor": {"condition": {"node_type": "group", "operator": "and", "conditions": [
+        {"node_type": "comparison", "operator": "greater_than", "left": {"kind": "indicator", "indicator": line}, "right": {"kind": "scalar", "value": 0}},
+        {"node_type": "comparison", "operator": "less_than_or_equal", "left": {"kind": "lagged_indicator", "offset_days": -1, "indicator": line}, "right": {"kind": "scalar", "value": 0}},
+    ]}}}
+
+    validate_source_conformance(source, coverage, payload)
+
+
 def test_timed_semantic_validation_rejects_strict_current_vs_anchor_price_on_t0():
     payload = {
         "schema_version": "0.3", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",

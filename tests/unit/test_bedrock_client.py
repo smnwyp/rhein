@@ -15,16 +15,15 @@ class Session:
         response = {"output": {"message": {"content": [{"text": json.dumps({"interpretation_json": json.dumps(result)})}]}}}
         return SimpleNamespace(raise_for_status=lambda: None, json=lambda: response)
 
-def test_bedrock_adapter_uses_converse_and_bearer_token_without_network():
+def test_bedrock_adapter_uses_plain_json_converse_and_bearer_token_without_network():
     session = Session()
     result = BedrockStrategyModelClient(api_key="test-token", session=session).interpret_strategy(StrategyInterpretationRequest(strategy_text="Buy on MA"))
     assert result["status"] == "clarification_required"
     assert session.call[0].endswith("/converse")
     assert session.call[1]["headers"]["Authorization"] == "Bearer test-token"
-    assert "inner strategy-interpretation JSON object" in session.call[1]["json"]["system"][0]["text"]
+    assert "StrategyInterpretationResult JSON object directly" in session.call[1]["json"]["system"][0]["text"]
     assert "toolConfig" not in session.call[1]["json"]
-    transport_schema = json.loads(session.call[1]["json"]["outputConfig"]["textFormat"]["structure"]["jsonSchema"]["schema"])
-    assert transport_schema == _bedrock_transport_schema()
+    assert "outputConfig" not in session.call[1]["json"]
     assert session.call[1]["timeout"] == 180
 
 

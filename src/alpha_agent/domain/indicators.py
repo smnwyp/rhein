@@ -23,6 +23,14 @@ class ADX(DSLModel):
     window: PositiveInt
 
 
+class DMIADX(DSLModel):
+    """Chinese-formula DMI ADX with explicit directional and smoothing windows."""
+
+    indicator: Literal["dmi_adx"]
+    directional_window: PositiveInt
+    adx_window: PositiveInt
+
+
 class MACDLine(DSLModel):
     """MACD fast line: EMA(fast) - EMA(slow)."""
 
@@ -45,4 +53,21 @@ class MACDSignal(MACDLine):
     indicator: Literal["macd_signal"]
 
 
-IndicatorDefinition = Annotated[SMA | EMA | RSI | RollingReturn | RollingMinimum | RollingMaximum | RollingMeanVolume | ADX | MACDLine | MACDSignal, Field(discriminator="indicator")]
+class MarketIndexMACDLine(DSLModel):
+    """DIF line calculated from a named external market-index close series."""
+
+    indicator: Literal["market_index_macd_line"]
+    index_symbol: str = Field(min_length=1)
+    field: Literal["close"] = "close"
+    fast_window: PositiveInt
+    slow_window: PositiveInt
+    signal_window: PositiveInt
+
+    @model_validator(mode="after")
+    def fast_must_precede_slow(self) -> "MarketIndexMACDLine":
+        if self.fast_window >= self.slow_window:
+            raise ValueError("market-index MACD fast_window must be less than slow_window")
+        return self
+
+
+IndicatorDefinition = Annotated[SMA | EMA | RSI | RollingReturn | RollingMinimum | RollingMaximum | RollingMeanVolume | ADX | DMIADX | MACDLine | MACDSignal | MarketIndexMACDLine, Field(discriminator="indicator")]

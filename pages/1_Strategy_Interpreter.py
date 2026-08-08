@@ -30,6 +30,7 @@ from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHisto
 from alpha_agent.domain.sequence import TimedStrategyDefinition
 from alpha_agent.research.legacy_adapter import compile_timed_strategy
 from alpha_agent.research.v03_engine import build_trade_event_audit, run_v03_backtest
+from alpha_agent.research.market_index import load_market_index_for_files, required_market_index_symbols
 from alpha_agent.research.reporting import aggregate_gross_pnl, presentation_kpis
 from rhein.backtest import input_files as backtest_input_files, load_ohlc as backtest_load_ohlc, run_backtest as legacy_run_backtest
 from rhein.ui.result_runner import collect_results
@@ -598,6 +599,28 @@ if matching_result is not None:
                     params, runner, label = compile_timed_strategy(timed_strategy, approximate_intraday_with_daily_low=True), legacy_run_backtest, "DSL v0.2 分组回测"
                     params["cost_bps"] = cost_bps
                 paths = backtest_input_files(Path(data_path))
+                if timed_strategy.schema_version == "0.3" and timed_strategy.data_requirement == "daily_ohlcv_with_market_index":
+                    index_symbols = required_market_index_symbols(timed_strategy.model_dump(mode="json"))
+                    if len(index_symbols) != 1:
+                        raise UnsupportedStrategyFeature(
+                            "当前日线引擎一次只支持一个明确声明的大盘指数数据源",
+                            details={"declared_index_symbols": sorted(index_symbols)},
+                        )
+                    index_symbol = next(iter(index_symbols))
+                    with st.spinner(f"正在加载并按日期对齐大盘指数 {index_symbol}…"):
+                        market_index = load_market_index_for_files(
+                            paths,
+                            symbol=index_symbol,
+                            cache_directory=ROOT / ".cache" / "market_indices",
+                        )
+                    # The one shared, date-aligned source is passed to every
+                    # asset run. It is loaded once, never inferred per stock.
+                    params["market_index"] = market_index
+                    st.session_state["dsl_market_index_by_scope"] = {
+                        "scope": current_backtest_view_scope,
+                        "symbol": index_symbol,
+                        "frame": market_index,
+                    }
                 kpis, trades = collect_results(paths, params, initial_capital, True, load_ohlc=backtest_load_ohlc, run_backtest=runner, progress_label=label)
                 if kpis.empty:
                     st.warning("本次所有标的均运行失败，未保存为空白回测记录；请检查上方逐文件错误后重试。")
@@ -767,6 +790,32 @@ if matching_result is not None:
                         # execution, and does not require a group rerun.
                         chart = add_display_dmi(chart)
                         source_chart = chart.copy()
+                        audit_market_index: pd.DataFrame | None = None
+                        if matching_result.strategy.schema_version == "0.3":
+                            audit_strategy = TimedStrategyDefinition.model_validate(
+                                matching_result.strategy.model_dump(mode="json")
+                            )
+                            if audit_strategy.data_requirement == "daily_ohlcv_with_market_index":
+                                index_symbols = required_market_index_symbols(audit_strategy.model_dump(mode="json"))
+                                if len(index_symbols) == 1:
+                                    index_symbol = next(iter(index_symbols))
+                                    cached_index = st.session_state.get("dsl_market_index_by_scope")
+                                    if (
+                                        isinstance(cached_index, dict)
+                                        and cached_index.get("scope") == current_backtest_view_scope
+                                        and cached_index.get("symbol") == index_symbol
+                                        and isinstance(cached_index.get("frame"), pd.DataFrame)
+                                    ):
+                                        audit_market_index = cached_index["frame"]
+                                    else:
+                                        try:
+                                            audit_market_index = load_market_index_for_files(
+                                                [source_path],
+                                                symbol=index_symbol,
+                                                cache_directory=ROOT / ".cache" / "market_indices",
+                                            )
+                                        except AlphaAgentError as error:
+                                            st.warning(f"无法加载 {index_symbol}，因此该笔交易的条件审计不可用：{error.message}")
                         signal, entry, exit_ = (pd.Timestamp(trade[column]).normalize() for column in ("signal", "entry", "exit"))
                         chart_dates = pd.to_datetime(chart["Date"], errors="coerce").dt.normalize()
                         signal_positions = chart.index[chart_dates == signal]
@@ -959,6 +1008,7 @@ if matching_result is not None:
                                             exit_date=str(trade["exit"]),
                                             reason=str(trade["reason"]),
                                             event=selected_event_id_for_detail,
+                                            market_index=audit_market_index,
                                         )
                                         event_title = "入场条件核对" if selected_event_id_for_detail == "entry" else "出场条件核对"
                                         with st.container(border=True):
@@ -989,6 +1039,7 @@ if matching_result is not None:
                                         exit_date=str(trade["exit"]),
                                         reason=str(trade["reason"]),
                                         event="entry",
+                                        market_index=audit_market_index,
                                     )
                                     checks = event_audit_rows(c_point_audit)
                                 except (ValueError, UnsupportedStrategyFeature):
@@ -1011,6 +1062,7 @@ if matching_result is not None:
                                         exit_date=str(trade["exit"]),
                                         reason=str(trade["reason"]),
                                         event="exit",
+                                        market_index=audit_market_index,
                                     )
                                     exit_checks = event_audit_rows(exit_audit)
                                     with st.expander("出场条件核对", expanded=False):

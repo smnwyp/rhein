@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import ADX, EMA, MACDLine, MACDSignal, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
+from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand, CandlestickPatternCondition,
@@ -32,6 +32,8 @@ def _indicator(indicator: object) -> str:
     if isinstance(indicator, RollingMaximum): return f"{indicator.field} {indicator.window} 日滚动最高值"
     if isinstance(indicator, RollingMeanVolume): return f"成交量 MA({indicator.window})"
     if isinstance(indicator, ADX): return f"ADX({indicator.window})"
+    if isinstance(indicator, DMIADX): return f"DMI ADX({indicator.directional_window},{indicator.adx_window})"
+    if isinstance(indicator, MarketIndexMACDLine): return f"指数 {indicator.index_symbol} DIF({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     if isinstance(indicator, MACDSignal): return f"MACD 慢线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     if isinstance(indicator, MACDLine): return f"MACD 快线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     raise TypeError(f"unknown indicator: {type(indicator).__name__}")
@@ -105,6 +107,10 @@ def _exit(rule: ExitRule) -> str:
     return f"{window}：按收盘价强制平仓。"
 
 
+def _entry_execution_name(execution: str) -> str:
+    return "开盘价" if execution == "open" else "收盘价"
+
+
 def build_review_items(strategy: AnyStrategyDefinition) -> list[ReviewItem]:
     """Translate validated fields only; it never claims source-language equivalence."""
     payload = strategy.model_dump(mode="json")
@@ -136,15 +142,17 @@ def build_review_items(strategy: AnyStrategyDefinition) -> list[ReviewItem]:
     if strategy.entry.mode == "fixed":
         assert strategy.entry.active_day is not None
         timing = _range(strategy.entry.active_day.start_offset_days, strategy.entry.active_day.end_offset_days)
-        explanation = f"{timing}：t0 条件全部成立后，按收盘价入场。" if strategy.entry.condition is None else f"{timing}：若{_temporal_condition(strategy.entry.condition)}，按收盘价入场。"
+        price = _entry_execution_name(strategy.entry.execution)
+        explanation = f"{timing}：t0 条件全部成立后，按{price}入场。" if strategy.entry.condition is None else f"{timing}：若{_temporal_condition(strategy.entry.condition)}，按{price}入场。"
         items.append(ReviewItem("入场", "entry", explanation))
     elif strategy.entry.mode == "conditional":
         assert strategy.entry.branches is not None
-        branches = "；".join(f"t0+{branch.active_day.start_offset_days}（{branch.branch_id}）：若{_temporal_condition(branch.condition)}，按收盘价入场" for branch in strategy.entry.branches)
+        price = _entry_execution_name(strategy.entry.execution)
+        branches = "；".join(f"t0+{branch.active_day.start_offset_days}（{branch.branch_id}）：若{_temporal_condition(branch.condition)}，按{price}入场" for branch in strategy.entry.branches)
         items.append(ReviewItem("条件入场", "entry.branches", branches + "。未命中任何分支则放弃该候选点。"))
     else:
         assert strategy.entry.defer_when is not None and strategy.entry.resume_when is not None
-        items.append(ReviewItem("延后入场", "entry", f"若 t0 当日{_temporal_condition(strategy.entry.defer_when)}，则不入场；自下一交易日起，首次{_temporal_condition(strategy.entry.resume_when)}时按收盘价入场。"))
+        items.append(ReviewItem("延后入场", "entry", f"若 t0 当日{_temporal_condition(strategy.entry.defer_when)}，则不入场；自下一交易日起，首次{_temporal_condition(strategy.entry.resume_when)}时按{_entry_execution_name(strategy.entry.execution)}入场。"))
     for index, state in enumerate(strategy.persistent_states):
         prefix = "实际入场日 E" if state.relative_to == "entry" else "t0"
         window = _range(state.active_days.start_offset_days, state.active_days.end_offset_days).replace("t0", prefix)

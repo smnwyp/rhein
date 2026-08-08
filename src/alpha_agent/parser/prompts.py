@@ -83,10 +83,13 @@ For an anchor-day comparison such as `MA20[t0] > MA20[t0-1]`, encode the prior
 value as `{\"kind\": \"lagged_indicator\", \"offset_days\": -1, \"indicator\": ...}`
 inside `anchor.condition`. Never put `anchor_indicator` in `anchor.condition`:
 that operand is only for relative-day entry and exit conditions.
-The product policy `execution_price_policy: daily_close` is authoritative for
-research: encode every entry and exit with `execution: close` and
-`data_requirement: daily_ohlcv`. When source prose asks for a pre-close or
-minute-level price/volume, use final daily Close/Volume instead and record a
+The product policy `execution_price_policy: daily_close` is authoritative when
+source prose asks for a pre-close or minute-level price: encode those orders
+with `execution: close` and `data_requirement: daily_ohlcv`. An explicitly
+requested next-trading-day opening entry is deterministically available from
+daily OHLCV: encode fixed `entry.active_day: t0+1` with `entry.execution: open`.
+When source prose asks for a pre-close or minute-level price/volume, use final
+daily Close/Volume instead and record a
 machine-readable assumption explaining this explicit daily-close proxy. Under
 this policy, assume a close order fills; record a warning when the source
 mentions suspension, price limits, or another no-fill scenario that daily OHLCV
@@ -104,6 +107,13 @@ all three explicit windows. For “current volume is highest or second-highest i
 recent N days”, compare `rolling_volume_rank(window=N)` <= 2. For an unbounded
 delayed entry after t0, use `entry.mode: "wait_until"` with explicit
 `defer_when` and `resume_when`; it has no hidden maximum wait period.
+For DMI(N,M) ADX, use `indicator=dmi_adx`, `directional_window=N`, and
+`adx_window=M`. It is distinct from Wilder `adx(window=N)`. In this product's
+NASDAQ-only universe, an unnamed stock “corresponding market index” is NASDAQ
+Composite `^IXIC`; record that as an explicit assumption and encode its DIF as
+`indicator=market_index_macd_line`, `index_symbol="^IXIC"`, with stated MACD
+windows. Set `data_requirement="daily_ohlcv_with_market_index"`; do not claim
+a single-stock CSV alone can evaluate that gate.
 For an algebraic current/relative-bar threshold such as a bearish real body
 larger than 2.5%, encode the equivalent explicit comparison using
 `scaled_operand` (for example `close < open × 0.975`).  Its nested operand
@@ -134,16 +144,18 @@ Use `clarification_required` only when the user's intent has more than one mater
 field-targeted questions. Use `unsupported` when intent is clear but the listed current capabilities cannot
 express it faithfully. Never invent a default parameter or execution assumption.
 
-The product policy uses final daily Close and Volume for every backtest order. A
-source request for a pre-close/minute price or volume must be normalized to this
-explicit daily-close proxy and reported as an assumption/warning, not unsupported.
-Current capabilities include daily-close comparisons, crosses, SMA/EMA/RSI/ADX/rolling return/rolling minimum/rolling maximum/rolling mean volume,
+The product policy uses final daily Close and Volume for every pre-close/minute
+order proxy. An explicit next-trading-day opening entry uses the daily Open.
+Current capabilities include daily-close or explicit next-open entries, comparisons, crosses, SMA/EMA/RSI/ADX/DMI-ADX/rolling return/rolling minimum/rolling maximum/rolling mean volume,
 MACD fast/signal lines, rolling comparison-count conditions, rolling close/low constraints,
 ordered A-to-B close drawdowns, close-executed conditional and wait-until entry rules,
 running maximum or tied top-two volume since anchor or in a fixed rolling window, persistent post-trigger state flags,
 doji/large-bearish patterns, and lifecycle choices.
 Suspension, price-limit, and no-fill prose is a documented daily-close execution
 limitation, not an unsupported interpreter feature; record it as a warning.
+For the current NASDAQ-only product dataset, an unnamed “corresponding market
+index” may be represented as NASDAQ Composite `^IXIC`, with an explicit
+assumption and an external-market-index data requirement.
 Every original source clause must be referenced by at least one semantic item. Return JSON only.
 Keep the inventory compact: do not repeat or quote source text; use clause IDs and terse pseudo-DSL only.
 Use at most 20 semantic items. Keep each pseudo-DSL under 240 characters and each explanation under 180 characters.

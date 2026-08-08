@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from alpha_agent.domain.conditions import CrossCondition
-from alpha_agent.domain.indicators import ADX, MACDLine, MACDSignal, RollingMaximum, RollingMinimum, SMA
+from alpha_agent.domain.indicators import ADX, DMIADX, MACDLine, MACDSignal, MarketIndexMACDLine, RollingMaximum, RollingMinimum, SMA
 from alpha_agent.domain.operands import IndicatorOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand,
@@ -12,7 +12,8 @@ from alpha_agent.domain.sequence import (
     TemporalScalarOperand,
     TimedStrategyDefinition,
 )
-from alpha_agent.research.v03_engine import build_trade_event_audit, _anchor_condition_checks, _anchor_constraints_hold, _indicator_values, _resolve_entry, _static_condition, _temporal_condition, _temporal_operand, run_v03_backtest
+from alpha_agent.research.v03_engine import attach_market_index_context, build_trade_event_audit, _anchor_condition_checks, _anchor_constraints_hold, _indicator_values, _resolve_entry, _static_condition, _temporal_condition, _temporal_operand, run_v03_backtest
+from alpha_agent.errors import UnsupportedStrategyFeature
 from alpha_agent.parser.validation import validate_strategy
 
 
@@ -164,6 +165,80 @@ def test_v03_supports_macd_rolling_trend_count_and_wait_until_entry():
     # Anchor at a declining day waits for the first subsequent up-close.
     resolved = _resolve_entry(frame, strategy, 4)
     assert resolved is not None and resolved[0] == 6
+
+
+def test_v03_supports_dmi_10_6_and_explicit_next_open_entry_price():
+    close = np.linspace(10, 40, 30)
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-01", periods=len(close), freq="B"),
+        "Open": close + 0.5,
+        "High": close + 1,
+        "Low": close - 1,
+        "Close": close,
+        "Volume": 100.0,
+    })
+    dmi_adx = DMIADX(indicator="dmi_adx", directional_window=10, adx_window=6)
+
+    values = _indicator_values(frame, dmi_adx)
+    assert np.isfinite(values[-1])
+    assert _indicator_values(frame, dmi_adx) is values
+
+    payload = _strategy().model_dump(mode="json")
+    payload["entry"] = {
+        "mode": "fixed",
+        "active_day": {"start_offset_days": 1, "end_offset_days": 1},
+        "execution": "open",
+    }
+    strategy = TimedStrategyDefinition.model_validate(payload)
+    assert _resolve_entry(frame, strategy, 10) == (11, float(frame["Open"].iloc[11]))
+
+
+def test_v03_market_index_gate_is_evaluated_from_an_explicit_date_aligned_series():
+    close = np.linspace(10, 40, 40)
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-01", periods=len(close), freq="B"),
+        "Open": close + 0.25, "High": close + 1, "Low": close - 1,
+        "Close": close, "Volume": 100.0,
+    })
+    index = pd.DataFrame({
+        "Date": frame["Date"], "Open": np.linspace(100, 150, len(frame)),
+        "High": np.linspace(101, 151, len(frame)), "Low": np.linspace(99, 149, len(frame)),
+        "Close": np.linspace(100, 150, len(frame)), "Volume": 1.0,
+    })
+    index.attrs["_alpha_market_index_symbol"] = "^IXIC"
+    market_dif = MarketIndexMACDLine(
+        indicator="market_index_macd_line", index_symbol="^IXIC", fast_window=3, slow_window=6, signal_window=3,
+    )
+    contextualized = attach_market_index_context(frame, index)
+    values = _indicator_values(contextualized, market_dif)
+    assert np.isfinite(values[-1])
+
+    payload = _strategy().model_dump(mode="json")
+    payload["data_requirement"] = "daily_ohlcv_with_market_index"
+    payload["anchor"]["constraints"] = []
+    payload["anchor"]["condition"] = _cmp(
+        {"kind": "indicator", "indicator": market_dif.model_dump(mode="json")},
+        {"kind": "scalar", "value": -100},
+    )
+    payload["entry"] = {"mode": "fixed", "active_day": {"start_offset_days": 0, "end_offset_days": 0}, "execution": "close"}
+    strategy = TimedStrategyDefinition.model_validate(payload)
+    _, stats = run_v03_backtest(frame, strategy=strategy, capital=10_000, compound=False, market_index=index)
+    assert stats["n_trades"] == 1
+
+
+def test_v03_market_index_gate_rejects_missing_alignment_instead_of_skipping_it():
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-01", periods=10, freq="B"),
+        "Open": 10.0, "High": 11.0, "Low": 9.0, "Close": 10.0, "Volume": 100.0,
+    })
+    incomplete_index = pd.DataFrame({"Date": frame["Date"].iloc[:-1], "Close": 100.0})
+    incomplete_index.attrs["_alpha_market_index_symbol"] = "^IXIC"
+    try:
+        attach_market_index_context(frame, incomplete_index)
+    except UnsupportedStrategyFeature as error:
+        assert error.details["missing_date_count"] == 1
+    else:  # pragma: no cover - assertion makes the intended safety rule explicit
+        raise AssertionError("missing index dates must not be forward-filled")
 
 
 def test_v03_supports_adx_prior_window_breakout_and_two_day_ma_exit():
