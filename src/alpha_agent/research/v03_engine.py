@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition, RollingCrossCountCondition
-from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDPercentLine, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
+from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDPercentLine, MACDPercentSignal, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorChangeConstraint, AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand,
@@ -134,14 +134,19 @@ def _indicator_values(df: pd.DataFrame, indicator: object) -> np.ndarray:
         gain = delta.clip(lower=0).ewm(alpha=1 / indicator.window, adjust=False, min_periods=indicator.window).mean()
         loss = (-delta.clip(upper=0)).ewm(alpha=1 / indicator.window, adjust=False, min_periods=indicator.window).mean()
         values = (100 - 100 / (1 + gain / loss)).to_numpy()
-    elif isinstance(indicator, (MACDLine, MACDSignal, MACDPercentLine)):
+    elif isinstance(indicator, (MACDLine, MACDSignal, MACDPercentLine, MACDPercentSignal)):
         fast = close.ewm(span=indicator.fast_window, adjust=False, min_periods=indicator.slow_window).mean()
         slow = close.ewm(span=indicator.slow_window, adjust=False, min_periods=indicator.slow_window).mean()
         line = fast - slow
         if isinstance(indicator, MACDSignal):
             values = line.ewm(span=indicator.signal_window, adjust=False, min_periods=indicator.signal_window).mean().to_numpy()
-        elif isinstance(indicator, MACDPercentLine):
-            values = (line / close.replace(0, np.nan) * 100).to_numpy()
+        elif isinstance(indicator, (MACDPercentLine, MACDPercentSignal)):
+            percent_line = line / close.replace(0, np.nan) * 100
+            values = (
+                percent_line.ewm(span=indicator.signal_window, adjust=False, min_periods=indicator.signal_window).mean().to_numpy()
+                if isinstance(indicator, MACDPercentSignal)
+                else percent_line.to_numpy()
+            )
         else:
             values = line.to_numpy()
     elif isinstance(indicator, MarketIndexMACDLine):
@@ -247,15 +252,17 @@ def _anchor_operand_label(operand: Operand) -> str:
 
 
 def _indicator_label(indicator: object) -> str:
-    if isinstance(indicator, (MACDLine, MACDSignal, MACDPercentLine)):
-        if isinstance(indicator, MACDPercentLine):
+    if isinstance(indicator, (MACDLine, MACDSignal, MACDPercentLine, MACDPercentSignal)):
+        if isinstance(indicator, (MACDPercentLine, MACDPercentSignal)):
             component = indicator.label or "归一化 EMA 差值"
+            if isinstance(indicator, MACDPercentSignal):
+                component = f"{component} 信号线"
         else:
             component = "慢线" if isinstance(indicator, MACDSignal) else "快线"
         windows = f"{indicator.fast_window},{indicator.slow_window}"
         if indicator.signal_window is not None:
             windows += f",{indicator.signal_window}"
-        return f"{component}({windows})" if isinstance(indicator, MACDPercentLine) else f"MACD{component}({windows})"
+        return f"{component}({windows})" if isinstance(indicator, (MACDPercentLine, MACDPercentSignal)) else f"MACD{component}({windows})"
     if isinstance(indicator, DMIADX):
         return f"DMI ADX({indicator.directional_window},{indicator.adx_window})"
     if isinstance(indicator, MarketIndexMACDLine):
@@ -747,6 +754,21 @@ def build_trade_event_audit(
             rows.extend(_temporal_condition_checks(df, strategy.entry.defer_when, index=anchor_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, section="延后买入判断（t0）", path="entry.defer_when"))
             if entry_index > anchor_index:
                 rows.extend(_temporal_condition_checks(df, strategy.entry.resume_when, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price, section="实际入场确认", path="entry.resume_when"))
+        elif strategy.entry.mode == "next_day_confirmation":
+            assert strategy.entry.observation_day is not None and strategy.entry.wait_when is not None
+            observation_index = anchor_index + strategy.entry.observation_day.start_offset_days
+            if observation_index < len(df):
+                rows.extend(_temporal_condition_checks(
+                    df, strategy.entry.wait_when, index=observation_index,
+                    anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price,
+                    section="t0+1 观望触发判断", path="entry.wait_when",
+                ))
+                # Only a triggered wait requires this re-confirmation.  The
+                # same static evaluator used by the engine produces the
+                # evidence, so the audit cannot disagree with eligibility.
+                if _temporal_condition(df, strategy.entry.wait_when, index=observation_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price):
+                    rows.extend({**row, "section": "t0+1 收盘完整条件复核", "dsl_path": row["dsl_path"].replace("anchor.condition", "entry.confirmation.anchor_condition", 1)} for row in _anchor_condition_checks(df, strategy.anchor.condition, observation_index))
+                    rows.extend(_anchor_constraint_checks(df, strategy, observation_index))
         elif strategy.entry.mode == "conditional":
             assert strategy.entry.branches is not None
             for branch_index, branch in enumerate(strategy.entry.branches):
@@ -881,7 +903,7 @@ def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_i
     elif strategy.entry.mode == "conditional":
         assert strategy.entry.branches is not None
         candidates = [(branch.active_day.start_offset_days, branch.condition) for branch in strategy.entry.branches]
-    else:
+    elif strategy.entry.mode == "wait_until":
         assert strategy.entry.defer_when is not None and strategy.entry.resume_when is not None
         anchor_price = _entry_price_at(df, strategy, anchor_index)
         if not _temporal_condition(df, strategy.entry.defer_when, index=anchor_index, anchor_index=anchor_index, entry_index=anchor_index, entry_price=anchor_price):
@@ -891,6 +913,36 @@ def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_i
             if _temporal_condition(df, strategy.entry.resume_when, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price):
                 return entry_index, entry_price
         return None
+    else:
+        assert strategy.entry.observation_day is not None
+        assert strategy.entry.confirmed_entry_day is not None
+        assert strategy.entry.wait_when is not None
+        observation_index = anchor_index + strategy.entry.observation_day.start_offset_days
+        confirmed_entry_index = anchor_index + strategy.entry.confirmed_entry_day.start_offset_days
+        if observation_index >= len(df) or confirmed_entry_index >= len(df):
+            return None
+        observation_price = _entry_price_at(df, strategy, observation_index)
+        if not np.isfinite(observation_price) or observation_price <= 0:
+            return None
+        should_wait = _temporal_condition(
+            df, strategy.entry.wait_when, index=observation_index,
+            anchor_index=anchor_index, entry_index=observation_index,
+            entry_price=observation_price,
+        )
+        if not should_wait:
+            return observation_index, observation_price
+        # The confirmation is intentionally bounded to t0+1. A failed
+        # re-check cancels this candidate instead of drifting into a later
+        # entry, which would change the source strategy's semantics.
+        if not _static_condition(df, strategy.anchor.condition, observation_index):
+            return None
+        constraints_hold, _ = _anchor_constraints_hold(df, strategy, observation_index)
+        if not constraints_hold:
+            return None
+        entry_price = _entry_price_at(df, strategy, confirmed_entry_index)
+        if not np.isfinite(entry_price) or entry_price <= 0:
+            return None
+        return confirmed_entry_index, entry_price
     for offset, condition in sorted(candidates, key=lambda item: item[0]):
         entry_index = anchor_index + offset
         if entry_index >= len(df):

@@ -1,0 +1,10 @@
+{
+  "generated_at_utc": "2026-08-09T14:32:06+00:00",
+  "classification_source": "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=5000&exchange=nasdaq&download=true",
+  "scope": "downloaded_manifest.csv 中有有效 OHLCV 的当前 Nasdaq 代码",
+  "universe_count": 2951,
+  "mapped_count": 2795,
+  "unmapped_count": 156,
+  "sector_standard": "Nasdaq 当前 sector 映射为中文十一大板块；无板块或非十一大板块的代码不纳入 industry_map.csv",
+  "historical_limit": "这是当前静态快照；用于历史回测时存在幸存者偏差与行业归属变更偏差。"
+}

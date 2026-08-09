@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "calibration": {
+    "entry_thresholds": [50, 55, 60, 65, 70, 75],
+    "exit_gaps": [5, 10, 15, 20],
+    "calibration_ratio": 0.7,
+    "transaction_cost": 0.001
+  },
+  "locked_thresholds": {
+    "entry_threshold": null,
+    "exit_threshold": null,
+    "status": "unlocked_pending_platform_selection"
+  }
+}

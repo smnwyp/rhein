@@ -242,7 +242,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -591,7 +595,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -1038,7 +1046,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -1550,7 +1562,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -2045,7 +2061,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -2513,7 +2533,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -2981,7 +3005,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -3448,7 +3476,11 @@
           }
         ],
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -4124,7 +4156,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -4713,7 +4749,11 @@
             "offset_days": -1,
             "field": "close"
           }
-        }
+        },
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -5223,7 +5263,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -5911,7 +5955,11 @@
             "offset_days": -1,
             "field": "close"
           }
-        }
+        },
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -6469,7 +6517,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -7075,7 +7127,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -7792,7 +7848,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -8568,7 +8628,11 @@
         "execution": "open",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -9407,7 +9471,11 @@
         "execution": "close",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -9994,7 +10062,11 @@
         "execution": "open",
         "branches": null,
         "defer_when": null,
-        "resume_when": null
+        "resume_when": null,
+        "observation_day": null,
+        "confirmed_entry_day": null,
+        "wait_when": null,
+        "confirmation_requires_anchor_condition": false
       },
       "exit_rules": [
         {
@@ -10207,6 +10279,830 @@
           "exit_rules[0].condition"
         ],
         "explanation": "DD 不低于 2 且高于前一日；次日开盘入场；MA20 上穿收盘价时按收盘代理价退出。"
+      }
+    ]
+  },
+  {
+    "strategy_id": "44317eed-81c1-4173-a72c-4105809a10e1",
+    "strategy_name": "大均线mmacd22",
+    "created_at": "2026-08-09T15:22:05.258080Z",
+    "original_language": "SS:=10;LL:=24;MM:=8;\nDD:=(EMA(C,SS)-EMA(C,LL))/C*100;\nDED:EMA(DD,MM);\n买入条件：\n1. 60ma&gt;REF(60ma,1) and REF(60ma,1)&gt;Ref(60ma,2);{60ma连续二天上升}\n2. Count(cross(20ma,60ma),5)&gt;=1;{5日至少发生过一次20Ma上穿60Ma}\n3. DD&gt;=3 and DD&gt;REF(DD,1) and DED&gt;Ref(DED,1);{DD大于3，且DD和DED大于前一日的DD和\nDED}\n或者\n1. 60ma&gt;REF(60ma,1) and REF(60ma,1)&gt;Ref(60ma,2);{60ma连续二天上升}\n2. Count(cross(30ma,60ma),3)&gt;=1；{3日至少发生过一次30Ma上穿60Ma}\n3. DD&gt;=6 and DD&gt;REF(DD,1); {DD大于6，且DD大于前一日的DD}\n\n或者\n1. 20MA&gt;60Ma;{20Ma大于60Ma}\n2. 30Ma&gt;60Ma; {30Ma大于60Ma}\n3. Count(cross(20Ma,60Ma),5)&gt;=1; {5日至少发生过一次20Ma上穿60Ma}\n4. Cross(20MA,30Ma);{20Ma上穿30Ma}\n5. DD&gt;=2 and DD&gt;REF(DD,1); {DD大于2，且DD大于前一日的DD}\n当天的股价相对于前一天的涨幅超过5%，或是一根大阴线（实体大于2%），或第二天的\n开盘价低于前一天的收盘价2%，则第二天开盘时观望。若第二天收盘价符合所有条件，\n则第三天开盘时买入。若当日未能成交，不保留买入指令；下一个交易日重新计算全\n部条件。\n卖出条件：\n1. 自买入点的5个交易日内，出现DD连续二天下降，即抛出；\n2. 自买入点的5个交易日起，Cross(20ma,Close);{股价下穿20Ma}\n卖出点为当日收盘前5分钟的价格。以当日收盘价作为策略的卖出点。实盘中可参考收盘\n前5分钟的价格和成交量预判，但以收盘结果确认。",
+    "strategy": null,
+    "assumptions": [],
+    "warnings": [],
+    "source_clauses": [],
+    "coverage": []
+  },
+  {
+    "strategy_id": "de22328f-3bc4-4789-a8ea-71321597eeee",
+    "strategy_name": "大均线mmacd 22",
+    "created_at": "2026-08-09T15:30:55.885409Z",
+    "original_language": "SS:=10;LL:=24;MM:=8;\nDD:=(EMA(C,SS)-EMA(C,LL))/C*100;\nDED:EMA(DD,MM);\n买入条件：\n1. 60ma&gt;REF(60ma,1) and REF(60ma,1)&gt;Ref(60ma,2);{60ma连续二天上升}\n2. Count(cross(20ma,60ma),5)&gt;=1;{5日至少发生过一次20Ma上穿60Ma}\n3. DD&gt;=3 and DD&gt;REF(DD,1) and DED&gt;Ref(DED,1);{DD大于3，且DD和DED大于前一日的DD和\nDED}\n或者\n1. 60ma&gt;REF(60ma,1) and REF(60ma,1)&gt;Ref(60ma,2);{60ma连续二天上升}\n2. Count(cross(30ma,60ma),3)&gt;=1；{3日至少发生过一次30Ma上穿60Ma}\n3. DD&gt;=6 and DD&gt;REF(DD,1); {DD大于6，且DD大于前一日的DD}\n\n或者\n1. 20MA&gt;60Ma;{20Ma大于60Ma}\n2. 30Ma&gt;60Ma; {30Ma大于60Ma}\n3. Count(cross(20Ma,60Ma),5)&gt;=1; {5日至少发生过一次20Ma上穿60Ma}\n4. Cross(20MA,30Ma);{20Ma上穿30Ma}\n5. DD&gt;=2 and DD&gt;REF(DD,1); {DD大于2，且DD大于前一日的DD}\n当天的股价相对于前一天的涨幅超过5%，或是一根大阴线（实体大于2%），或第二天的\n开盘价低于前一天的收盘价2%，则第二天开盘时观望。若第二天收盘价符合所有条件，\n则第三天开盘时买入。若当日未能成交，不保留买入指令；下一个交易日重新计算全\n部条件。\n卖出条件：\n1. 自买入点的5个交易日内，出现DD连续二天下降，即抛出；\n2. 自买入点的5个交易日起，Cross(20ma,Close);{股价下穿20Ma}\n卖出点为当日收盘前5分钟的价格。以当日收盘价作为策略的卖出点。实盘中可参考收盘\n前5分钟的价格和成交量预判，但以收盘结果确认。\n\n补充澄清信息：\n当信号日出现以下任一情形时触发等待：三种情形均独立触发等待，任一满足即等待。\n触发等待后，若次日收盘价不满足全部条件，则放弃本次信号；下一交易日重新计算。\n卖出条件 1：DD 在 5 日窗口内任意两个相邻交易日均下降。",
+    "strategy": {
+      "schema_version": "0.3",
+      "strategy_name": "大均线mmacd 22",
+      "symbol": "AAON",
+      "frequency": "1d",
+      "direction": "long_only",
+      "position_mode": "fully_invested_or_flat",
+      "data_requirement": "daily_ohlcv",
+      "anchor": {
+        "name": "t0",
+        "condition": {
+          "node_type": "group",
+          "operator": "or",
+          "conditions": [
+            {
+              "node_type": "group",
+              "operator": "and",
+              "conditions": [
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -2,
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "rolling_cross_count",
+                  "lookback_days": 5,
+                  "minimum_true_count": 1,
+                  "operator": "cross_above",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 20
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than_or_equal",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "macd_percent_line",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DD"
+                    }
+                  },
+                  "right": {
+                    "kind": "scalar",
+                    "value": 3.0
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "macd_percent_line",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DD"
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "macd_percent_line",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DD"
+                    }
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "macd_percent_signal",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DED"
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "macd_percent_signal",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DED"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "node_type": "group",
+              "operator": "and",
+              "conditions": [
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -2,
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "rolling_cross_count",
+                  "lookback_days": 3,
+                  "minimum_true_count": 1,
+                  "operator": "cross_above",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 30
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than_or_equal",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "macd_percent_line",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DD"
+                    }
+                  },
+                  "right": {
+                    "kind": "scalar",
+                    "value": 6.0
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "macd_percent_line",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DD"
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "macd_percent_line",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DD"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "node_type": "group",
+              "operator": "and",
+              "conditions": [
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 20
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 30
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "rolling_cross_count",
+                  "lookback_days": 5,
+                  "minimum_true_count": 1,
+                  "operator": "cross_above",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 20
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "cross",
+                  "operator": "cross_above",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 20
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 30
+                    }
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than_or_equal",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "macd_percent_line",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DD"
+                    }
+                  },
+                  "right": {
+                    "kind": "scalar",
+                    "value": 2.0
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "macd_percent_line",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DD"
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "macd_percent_line",
+                      "field": "close",
+                      "fast_window": 10,
+                      "slow_window": 24,
+                      "signal_window": 8,
+                      "label": "DD"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "constraints": []
+      },
+      "entry": {
+        "mode": "next_day_confirmation",
+        "active_day": null,
+        "condition": null,
+        "execution": "open",
+        "branches": null,
+        "defer_when": null,
+        "resume_when": null,
+        "observation_day": {
+          "anchor": "t0",
+          "start_offset_days": 1,
+          "end_offset_days": 1
+        },
+        "confirmed_entry_day": {
+          "anchor": "t0",
+          "start_offset_days": 2,
+          "end_offset_days": 2
+        },
+        "wait_when": {
+          "node_type": "group",
+          "operator": "or",
+          "conditions": [
+            {
+              "node_type": "comparison",
+              "operator": "greater_than",
+              "left": {
+                "kind": "anchor_indicator",
+                "anchor": "t0",
+                "offset_days": 0,
+                "indicator": {
+                  "indicator": "rolling_return",
+                  "field": "close",
+                  "window": 1
+                }
+              },
+              "right": {
+                "kind": "scalar",
+                "value": 0.05
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than",
+              "left": {
+                "kind": "anchor_market_field",
+                "anchor": "t0",
+                "field": "close"
+              },
+              "right": {
+                "kind": "scaled_operand",
+                "operand": {
+                  "kind": "anchor_market_field",
+                  "anchor": "t0",
+                  "field": "open"
+                },
+                "multiplier": 0.98
+              }
+            },
+            {
+              "node_type": "comparison",
+              "operator": "less_than",
+              "left": {
+                "kind": "market_field",
+                "field": "open"
+              },
+              "right": {
+                "kind": "scaled_operand",
+                "operand": {
+                  "kind": "anchor_market_field",
+                  "anchor": "t0",
+                  "field": "close"
+                },
+                "multiplier": 0.98
+              }
+            }
+          ]
+        },
+        "confirmation_requires_anchor_condition": true
+      },
+      "exit_rules": [
+        {
+          "rule_id": "dd_two_consecutive_declines_early",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 2,
+            "end_offset_days": 5
+          },
+          "relative_to": "entry",
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "group",
+            "operator": "and",
+            "conditions": [
+              {
+                "node_type": "comparison",
+                "operator": "less_than",
+                "left": {
+                  "kind": "indicator",
+                  "indicator": {
+                    "indicator": "macd_percent_line",
+                    "field": "close",
+                    "fast_window": 10,
+                    "slow_window": 24,
+                    "signal_window": 8,
+                    "label": "DD"
+                  }
+                },
+                "right": {
+                  "kind": "lagged_indicator",
+                  "offset_days": -1,
+                  "indicator": {
+                    "indicator": "macd_percent_line",
+                    "field": "close",
+                    "fast_window": 10,
+                    "slow_window": 24,
+                    "signal_window": 8,
+                    "label": "DD"
+                  }
+                }
+              },
+              {
+                "node_type": "comparison",
+                "operator": "less_than",
+                "left": {
+                  "kind": "lagged_indicator",
+                  "offset_days": -1,
+                  "indicator": {
+                    "indicator": "macd_percent_line",
+                    "field": "close",
+                    "fast_window": 10,
+                    "slow_window": 24,
+                    "signal_window": 8,
+                    "label": "DD"
+                  }
+                },
+                "right": {
+                  "kind": "lagged_indicator",
+                  "offset_days": -2,
+                  "indicator": {
+                    "indicator": "macd_percent_line",
+                    "field": "close",
+                    "fast_window": 10,
+                    "slow_window": 24,
+                    "signal_window": 8,
+                    "label": "DD"
+                  }
+                }
+              }
+            ]
+          },
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
+        },
+        {
+          "rule_id": "ma20_crosses_above_close_after_five_days",
+          "priority": 2,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 5,
+            "end_offset_days": null
+          },
+          "relative_to": "entry",
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "cross",
+            "operator": "cross_above",
+            "left": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 20
+              }
+            },
+            "right": {
+              "kind": "market_field",
+              "field": "close"
+            }
+          },
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
+        }
+      ],
+      "persistent_states": [],
+      "lifecycle_policy": {
+        "sample_end_open_position": "leave_open_excluded",
+        "allow_reentry_after_exit": false
+      }
+    },
+    "assumptions": [
+      {
+        "code": "daily_close_execution_proxy",
+        "message": "原文“收盘前 5 分钟”的日线成交以当日收盘价代理；日线数据无法复原盘前 5 分钟价格。"
+      },
+      {
+        "code": "normal_signal_next_open_entry",
+        "message": "未触发观望时，按原文“第二天开盘时观望”的对照语义，于 t0+1 开盘价入场。"
+      },
+      {
+        "code": "five_day_dd_window",
+        "message": "“买入点的 5 个交易日内”按实际入场后的第 1 至第 5 个交易日解释；连续两日 DD 下降最早在第 2 日收盘确认。"
+      },
+      {
+        "code": "post_exit_reentry_disabled",
+        "message": "原文未定义平仓后的再次入场，因此保守设为平仓后不再进入新的候选点扫描。"
+      },
+      {
+        "code": "sample_end_open_excluded",
+        "message": "原文未定义样本结束未平仓头寸处理，因此保留未平仓头寸，并从已平仓 KPI 中排除。"
+      }
+    ],
+    "warnings": [
+      {
+        "code": "daily_open_confirmation_timing",
+        "message": "t0+1 的开盘跳空条件以日线 Open 判断；它决定当日开盘观望或执行。"
+      }
+    ],
+    "source_clauses": [
+      {
+        "clause_id": "C01",
+        "text": "SS:=10;LL:=24;MM:=8;\nDD:=(EMA(C,SS)-EMA(C,LL))/C*100;\nDED:EMA(DD,MM);\n买入条件："
+      },
+      {
+        "clause_id": "C02",
+        "text": "1. 60ma&gt;REF(60ma,1) and REF(60ma,1)&gt;Ref(60ma,2);{60ma连续二天上升}"
+      },
+      {
+        "clause_id": "C03",
+        "text": "2. Count(cross(20ma,60ma),5)&gt;=1;{5日至少发生过一次20Ma上穿60Ma}"
+      },
+      {
+        "clause_id": "C04",
+        "text": "3. DD&gt;=3 and DD&gt;REF(DD,1) and DED&gt;Ref(DED,1);{DD大于3，且DD和DED大于前一日的DD和\nDED}\n或者"
+      },
+      {
+        "clause_id": "C05",
+        "text": "1. 60ma&gt;REF(60ma,1) and REF(60ma,1)&gt;Ref(60ma,2);{60ma连续二天上升}"
+      },
+      {
+        "clause_id": "C06",
+        "text": "2. Count(cross(30ma,60ma),3)&gt;=1；{3日至少发生过一次30Ma上穿60Ma}"
+      },
+      {
+        "clause_id": "C07",
+        "text": "3. DD&gt;=6 and DD&gt;REF(DD,1); {DD大于6，且DD大于前一日的DD}\n或者"
+      },
+      {
+        "clause_id": "C08",
+        "text": "1. 20MA&gt;60Ma;{20Ma大于60Ma}"
+      },
+      {
+        "clause_id": "C09",
+        "text": "2. 30Ma&gt;60Ma; {30Ma大于60Ma}"
+      },
+      {
+        "clause_id": "C10",
+        "text": "3. Count(cross(20Ma,60Ma),5)&gt;=1; {5日至少发生过一次20Ma上穿60Ma}"
+      },
+      {
+        "clause_id": "C11",
+        "text": "4. Cross(20MA,30Ma);{20Ma上穿30Ma}"
+      },
+      {
+        "clause_id": "C12",
+        "text": "5. DD&gt;=2 and DD&gt;REF(DD,1); {DD大于2，且DD大于前一日的DD}\n当天的股价相对于前一天的涨幅超过5%，或是一根大阴线（实体大于2%），或第二天的\n开盘价低于前一天的收盘价2%，则第二天开盘时观望。若第二天收盘价符合所有条件，\n则第三天开盘时买入。若当日未能成交，不保留买入指令；下一个交易日重新计算全\n部条件。\n卖出条件："
+      },
+      {
+        "clause_id": "C13",
+        "text": "1. 自买入点的5个交易日内，出现DD连续二天下降，即抛出；"
+      },
+      {
+        "clause_id": "C14",
+        "text": "2. 自买入点的5个交易日起，Cross(20ma,Close);{股价下穿20Ma}\n卖出点为当日收盘前5分钟的价格。以当日收盘价作为策略的卖出点。实盘中可参考收盘\n前5分钟的价格和成交量预判，但以收盘结果确认。\n补充澄清信息：\n当信号日出现以下任一情形时触发等待：三种情形均独立触发等待，任一满足即等待。\n触发等待后，若次日收盘价不满足全部条件，则放弃本次信号；下一交易日重新计算。\n卖出条件 1：DD 在 5 日窗口内任意两个相邻交易日均下降。"
+      }
+    ],
+    "coverage": [
+      {
+        "clause_id": "C01",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C02",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0].conditions[0]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C03",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0].conditions[2]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C04",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0].conditions[3]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C05",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[1].conditions[0]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C06",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[1].conditions[2]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C07",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[1].conditions[3]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C08",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[0]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C09",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[1]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C10",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[2]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C11",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[3]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C12",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[4]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C13",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[0]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
+      },
+      {
+        "clause_id": "C14",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "exit_rules[1]"
+        ],
+        "explanation": "已映射为受限、可审计的时序 DSL 条件。"
       }
     ]
   }

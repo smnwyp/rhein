@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition, RollingCrossCountCondition
-from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDPercentLine, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
+from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDPercentLine, MACDPercentSignal, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand, CandlestickPatternCondition,
@@ -34,11 +34,12 @@ def _indicator(indicator: object) -> str:
     if isinstance(indicator, ADX): return f"ADX({indicator.window})"
     if isinstance(indicator, DMIADX): return f"DMI ADX({indicator.directional_window},{indicator.adx_window})"
     if isinstance(indicator, MarketIndexMACDLine): return f"指数 {indicator.index_symbol} DIF({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
-    if isinstance(indicator, MACDPercentLine):
+    if isinstance(indicator, (MACDPercentLine, MACDPercentSignal)):
         windows = f"{indicator.fast_window},{indicator.slow_window}"
         if indicator.signal_window is not None:
             windows += f",{indicator.signal_window}"
-        return f"{indicator.label or '归一化 EMA 差值'}({windows})"
+        name = indicator.label or '归一化 EMA 差值'
+        return f"{name}{' 信号线' if isinstance(indicator, MACDPercentSignal) else ''}({windows})"
     if isinstance(indicator, MACDSignal): return f"MACD 慢线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     if isinstance(indicator, MACDLine): return f"MACD 快线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     raise TypeError(f"unknown indicator: {type(indicator).__name__}")
@@ -156,9 +157,14 @@ def build_review_items(strategy: AnyStrategyDefinition) -> list[ReviewItem]:
         price = _entry_execution_name(strategy.entry.execution)
         branches = "；".join(f"t0+{branch.active_day.start_offset_days}（{branch.branch_id}）：若{_temporal_condition(branch.condition)}，按{price}入场" for branch in strategy.entry.branches)
         items.append(ReviewItem("条件入场", "entry.branches", branches + "。未命中任何分支则放弃该候选点。"))
-    else:
+    elif strategy.entry.mode == "wait_until":
         assert strategy.entry.defer_when is not None and strategy.entry.resume_when is not None
         items.append(ReviewItem("延后入场", "entry", f"若 t0 当日{_temporal_condition(strategy.entry.defer_when)}，则不入场；自下一交易日起，首次{_temporal_condition(strategy.entry.resume_when)}时按{_entry_execution_name(strategy.entry.execution)}入场。"))
+    else:
+        assert strategy.entry.observation_day is not None and strategy.entry.confirmed_entry_day is not None and strategy.entry.wait_when is not None
+        observation = _range(strategy.entry.observation_day.start_offset_days, strategy.entry.observation_day.end_offset_days)
+        confirmed = _range(strategy.entry.confirmed_entry_day.start_offset_days, strategy.entry.confirmed_entry_day.end_offset_days)
+        items.append(ReviewItem("次日观察与确认入场", "entry", f"{observation}：若{_temporal_condition(strategy.entry.wait_when)}，则观望；该日收盘重新满足完整 t0 条件时，{confirmed}按开盘价入场。若未触发观望，则 {observation} 按开盘价入场；重新确认失败即放弃该候选点。"))
     for index, state in enumerate(strategy.persistent_states):
         prefix = "实际入场日 E" if state.relative_to == "entry" else "t0"
         window = _range(state.active_days.start_offset_days, state.active_days.end_offset_days).replace("t0", prefix)

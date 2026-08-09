@@ -81,6 +81,18 @@ class MACDPercentLine(DSLModel):
         return self
 
 
+class MACDPercentSignal(MACDPercentLine):
+    """EMA signal line of the normalised percentage EMA spread.
+
+    Formula-language strategies often call this ``DED`` or ``DEA``.  It is
+    not the ordinary price-unit MACD signal line: its input is the percentage
+    quantity ``(EMA(fast)-EMA(slow))/Close*100``.
+    """
+
+    indicator: Literal["macd_percent_signal"]
+    signal_window: PositiveInt
+
+
 class MarketIndexMACDLine(DSLModel):
     """DIF line calculated from a named external market-index close series."""
 
@@ -98,4 +110,4 @@ class MarketIndexMACDLine(DSLModel):
         return self
 
 
-IndicatorDefinition = Annotated[SMA | EMA | RSI | RollingReturn | RollingMinimum | RollingMaximum | RollingMeanVolume | ADX | DMIADX | MACDLine | MACDSignal | MACDPercentLine | MarketIndexMACDLine, Field(discriminator="indicator")]
+IndicatorDefinition = Annotated[SMA | EMA | RSI | RollingReturn | RollingMinimum | RollingMaximum | RollingMeanVolume | ADX | DMIADX | MACDLine | MACDSignal | MACDPercentLine | MACDPercentSignal | MarketIndexMACDLine, Field(discriminator="indicator")]

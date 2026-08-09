@@ -186,8 +186,8 @@ def test_old_cached_kpis_remain_displayable_after_risk_metrics_are_added() -> No
     assert any("更新前的缓存" in info.value for info in app.info)
 
 
-def test_interpreter_loads_saved_run_and_renders_the_trade_chart() -> None:
-    """Regression path for a historical-result load hiding the entire K chart."""
+def test_interpreter_hides_stale_saved_run_when_the_strategy_dsl_changed() -> None:
+    """A historical result must not masquerade as evidence for a new DSL."""
     from streamlit.testing.v1 import AppTest
 
     app = AppTest.from_file("pages/1_Strategy_Interpreter.py")
@@ -197,16 +197,9 @@ def test_interpreter_loads_saved_run_and_renders_the_trade_chart() -> None:
     app.radio[0].set_value("已保存策略").run(timeout=45)
     saved_strategy = next(widget for widget in app.selectbox if widget.label == "选择已保存策略")
     saved_strategy.select("周四策略 · 已验证").run(timeout=45)
-    next(widget for widget in app.button if widget.label == "载入这次已保存回测").click().run(timeout=90)
-
     assert not app.exception
-    assert any(widget.value.endswith("：交易 K 线") for widget in app.subheader)
-    # Entry / exit audit is now drawn inside the price chart after the exit
-    # marker, so loading a saved result must not create a second dashboard
-    # sidecar for it.
-    # The first Vega-Lite chart is the trade chart; the second is the review
-    # timeline. Both must survive loading a saved result.
-    assert len(app.get("vega_lite_chart")) >= 2
+    assert not any(widget.label == "载入这次已保存回测" for widget in app.button)
+    assert any("基于旧 DSL 版本" in widget.value for widget in app.info)
 
 
 def test_trade_chart_keeps_price_macd_and_dmi_legends_independent() -> None:

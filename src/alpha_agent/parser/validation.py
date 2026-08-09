@@ -1,6 +1,6 @@
 """Deterministic domain semantics, separate from schema parsing."""
 from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, RollingComparisonCountCondition, RollingCrossCountCondition
-from alpha_agent.domain.indicators import ADX, DMIADX, MACDPercentLine, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn
+from alpha_agent.domain.indicators import ADX, DMIADX, MACDPercentLine, MACDPercentSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand,
@@ -32,7 +32,7 @@ def _series_dimension(o: MarketFieldOperand | IndicatorOperand | LaggedIndicator
     if isinstance(o.indicator, RSI): return "rsi"
     if isinstance(o.indicator, RollingReturn): return "return"
     if isinstance(o.indicator, (ADX, DMIADX)): return "adx"
-    if isinstance(o.indicator, (MarketIndexMACDLine, MACDPercentLine)): return "macd"
+    if isinstance(o.indicator, (MarketIndexMACDLine, MACDPercentLine, MACDPercentSignal)): return "macd"
     return "price"
 def _dimension(o: Operand) -> str:
     if isinstance(o, ScalarOperand): return "scalar"
@@ -67,7 +67,7 @@ def _temporal_dimension(operand: TemporalOperand) -> str:
             return "return"
         if isinstance(indicator, (ADX, DMIADX)):
             return "adx"
-        if isinstance(indicator, (MarketIndexMACDLine, MACDPercentLine)):
+        if isinstance(indicator, (MarketIndexMACDLine, MACDPercentLine, MACDPercentSignal)):
             return "macd"
         return "price"
     raise TypeError(f"unsupported temporal operand: {type(operand).__name__}")
@@ -163,6 +163,11 @@ def validate_strategy(strategy: AnyStrategyDefinition) -> None:
                 raise SemanticStrategyValidationFailure(issues)
             _walk_timed_condition(strategy.entry.defer_when, "entry.defer_when", issues, evaluated_on_anchor_day=True)
             _walk_timed_condition(strategy.entry.resume_when, "entry.resume_when", issues, evaluated_on_anchor_day=False)
+        elif strategy.entry.mode == "next_day_confirmation":
+            if strategy.entry.observation_day is None or strategy.entry.confirmed_entry_day is None or strategy.entry.wait_when is None:
+                issues.append(_issue("entry", "next_day_confirmation_predicates", "next_day_confirmation requires explicit observation, confirmed-entry, and wait predicates"))
+                raise SemanticStrategyValidationFailure(issues)
+            _walk_timed_condition(strategy.entry.wait_when, "entry.wait_when", issues, evaluated_on_anchor_day=False)
         else:
             issues.append(_issue("entry.mode", "supported_entry_mode", f"unsupported entry mode: {strategy.entry.mode}"))
         if issues:

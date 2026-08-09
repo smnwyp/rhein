@@ -253,30 +253,45 @@ class EntryRule(DSLModel):
     condition languages is both redundant and a source of semantic drift.
     """
 
-    mode: Literal["fixed", "conditional", "wait_until"] = "fixed"
+    mode: Literal["fixed", "conditional", "wait_until", "next_day_confirmation"] = "fixed"
     active_day: RelativeDayRange | None = None
     condition: TemporalCondition | None = None
     execution: Literal["close", "open"]
     branches: list[EntryBranch] | None = None
     defer_when: TemporalCondition | None = None
     resume_when: TemporalCondition | None = None
+    # Bounded t1 observation and t2 open entry.  It is intentionally not an
+    # unbounded wait: a failed t1 re-check discards this t0 candidate.
+    observation_day: RelativeDayRange | None = None
+    confirmed_entry_day: RelativeDayRange | None = None
+    wait_when: TemporalCondition | None = None
+    confirmation_requires_anchor_condition: bool = False
 
     @model_validator(mode="after")
     def entry_must_be_one_day(self) -> "EntryRule":
         if self.mode == "fixed":
-            if self.active_day is None or self.branches is not None or self.defer_when is not None or self.resume_when is not None:
+            if self.active_day is None or self.branches is not None or self.defer_when is not None or self.resume_when is not None or self.observation_day is not None or self.confirmed_entry_day is not None or self.wait_when is not None or self.confirmation_requires_anchor_condition:
                 raise ValueError("fixed entry requires active_day and cannot define branches")
             if self.active_day.end_offset_days != self.active_day.start_offset_days:
                 raise ValueError("entry active_day must name exactly one relative day")
         elif self.mode == "conditional":
-            if self.active_day is not None or self.condition is not None or not self.branches:
+            if self.active_day is not None or self.condition is not None or not self.branches or self.defer_when is not None or self.resume_when is not None or self.observation_day is not None or self.confirmed_entry_day is not None or self.wait_when is not None or self.confirmation_requires_anchor_condition:
                 raise ValueError("conditional entry requires one or more branches only")
             offsets = [branch.active_day.start_offset_days for branch in self.branches]
             if len(offsets) != len(set(offsets)):
                 raise ValueError("conditional entry branches must use distinct relative days")
-        else:
-            if self.active_day is not None or self.condition is not None or self.branches is not None or self.defer_when is None or self.resume_when is None:
+        elif self.mode == "wait_until":
+            if self.active_day is not None or self.condition is not None or self.branches is not None or self.defer_when is None or self.resume_when is None or self.observation_day is not None or self.confirmed_entry_day is not None or self.wait_when is not None or self.confirmation_requires_anchor_condition:
                 raise ValueError("wait_until entry requires defer_when and resume_when only")
+        else:
+            if self.active_day is not None or self.condition is not None or self.branches is not None or self.defer_when is not None or self.resume_when is not None or self.observation_day is None or self.confirmed_entry_day is None or self.wait_when is None or not self.confirmation_requires_anchor_condition:
+                raise ValueError("next_day_confirmation requires observation/confirmed-entry days, wait_when, and anchor confirmation")
+            if self.execution != "open":
+                raise ValueError("next_day_confirmation requires open execution")
+            if self.observation_day.end_offset_days != self.observation_day.start_offset_days or self.confirmed_entry_day.end_offset_days != self.confirmed_entry_day.start_offset_days:
+                raise ValueError("next_day_confirmation days must each name exactly one relative day")
+            if self.confirmed_entry_day.start_offset_days != self.observation_day.start_offset_days + 1:
+                raise ValueError("next_day_confirmation entry must be exactly one trading day after observation")
         return self
 
 

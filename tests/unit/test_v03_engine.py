@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from alpha_agent.domain.conditions import CrossCondition, RollingCrossCountCondition
-from alpha_agent.domain.indicators import ADX, DMIADX, MACDLine, MACDPercentLine, MACDSignal, MarketIndexMACDLine, RollingMaximum, RollingMinimum, SMA
+from alpha_agent.domain.indicators import ADX, DMIADX, MACDLine, MACDPercentLine, MACDPercentSignal, MACDSignal, MarketIndexMACDLine, RollingMaximum, RollingMinimum, SMA
 from alpha_agent.domain.operands import IndicatorOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand,
@@ -36,6 +36,9 @@ def test_percent_dif_and_rolling_cross_count_preserve_formula_strategy_semantics
         * 100
     ).to_numpy()
     np.testing.assert_allclose(_indicator_values(frame, percent_dif), expected_percent_dif, equal_nan=True)
+    percent_signal = MACDPercentSignal(indicator="macd_percent_signal", fast_window=12, slow_window=26, signal_window=9, label="DED")
+    expected_percent_signal = pd.Series(expected_percent_dif).ewm(span=9, adjust=False, min_periods=9).mean().to_numpy()
+    np.testing.assert_allclose(_indicator_values(frame, percent_signal), expected_percent_signal, equal_nan=True)
     assert two_window_percent_dif.signal_window is None
     assert _indicator_label(MACDPercentLine(indicator="macd_percent_line", fast_window=10, slow_window=24, label="DD")) == "DD(10,24)"
     condition = RollingCrossCountCondition(
@@ -45,6 +48,35 @@ def test_percent_dif_and_rolling_cross_count_preserve_formula_strategy_semantics
         right=IndicatorOperand(kind="indicator", indicator=SMA(indicator="sma", field="close", window=8)),
     )
     assert any(_static_condition(frame, condition, index) for index in range(8, len(frame)))
+
+
+def test_next_day_confirmation_entry_is_bounded_and_rechecks_the_anchor_at_t1():
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-01", periods=4, freq="B"),
+        "Open": [10.0, 20.0, 30.0, 40.0], "High": [11.0, 21.0, 31.0, 41.0],
+        "Low": [9.0, 19.0, 29.0, 39.0], "Close": [10.0, 20.0, 30.0, 40.0], "Volume": [100.0] * 4,
+    })
+    payload = {
+        "schema_version": "0.3", "symbol": "TEST", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": _cmp(_field("close"), {"kind": "scalar", "value": 0}), "constraints": []},
+        "entry": {
+            "mode": "next_day_confirmation", "execution": "open",
+            "observation_day": {"start_offset_days": 1, "end_offset_days": 1},
+            "confirmed_entry_day": {"start_offset_days": 2, "end_offset_days": 2},
+            "wait_when": _cmp({"kind": "anchor_market_field", "anchor": "t0", "field": "close"}, {"kind": "scalar", "value": 5}),
+            "confirmation_requires_anchor_condition": True,
+        },
+        "exit_rules": [{"rule_id": "never", "priority": 1, "relative_to": "entry", "active_days": {"start_offset_days": 1}, "kind": "close_condition", "condition": _cmp(_field("close"), {"kind": "scalar", "value": -1}, "less_than"), "execution": "close"}],
+        "lifecycle_policy": {"sample_end_open_position": "leave_open_excluded", "allow_reentry_after_exit": False},
+    }
+    strategy = TimedStrategyDefinition.model_validate(payload)
+    validate_strategy(strategy)
+    # Waiting t1 is explicitly followed by one t1 re-check and a t2-open
+    # execution; it cannot turn into an unbounded later entry.
+    assert _resolve_entry(frame, strategy, 0) == (2, 30.0)
+    payload["entry"]["wait_when"] = _cmp({"kind": "anchor_market_field", "anchor": "t0", "field": "close"}, {"kind": "scalar", "value": 15})
+    assert _resolve_entry(frame, TimedStrategyDefinition.model_validate(payload), 0) == (1, 20.0)
 
 
 def test_next_day_open_entry_can_exit_on_its_same_day_close():
