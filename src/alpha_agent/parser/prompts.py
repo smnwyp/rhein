@@ -120,6 +120,13 @@ larger than 2.5%, encode the equivalent explicit comparison using
 must be a market field or indicator evaluated on that same relative bar; do
 not misuse `scaled_entry_price`, which is only for the fixed actual entry
 price.
+For a formula explicitly defining `DIF=(EMA(close,fast)-EMA(close,slow))/close*100`,
+use `indicator=macd_percent_line` with the stated fast, slow, and signal windows.
+Its thresholds are percentage-point values: preserve them exactly, do not replace
+this with `macd_line`, and do not ask the user to convert them. For
+`COUNT(CROSS(left,right), N) >= K`, use `node_type=rolling_cross_count`,
+`operator=cross_above`, its two series operands, `lookback_days=N`, and
+`minimum_true_count=K`; it counts events, not persistent comparisons.
 Use only the field names and nested shapes in the supplied inner JSON Schema. In particular, do not
 invent fields such as `indicators`, `rules`, `order_type`, or `risk_management`."""
 
@@ -147,7 +154,7 @@ express it faithfully. Never invent a default parameter or execution assumption.
 The product policy uses final daily Close and Volume for every pre-close/minute
 order proxy. An explicit next-trading-day opening entry uses the daily Open.
 Current capabilities include daily-close or explicit next-open entries, comparisons, crosses, SMA/EMA/RSI/ADX/DMI-ADX/rolling return/rolling minimum/rolling maximum/rolling mean volume,
-MACD fast/signal lines, rolling comparison-count conditions, rolling close/low constraints,
+MACD fast/signal lines, percentage-normalized DIF lines, rolling comparison-count and rolling cross-count conditions, rolling close/low constraints,
 ordered A-to-B close drawdowns, close-executed conditional and wait-until entry rules,
 running maximum or tied top-two volume since anchor or in a fixed rolling window, persistent post-trigger state flags,
 doji/large-bearish patterns, and lifecycle choices.

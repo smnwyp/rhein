@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from alpha_agent.domain.conditions import CrossCondition
-from alpha_agent.domain.indicators import ADX, DMIADX, MACDLine, MACDSignal, MarketIndexMACDLine, RollingMaximum, RollingMinimum, SMA
+from alpha_agent.domain.conditions import CrossCondition, RollingCrossCountCondition
+from alpha_agent.domain.indicators import ADX, DMIADX, MACDLine, MACDPercentLine, MACDSignal, MarketIndexMACDLine, RollingMaximum, RollingMinimum, SMA
 from alpha_agent.domain.operands import IndicatorOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand,
@@ -20,6 +20,20 @@ from alpha_agent.parser.validation import validate_strategy
 def _field(name): return {"kind": "market_field", "field": name}
 def _sma(window): return {"kind": "indicator", "indicator": {"indicator": "sma", "field": "close", "window": window}}
 def _cmp(left, right, operator="greater_than"): return {"node_type": "comparison", "operator": operator, "left": left, "right": right}
+
+
+def test_percent_dif_and_rolling_cross_count_preserve_formula_strategy_semantics():
+    close = np.concatenate([np.full(30, 10.0), np.linspace(10, 14, 20)])
+    frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=len(close), freq="B"), "Open": close, "High": close + 1, "Low": close - 1, "Close": close, "Volume": 100.0})
+    percent_dif = MACDPercentLine(indicator="macd_percent_line", fast_window=12, slow_window=26, signal_window=9)
+    assert _indicator_values(frame, percent_dif)[-1] > 0
+    condition = RollingCrossCountCondition(
+        node_type="rolling_cross_count", lookback_days=5, minimum_true_count=1,
+        operator="cross_above",
+        left=IndicatorOperand(kind="indicator", indicator=SMA(indicator="sma", field="close", window=2)),
+        right=IndicatorOperand(kind="indicator", indicator=SMA(indicator="sma", field="close", window=8)),
+    )
+    assert any(_static_condition(frame, condition, index) for index in range(8, len(frame)))
 
 
 def _strategy() -> TimedStrategyDefinition:

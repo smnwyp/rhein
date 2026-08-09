@@ -34,7 +34,9 @@ _EXPLICIT_NONOPERATIVE_CLAUSE = re.compile(
 )
 
 
-def _normalize_provider_result(raw: Mapping[str, object]) -> dict[str, object]:
+def _normalize_provider_result(
+    raw: Mapping[str, object], request: StrategyInterpretationRequest | None = None,
+) -> dict[str, object]:
     """Remove only empty inactive fields leaked by the Bedrock transport envelope.
 
     Bedrock's tool schema must be non-recursive, whereas the DSL condition tree is
@@ -43,6 +45,28 @@ def _normalize_provider_result(raw: Mapping[str, object]) -> dict[str, object]:
     errors under the strict domain contract.
     """
     normalized = dict(raw)
+    # A provider occasionally returns precisely one ClarificationQuestion
+    # object rather than the required interpretation-result envelope.  This is
+    # transport-shape drift, not an answer to the user.  Wrap only the
+    # unmistakable question shape, retain every user-visible detail verbatim,
+    # and mark all source clauses unresolved rather than inventing DSL paths.
+    question_keys = {"question_id", "question", "target_path"}
+    if "status" not in normalized and question_keys.issubset(normalized):
+        question_text = str(normalized["question"])
+        coverage = []
+        if request is not None:
+            coverage = [{
+                "clause_id": clause.clause_id,
+                "disposition": "clarification_required",
+                "dsl_paths": [],
+                "explanation": "当前解释被一个待澄清的指标或执行口径阻塞。",
+            } for clause in request.source_clauses]
+        normalized = {
+            "status": "clarification_required",
+            "questions": [normalized],
+            "ambiguous_terms": [question_text],
+            "coverage": coverage,
+        }
     # Claude occasionally emits the requested inner StrategyDefinition itself,
     # rather than the surrounding interpretation-result envelope.  It is safe
     # to recognise only an unmistakable DSL root and adapt it; any unrelated
@@ -746,7 +770,7 @@ class StrategyInterpreterService:
             for attempt in range(2):
                 try:
                     self._report_progress("正在将语义清单编译为策略 DSL…" if attempt == 0 else "DSL 未通过本地校验；正在请求仅修复受影响条款…")
-                    raw = _normalize_provider_result(self._client.interpret_strategy(request))
+                    raw = _normalize_provider_result(self._client.interpret_strategy(request), request)
                     raw = _direct_dsl_fallback_coverage(raw, request)
                     raw = _repair_explicit_nonoperative_coverage(raw, request)
                     raw = _repair_coverage_paths_to_existing_ancestors(raw)

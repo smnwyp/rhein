@@ -1,6 +1,6 @@
 """Deterministic domain semantics, separate from schema parsing."""
-from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import ADX, DMIADX, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn
+from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, RollingComparisonCountCondition, RollingCrossCountCondition
+from alpha_agent.domain.indicators import ADX, DMIADX, MACDPercentLine, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand,
@@ -32,7 +32,7 @@ def _series_dimension(o: MarketFieldOperand | IndicatorOperand | LaggedIndicator
     if isinstance(o.indicator, RSI): return "rsi"
     if isinstance(o.indicator, RollingReturn): return "return"
     if isinstance(o.indicator, (ADX, DMIADX)): return "adx"
-    if isinstance(o.indicator, MarketIndexMACDLine): return "macd"
+    if isinstance(o.indicator, (MarketIndexMACDLine, MACDPercentLine)): return "macd"
     return "price"
 def _dimension(o: Operand) -> str:
     if isinstance(o, ScalarOperand): return "scalar"
@@ -67,7 +67,7 @@ def _temporal_dimension(operand: TemporalOperand) -> str:
             return "return"
         if isinstance(indicator, (ADX, DMIADX)):
             return "adx"
-        if isinstance(indicator, MarketIndexMACDLine):
+        if isinstance(indicator, (MarketIndexMACDLine, MACDPercentLine)):
             return "macd"
         return "price"
     raise TypeError(f"unsupported temporal operand: {type(operand).__name__}")
@@ -76,6 +76,9 @@ def _walk(c: Condition, path: str, issues: list[dict[str, str]]) -> None:
         for i, child in enumerate(c.conditions): _walk(child, f"{path}.conditions[{i}]", issues)
     elif isinstance(c, RollingComparisonCountCondition):
         _walk(c.comparison, f"{path}.comparison", issues)
+    elif isinstance(c, RollingCrossCountCondition):
+        # Both operands are statically typed as time-series operands.
+        pass
     elif isinstance(c, ComparisonCondition):
         l, r = _dimension(c.left), _dimension(c.right)
         if "scalar" not in (l, r) and l != r: issues.append(_issue(path, "compatible_operands", f"cannot compare {l} with {r}"))

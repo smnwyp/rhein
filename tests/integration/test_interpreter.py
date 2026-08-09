@@ -40,6 +40,51 @@ def test_clarification_and_partial_strategy_are_validated():
     with pytest.raises(SemanticStrategyValidationFailure): StrategyInterpreterService(FakeModelClient([invalid])).interpret(StrategyInterpretationRequest(strategy_text="ambiguous"))
 
 
+def test_bare_provider_question_is_wrapped_as_a_valid_clarification_result():
+    raw_question = {
+        "question_id": "Q01",
+        "question": "请确认 DIF 的计算口径。",
+        "target_path": "anchor.condition",
+        "suggested_answers": ["使用百分比 DIF"],
+        "answer_kind": "choice",
+    }
+    request = StrategyInterpretationRequest(strategy_text="DIF 有阈值。")
+    result = StrategyInterpreterService(FakeModelClient([raw_question])).interpret(request)
+    assert isinstance(result, ClarificationRequired)
+    assert result.questions[0].question_id == "Q01"
+    # The service enriches a hand-built request with deterministic source clauses.
+    assert len(result.coverage) == 1
+
+
+def test_formula_language_percent_dif_and_counted_crosses_are_not_downgraded_to_standard_macd():
+    percent_dif = {"indicator": "macd_percent_line", "fast_window": 12, "slow_window": 26, "signal_window": 9}
+    sma = lambda window: {"kind": "indicator", "indicator": {"indicator": "sma", "field": "close", "window": window}}
+    dif = {"kind": "indicator", "indicator": percent_dif}
+    previous_dif = {"kind": "lagged_indicator", "offset_days": -1, "indicator": percent_dif}
+    rising_60 = cmp(sma(60), {"kind": "lagged_indicator", "offset_days": -1, "indicator": {"indicator": "sma", "field": "close", "window": 60}})
+    counted_cross = lambda left, right, days: {"node_type": "rolling_cross_count", "lookback_days": days, "minimum_true_count": 1, "operator": "cross_above", "left": sma(left), "right": sma(right)}
+    rising_dif = lambda floor: group("and", cmp(dif, s(floor), "greater_than_or_equal"), cmp(dif, previous_dif))
+    entry = group("or",
+        group("and", rising_60, counted_cross(20, 60, 5), rising_dif(3)),
+        group("and", rising_60, counted_cross(30, 60, 3), rising_dif(6)),
+        group("and", cmp(sma(20), sma(60)), cmp(sma(30), sma(60)), counted_cross(20, 60, 5), cross(sma(20), sma(30), "cross_above"), rising_dif(2)),
+    )
+    exit = cross(sma(20), f("close"), "cross_above")
+    request = StrategyInterpretationRequest(strategy_text="公式策略：DIF 百分比；三个或分支；卖出 Cross(20ma,Close)。", symbol="AAON")
+    clauses = segment_source_clauses(request.strategy_text)
+    response = {
+        "status": "parsed",
+        "strategy": {"schema_version": "0.1", "symbol": "AAON", "frequency": "1d", "direction": "long_only", "position_mode": "fully_invested_or_flat", "entry_condition": entry, "exit_condition": exit},
+        "assumptions": [], "warnings": [],
+        "coverage": [{"clause_id": clause.clause_id, "disposition": "mapped", "dsl_paths": ["entry_condition", "exit_condition"], "explanation": "公式条件已按显式指标、交叉事件与或分支映射。"} for clause in clauses],
+    }
+    result = StrategyInterpreterService(FakeModelClient([response])).interpret(request)
+    assert isinstance(result, ParsedStrategy)
+    payload = result.strategy.model_dump(mode="json")
+    assert 'macd_percent_line' in str(payload)
+    assert 'rolling_cross_count' in str(payload)
+
+
 def test_invalid_optional_clarification_draft_is_discarded_but_questions_are_preserved():
     raw = {
         "status": "clarification_required",

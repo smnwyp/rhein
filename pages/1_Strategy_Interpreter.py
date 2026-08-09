@@ -36,7 +36,7 @@ from rhein.backtest import input_files as backtest_input_files, load_ohlc as bac
 from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.summaries import style_by_drawdown
-from rhein.ui.trade_chart import event_text_layer, trade_selector_options
+from rhein.ui.trade_chart import compact_audit_overlay_lines, event_text_layer, selected_event_id, trade_selector_options
 from rhein.ui.chart_theme import event_annotation_style
 from rhein.ui.dmi import add_display_dmi
 from rhein.ui.macd import add_display_macd
@@ -192,29 +192,6 @@ def chart_event_points(trade: pd.Series) -> list[dict[str, object]]:
         {"event_id": "anchor", "label": "t0 基准点", "date": str(trade["signal"]), "price": trade.get("entry_px")},
         {"event_id": "entry", "label": "入场", "date": str(trade["entry"]), "price": trade.get("entry_px")},
         {"event_id": "exit", "label": "出场", "date": str(trade["exit"]), "price": trade.get("exit_px")},
-    ]
-
-
-def anchor_check_rows(trade: pd.Series) -> list[dict[str, object]]:
-    """Convert deterministic C/t0 condition snapshots into a review table."""
-    raw_checks = trade.get("anchor_checks")
-    if not isinstance(raw_checks, list):
-        return []
-    operator_labels = {"greater_than": ">", "less_than": "<", "greater_than_or_equal": "≥", "less_than_or_equal": "≤", "equal": "=", "group_result": "结果"}
-    return [
-        {
-            "DSL 路径": str(check["dsl_path"]),
-            "左侧": str(check["left"]),
-            "左侧数值": check.get("left_value"),
-            "比较": operator_labels.get(str(check["operator"]), str(check["operator"])),
-            "右侧": str(check["right"]),
-            "右侧数值": check.get("right_value"),
-            "前一日左侧": check.get("prior_left_value"),
-            "前一日右侧": check.get("prior_right_value"),
-            "结果": "通过" if check.get("passed") else "未通过",
-        }
-        for check in raw_checks
-        if isinstance(check, dict) and {"dsl_path", "left", "operator", "right"}.issubset(check)
     ]
 
 
@@ -893,6 +870,29 @@ if matching_result is not None:
                                 }
                                 for position, labels in marker_labels.items()
                             ]
+                            # Keep the visible structural annotations compact,
+                            # but expose entry / exit as separate hit targets.
+                            # A single candle can contain C/t0 and entry, so
+                            # grouping all labels into one marker would make it
+                            # impossible for Vega-Lite to tell which audit the
+                            # user intended to inspect.
+                            audit_markers: list[dict[str, object]] = []
+                            for event_point in event_points:
+                                event_id = str(event_point.get("event_id", ""))
+                                if event_id not in {"entry", "exit"}:
+                                    continue
+                                date = pd.Timestamp(event_point["date"]).normalize()
+                                positions = chart.index[chart_dates_for_markers == date]
+                                if len(positions):
+                                    position = int(positions[0])
+                                    price = event_point.get("price")
+                                    audit_markers.append({
+                                        "Index": position,
+                                        "Date": str(chart.loc[position, "Date"]),
+                                        "EventPrice": float(price) if isinstance(price, (int, float)) else float(chart.loc[position, "Close"]),
+                                        "EventId": event_id,
+                                        "EventLabel": "入场条件" if event_id == "entry" else "出场条件",
+                                    })
                             chart["Date"] = pd.to_datetime(chart["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
                             # A tightly packed ordinal date band gives each
                             # trading day its own slot while showing readable
@@ -926,6 +926,11 @@ if matching_result is not None:
                                 {"field":"EventPrice","type":"quantitative","title":"事件价格","format":".4f"},
                                 {"field":"Index","type":"quantitative","title":"图内零基索引","format":"d"},
                             ]
+                            clickable_event_tooltip = [
+                                {"field": "EventLabel", "type": "nominal", "title": "点击查看"},
+                                {"field": "Date", "type": "nominal", "title": "日期"},
+                                {"field": "EventPrice", "type": "quantitative", "title": "事件价格", "format": ".4f"},
+                            ]
                             macd_tooltip = [
                                 {"field":"Date","type":"nominal","title":"日期"},
                                 {"field":"MACD_DIF","type":"quantitative","title":"DIF (12,24)","format":".4f"},
@@ -939,9 +944,63 @@ if matching_result is not None:
                                 {"field":"DMI_ADX","type":"quantitative","title":"ADX (6)","format":".2f"},
                                 {"field":"DMI_ADXR","type":"quantitative","title":"ADXR (6)","format":".2f"},
                             ]
+                            # The card is rendered *inside* the price chart on
+                            # the bars after the exit point.  It is built from
+                            # the deterministic replay audit, never a chart
+                            # approximation or LLM explanation.
+                            event_detail_key = f"dsl_chart_event_detail::{current_backtest_view_scope}::{selected_symbol}::{trade_id}"
+                            selected_event_id_for_detail = st.session_state.get(event_detail_key)
+                            event_audit: dict[str, object] | None = None
+                            audit_overlay_lines: list[str] = []
+                            if selected_event_id_for_detail in {"entry", "exit"} and matching_result.strategy.schema_version == "0.3":
+                                try:
+                                    timed_for_audit = TimedStrategyDefinition.model_validate(matching_result.strategy.model_dump(mode="json"))
+                                    event_audit = build_trade_event_audit(
+                                        source_chart,
+                                        strategy=timed_for_audit,
+                                        signal_date=str(trade["signal"]),
+                                        entry_date=str(trade["entry"]),
+                                        exit_date=str(trade["exit"]),
+                                        reason=str(trade["reason"]),
+                                        event=selected_event_id_for_detail,
+                                        market_index=audit_market_index,
+                                    )
+                                    audit_overlay_lines = compact_audit_overlay_lines(event_audit_rows(event_audit))
+                                except (ValueError, UnsupportedStrategyFeature):
+                                    # The chart itself must remain visible even
+                                    # when an optional evidence replay cannot be
+                                    # built for an old artifact.
+                                    event_audit = None
+                            audit_card: list[dict[str, object]] = []
+                            audit_card_lines: list[dict[str, object]] = []
+                            if event_audit is not None:
+                                exit_marker = next((item for item in audit_markers if item["EventId"] == "exit"), None)
+                                exit_index = int(exit_marker["Index"]) if exit_marker is not None else max(0, len(chart) - 28)
+                                start_index = min(len(chart) - 1, exit_index + 3)
+                                end_index = min(len(chart) - 1, start_index + 25)
+                                top = float(chart["High"].max()) + label_offset * 2.8
+                                bottom = top - price_span * min(0.46, 0.10 + 0.052 * (len(audit_overlay_lines) + 2))
+                                title = "入场条件核对" if selected_event_id_for_detail == "entry" else "出场条件核对"
+                                audit_card = [{
+                                    "Start": str(chart.loc[start_index, "Date"]), "End": str(chart.loc[end_index, "Date"]),
+                                    "Top": top, "Bottom": bottom, "Title": title,
+                                }]
+                                card_lines = [title, str(event_audit.get("summary", ""))] + (audit_overlay_lines or ["没有可逐项展示的技术条件。"])
+                                line_step = (top - bottom) / (len(card_lines) + 1.6)
+                                audit_card_lines = [{
+                                    "Start": str(chart.loc[start_index, "Date"]),
+                                    "LinePrice": top - line_step * (line_index + 1),
+                                    "Text": line,
+                                    "Title": line_index == 0,
+                                } for line_index, line in enumerate(card_lines)]
                             annotation_style = event_annotation_style(st.context.theme.type)
                             event_color = annotation_style["color"]
                             spec = {
+                                # A compound Vega chart has a fixed intrinsic
+                                # minimum width. Keep it inside the left
+                                # sidecar column; otherwise it can paint over
+                                # the condition card on wide dashboard pages.
+                                "width": 1200,
                                 "vconcat": [
                                     {
                                         "height": 360,
@@ -953,6 +1012,18 @@ if matching_result is not None:
                                             {"data": {"values": markers}, "mark": {"type": "rule", "color": event_color, "strokeWidth": 1.2}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "y2": {"field": "LabelPrice"}, "tooltip": event_tooltip}},
                                             {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 90, "color": event_color}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "tooltip": event_tooltip}},
                                             {"data": {"values": markers}, "mark": {"type": "text", "fontWeight": "bold", "color": event_color}, "encoding": {"x": x, "y": {"field": "LabelPrice", "type": "quantitative"}, "text": {"field": "ShortLabel"}, "tooltip": event_tooltip}},
+                                            # When an entry/exit marker is selected, keep the
+                                            # proof next to the trade rather than putting it in
+                                            # a separate right-side dashboard column. The card
+                                            # begins after exit + 3 bars, leaving both markers
+                                            # and the associated candles unobscured.
+                                            {"data": {"values": audit_card}, "mark": {"type": "rect", "fill": "#ffffff", "fillOpacity": 0.94, "stroke": "#cbd5e1", "strokeWidth": 1, "cornerRadius": 8}, "encoding": {"x": {"field": "Start", "type": "ordinal"}, "x2": {"field": "End"}, "y": {"field": "Bottom", "type": "quantitative"}, "y2": {"field": "Top"}}},
+                                            {"data": {"values": audit_card_lines}, "mark": {"type": "text", "align": "left", "baseline": "top", "dx": 10, "fontSize": 11, "color": "#334155", "limit": 360}, "encoding": {"x": {"field": "Start", "type": "ordinal"}, "y": {"field": "LinePrice", "type": "quantitative"}, "text": {"field": "Text", "type": "nominal"}}},
+                                            # The selection is deliberately scoped to this unit
+                                            # layer. A top-level selection on a vconcat chart can
+                                            # cause Vega-Lite to bind to every child view and leave
+                                            # the whole chart blank.
+                                            {"data": {"values": audit_markers}, "params": [{"name": "trade_event", "select": {"type": "point", "fields": ["EventId"], "on": "click", "clear": "dblclick"}}], "mark": {"type": "point", "filled": True, "size": 520, "opacity": 0.015, "cursor": "pointer"}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "tooltip": clickable_event_tooltip}},
                                         ],
                                     },
                                     {"height": 100, "mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Volume", "type": "quantitative"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
@@ -986,97 +1057,17 @@ if matching_result is not None:
                             text_mark = annotation_text_layer["mark"]
                             text_mark.update({"fontSize": 13, "stroke": annotation_style["halo_color"], "strokeWidth": annotation_style["halo_width"], "align": "left", "dx": 4, "baseline": "bottom"})
                             annotation_text_layer["encoding"]["text"]["type"] = "nominal"
-                            st.vega_lite_chart(chart, spec, width="stretch", key=f"dsl_chart_{selected_symbol}_{trade_id}")
-                            event_detail_key = f"dsl_chart_event_detail::{current_backtest_view_scope}::{selected_symbol}::{trade_id}"
-                            entry_control, exit_control = st.columns(2)
-                            if entry_control.button("查看入场点条件", key=f"{event_detail_key}::entry", width="stretch"):
-                                st.session_state[event_detail_key] = "entry"
-                            if exit_control.button("查看出场点条件", key=f"{event_detail_key}::exit", width="stretch"):
-                                st.session_state[event_detail_key] = "exit"
-                            selected_event_id_for_detail = st.session_state.get(event_detail_key)
-                            if selected_event_id_for_detail in {"entry", "exit"}:
-                                if matching_result.strategy.schema_version != "0.3":
-                                    st.info("此历史结果没有 v0.3 的逐点条件审计；请重新以 v0.3 DSL 运行回测后查看。")
-                                else:
-                                    try:
-                                        timed_for_audit = TimedStrategyDefinition.model_validate(matching_result.strategy.model_dump(mode="json"))
-                                        event_audit = build_trade_event_audit(
-                                            source_chart,
-                                            strategy=timed_for_audit,
-                                            signal_date=str(trade["signal"]),
-                                            entry_date=str(trade["entry"]),
-                                            exit_date=str(trade["exit"]),
-                                            reason=str(trade["reason"]),
-                                            event=selected_event_id_for_detail,
-                                            market_index=audit_market_index,
-                                        )
-                                        event_title = "入场条件核对" if selected_event_id_for_detail == "entry" else "出场条件核对"
-                                        with st.container(border=True):
-                                            st.markdown(f"#### {event_title}")
-                                            st.caption("来自确定性回测引擎的同一套计算；绿色“通过”说明该数值满足该规则。AND/OR 组合会额外显示组合结果。")
-                                            st.write(str(event_audit["summary"]))
-                                            rows_for_event = event_audit_rows(event_audit)
-                                            if rows_for_event:
-                                                st.dataframe(pd.DataFrame(rows_for_event), hide_index=True, width="stretch")
-                                            else:
-                                                st.info("此点没有可逐项展示的技术条件（例如样本末尾强制平仓）。")
-                                    except (ValueError, UnsupportedStrategyFeature) as error:
-                                        st.warning(f"无法生成该点的确定性审计：{error}")
-                            checks = anchor_check_rows(trade)
-                            # Historical runs predate group-level snapshots.
-                            # Rebuild the audit from the exact same source
-                            # data and deterministic engine so OR/AND results
-                            # are visible instead of looking like every false
-                            # alternative invalidated this accepted C point.
-                            if matching_result.strategy.schema_version == "0.3":
-                                try:
-                                    timed_for_c_point_audit = TimedStrategyDefinition.model_validate(matching_result.strategy.model_dump(mode="json"))
-                                    c_point_audit = build_trade_event_audit(
-                                        source_chart,
-                                        strategy=timed_for_c_point_audit,
-                                        signal_date=str(trade["signal"]),
-                                        entry_date=str(trade["entry"]),
-                                        exit_date=str(trade["exit"]),
-                                        reason=str(trade["reason"]),
-                                        event="entry",
-                                        market_index=audit_market_index,
-                                    )
-                                    checks = event_audit_rows(c_point_audit)
-                                except (ValueError, UnsupportedStrategyFeature):
-                                    pass
-                            if checks:
-                                with st.expander("C 点入场条件核对", expanded=True):
-                                    st.success("最终 C/t0 入场判定：通过。AND 组合要求全部子条件通过；OR 组合只要求至少一个分支通过。")
-                                    st.caption("表中“未通过”可能是 OR 的另一条候选分支；请以标有“组合条件（AND/OR）”的结果行为准。")
-                                    st.dataframe(pd.DataFrame(checks), hide_index=True, width="stretch")
-                            if matching_result.strategy.schema_version == "0.3":
-                                try:
-                                    timed_for_exit_audit = TimedStrategyDefinition.model_validate(
-                                        matching_result.strategy.model_dump(mode="json")
-                                    )
-                                    exit_audit = build_trade_event_audit(
-                                        source_chart,
-                                        strategy=timed_for_exit_audit,
-                                        signal_date=str(trade["signal"]),
-                                        entry_date=str(trade["entry"]),
-                                        exit_date=str(trade["exit"]),
-                                        reason=str(trade["reason"]),
-                                        event="exit",
-                                        market_index=audit_market_index,
-                                    )
-                                    exit_checks = event_audit_rows(exit_audit)
-                                    with st.expander("出场条件核对", expanded=False):
-                                        st.success(str(exit_audit["summary"]))
-                                        st.caption(
-                                            "每条退出规则均按实际出场日重新计算：先核对生效日范围与状态门槛，"
-                                            "再核对所有技术条件和 AND/OR 组合结果。只有“规则最终结果”为通过的规则可触发出场。"
-                                        )
-                                        if exit_checks:
-                                            st.dataframe(pd.DataFrame(exit_checks), hide_index=True, width="stretch")
-                                        else:
-                                            st.info("该笔交易没有可逐项展示的技术出场条件。")
-                                except (ValueError, UnsupportedStrategyFeature) as error:
-                                    st.warning(f"无法生成本笔交易的出场条件核对：{error}")
+                            chart_state = st.vega_lite_chart(
+                                chart,
+                                spec,
+                                width="stretch",
+                                key=f"dsl_chart_{selected_symbol}_{trade_id}",
+                                on_select="rerun",
+                                selection_mode="trade_event",
+                            )
+                            clicked_event_id = selected_event_id(chart_state)
+                            if clicked_event_id is not None:
+                                st.session_state[event_detail_key] = clicked_event_id
                             if audit_rows:
                                 with st.expander("标注核对", expanded=False):
                                     st.caption("A/B/C 等点直接来自本笔交易的确定性回测 artifact；A/B 均按 DSL 指定的最早并列规则计算。")

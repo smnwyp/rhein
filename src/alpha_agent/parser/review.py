@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
+from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition, RollingCrossCountCondition
+from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDPercentLine, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand, CandlestickPatternCondition,
@@ -34,6 +34,7 @@ def _indicator(indicator: object) -> str:
     if isinstance(indicator, ADX): return f"ADX({indicator.window})"
     if isinstance(indicator, DMIADX): return f"DMI ADX({indicator.directional_window},{indicator.adx_window})"
     if isinstance(indicator, MarketIndexMACDLine): return f"指数 {indicator.index_symbol} DIF({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
+    if isinstance(indicator, MACDPercentLine): return f"百分比 DIF({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     if isinstance(indicator, MACDSignal): return f"MACD 慢线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     if isinstance(indicator, MACDLine): return f"MACD 快线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     raise TypeError(f"unknown indicator: {type(indicator).__name__}")
@@ -73,6 +74,7 @@ def _condition(condition: Condition) -> str:
     if isinstance(condition, ComparisonCondition): return f"{_operand(condition.left)} {_OPERATOR[condition.operator]} {_operand(condition.right)}"
     if isinstance(condition, CrossCondition): return f"{_operand(condition.left)} {_OPERATOR[condition.operator]} {_operand(condition.right)}"
     if isinstance(condition, RollingComparisonCountCondition): return f"最近 {condition.lookback_days} 日中，{_condition(condition.comparison)} 至少成立 {condition.minimum_true_count} 次"
+    if isinstance(condition, RollingCrossCountCondition): return f"最近 {condition.lookback_days} 日中，{_operand(condition.left)} {_OPERATOR[condition.operator]} {_operand(condition.right)} 至少出现 {condition.minimum_true_count} 次"
     if isinstance(condition, ConditionGroup):
         joiner = " 且 " if condition.operator == "and" else " 或 "
         return "(" + joiner.join(_condition(item) for item in condition.conditions) + ")"

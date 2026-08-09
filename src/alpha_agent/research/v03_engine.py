@@ -6,8 +6,8 @@ from typing import Callable, Literal
 import numpy as np
 import pandas as pd
 
-from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition
-from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
+from alpha_agent.domain.conditions import ComparisonCondition, Condition, ConditionGroup, CrossCondition, RollingComparisonCountCondition, RollingCrossCountCondition
+from alpha_agent.domain.indicators import ADX, DMIADX, EMA, MACDLine, MACDPercentLine, MACDSignal, MarketIndexMACDLine, RSI, RollingMaximum, RollingMeanVolume, RollingMinimum, RollingReturn, SMA
 from alpha_agent.domain.operands import IndicatorOperand, LaggedIndicatorOperand, MarketFieldOperand, Operand, ScalarOperand, ScaledOperand
 from alpha_agent.domain.sequence import (
     AnchorIndicatorChangeConstraint, AnchorIndicatorOperand, AnchorMarketOperand, AnchorRunningMaximumOperand, AnchorRunningVolumeRankOperand,
@@ -134,12 +134,14 @@ def _indicator_values(df: pd.DataFrame, indicator: object) -> np.ndarray:
         gain = delta.clip(lower=0).ewm(alpha=1 / indicator.window, adjust=False, min_periods=indicator.window).mean()
         loss = (-delta.clip(upper=0)).ewm(alpha=1 / indicator.window, adjust=False, min_periods=indicator.window).mean()
         values = (100 - 100 / (1 + gain / loss)).to_numpy()
-    elif isinstance(indicator, (MACDLine, MACDSignal)):
+    elif isinstance(indicator, (MACDLine, MACDSignal, MACDPercentLine)):
         fast = close.ewm(span=indicator.fast_window, adjust=False, min_periods=indicator.slow_window).mean()
         slow = close.ewm(span=indicator.slow_window, adjust=False, min_periods=indicator.slow_window).mean()
         line = fast - slow
         if isinstance(indicator, MACDSignal):
             values = line.ewm(span=indicator.signal_window, adjust=False, min_periods=indicator.signal_window).mean().to_numpy()
+        elif isinstance(indicator, MACDPercentLine):
+            values = (line / close.replace(0, np.nan) * 100).to_numpy()
         else:
             values = line.to_numpy()
     elif isinstance(indicator, MarketIndexMACDLine):
@@ -226,6 +228,12 @@ def _static_condition(df: pd.DataFrame, condition: Condition, index: int) -> boo
             for candidate_index in range(start, index + 1)
         )
         return passed >= condition.minimum_true_count
+    if isinstance(condition, RollingCrossCountCondition):
+        start = index - condition.lookback_days + 1
+        if start < 1:
+            return False
+        cross = CrossCondition(node_type="cross", operator=condition.operator, left=condition.left, right=condition.right)
+        return sum(_static_condition(df, cross, candidate) for candidate in range(start, index + 1)) >= condition.minimum_true_count
     raise UnsupportedStrategyFeature("v0.3 daily engine supports comparison/group anchor conditions only")
 
 
@@ -239,8 +247,8 @@ def _anchor_operand_label(operand: Operand) -> str:
 
 
 def _indicator_label(indicator: object) -> str:
-    if isinstance(indicator, (MACDLine, MACDSignal)):
-        component = "慢线" if isinstance(indicator, MACDSignal) else "快线"
+    if isinstance(indicator, (MACDLine, MACDSignal, MACDPercentLine)):
+        component = "慢线" if isinstance(indicator, MACDSignal) else ("百分比 DIF" if isinstance(indicator, MACDPercentLine) else "快线")
         return f"MACD{component}({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     if isinstance(indicator, DMIADX):
         return f"DMI ADX({indicator.directional_window},{indicator.adx_window})"
@@ -306,6 +314,19 @@ def _anchor_condition_checks(df: pd.DataFrame, condition: Condition, index: int,
             "right": str(condition.minimum_true_count),
             "right_value": condition.minimum_true_count,
             "passed": start >= 0 and count >= condition.minimum_true_count,
+        }]
+    if isinstance(condition, RollingCrossCountCondition):
+        start = index - condition.lookback_days + 1
+        cross = CrossCondition(node_type="cross", operator=condition.operator, left=condition.left, right=condition.right)
+        count = sum(_static_condition(df, cross, day) for day in range(max(1, start), index + 1))
+        return [{
+            "dsl_path": path,
+            "left": f"{condition.lookback_days} 日内{condition.operator}次数",
+            "left_value": count,
+            "operator": "greater_than_or_equal",
+            "right": str(condition.minimum_true_count),
+            "right_value": condition.minimum_true_count,
+            "passed": start >= 1 and count >= condition.minimum_true_count,
         }]
     raise UnsupportedStrategyFeature("v0.3 daily engine cannot materialize this anchor condition")
 

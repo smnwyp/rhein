@@ -8291,7 +8291,7 @@
     "strategy_id": "7106c7a1-6f19-4ab2-b7cc-657d594c755e",
     "strategy_name": "叠加大盘指数",
     "created_at": "2026-08-08T11:40:47.827941Z",
-   "original_language": "1. 数据与指标口径\n日线价格、均线、MACD、DMI、涨幅与 K 线形态，统一使用前复权数据。\n60日均线与 10 日均线均采用简单移动平均线（MA）。\nMACD 当前参数为 10、24、8：DIF：快线；DEA：慢线；\n所有“快线、慢线、金叉、死叉”均指 DIF 与 DEA 两条线，不包含 MACD 柱状图。\nDMI当前参数为10、6。\n\n2. 买入规则\n仅在空仓、且没有未完成卖出指令时考虑买入。\n以下前提必须同时满足：\nA.个股对应的大盘指数的DIF大于0。\nB. MA60（当日) > MA60(两日前)，即 60日均线向上。\nC. MACD 的DEA向上，即当日的DEA大于两日的。\nD. 公式DMI的ADX大于26，且向上，即当日DMI的ADX大于前两日的。\nE. MACD 的DIF 从零轴下方上穿零轴，且当日收盘价相对此前 20 个交易日的最低价，涨幅不超过 20%（前 20 日不包含买入当天，最低价取这 20 天中的日内最低价），即可买入；\n或者，DIF 位于零轴上方，且从下向上上穿 DEA（即前一日：DIF < DEA，当日：DIF > DEA），而且，当日收盘价相对此前 20 个交易日的最低价，涨幅不超过 40%（前 20 日不包含买入当天，最低价取这 20 天中的日内最低价），亦可买入。\n买入点为第二天的开盘价。若当日未能成交，不保留买入指令；下一交易日重新计算全部条件。\n\n3. 卖出规则\n买入后的第 1 至第 5个完整交易日（买入当天不计，买入后的下一个完整交易日为第 1 天），出现以下任一情况，即卖出：\nA. 死叉。DIF 下穿 DEA，形成死叉。即前一日：DIF > DEA，当日：DIF ≤ DEA。\nB. 下降形态。DIF 连续两日下降，即DIF(当日) < DIF(前一日)，且 DIF(前一日) < DIF(前两日)。\nC. 破MA5。当日收盘价<MA5，盘中跌破、但收盘重新站回 MA5，不卖出。\n\n买入后的第 6个交易日起，出现以下任一情况，即卖出：\nD. 大阴线。单根阴线实体跌幅大于 3%，即（开盘价 − 收盘价）÷ 开盘价 > 3%。\nE. 放大量。当日成交量与此前 29 个交易日合计 30 日的成交量比较，排名为最高或次高（并列同样成立）。\nF. 高位十字星。\n  十字星体可有上下影线，实体绝对幅度小于 0.5%，即| 收盘价 − 开盘价| ÷ 开盘价 < 0.5%。\n  高位：从本次买入的收盘价到当日收盘价的累计涨幅至少 15%，即（当日收盘价 ÷ 买入收盘价）− 1 ≥ 15%\nG. 破MA10。当日收盘价<MA10，盘中跌破、但收盘重新站回 MA10，不卖出。\nH. 死叉。DIF 下穿 DEA，形成死叉。即前一日：DIF > DEA，当日：DIF ≤ DEA。\n 卖出点为当日收盘前5分钟的价格。以当日收盘价作为策略买入点。实盘中可参考收盘前 5 分钟的价格和成交量预判，但以收盘结果最终确认。\n\n4. 执行与仓位规则\n当日同时出现买入与卖出信号时，优先卖出，当天不再买入。\n\n若卖出时因跌停、停牌或流动性不足无法成交，保留卖出意图，在下一个可交易时点继续优先卖出。\n全部可用资金一次只持有一只股票。\n卖出后不设冷静期；后续交易日若再次满足全部买入条件，可以重新买入。\n\n5. 尚可补充但不影响当前规则运行的项目\n适用的股票范围；\n是否排除 ST、停牌复牌、上市时间较短等标的；\n回测时的手续费、滑点与涨跌停成交规则。",
+    "original_language": "1. 数据与指标口径\n日线价格、均线、MACD、DMI、涨幅与 K 线形态，统一使用前复权数据。\n60日均线与 10 日均线均采用简单移动平均线（MA）。\nMACD 当前参数为 10、24、8：DIF：快线；DEA：慢线；\n所有“快线、慢线、金叉、死叉”均指 DIF 与 DEA 两条线，不包含 MACD 柱状图。\nDMI当前参数为10、6。\n\n2. 买入规则\n仅在空仓、且没有未完成卖出指令时考虑买入。\n以下前提必须同时满足：\nA.个股对应的大盘指数的DIF大于0。\nB. MA60（当日) > MA60(两日前)，即 60日均线向上。\nC. MACD 的DEA向上，即当日的DEA大于两日的。\nD. 公式DMI的ADX大于26，且向上，即当日DMI的ADX大于前两日的。\nE. MACD 的DIF 从零轴下方上穿零轴，且当日收盘价相对此前 20 个交易日的最低价，涨幅不超过 20%（前 20 日不包含买入当天，最低价取这 20 天中的日内最低价），即可买入；\n或者，DIF 位于零轴上方，且从下向上上穿 DEA（即前一日：DIF < DEA，当日：DIF > DEA），而且，当日收盘价相对此前 20 个交易日的最低价，涨幅不超过 40%（前 20 日不包含买入当天，最低价取这 20 天中的日内最低价），亦可买入。\n买入点为第二天的开盘价。若当日未能成交，不保留买入指令；下一交易日重新计算全部条件。\n\n3. 卖出规则\n买入后的第 1 至第 5个完整交易日（买入当天不计，买入后的下一个完整交易日为第 1 天），出现以下任一情况，即卖出：\nA. 死叉。DIF 下穿 DEA，形成死叉。即前一日：DIF > DEA，当日：DIF ≤ DEA。\nB. 下降形态。DIF 连续两日下降，即DIF(当日) < DIF(前一日)，且 DIF(前一日) < DIF(前两日)。\nC. 破MA5。当日收盘价<MA5，盘中跌破、但收盘重新站回 MA5，不卖出。\n\n买入后的第 6个交易日起，出现以下任一情况，即卖出：\nD. 大阴线。单根阴线实体跌幅大于 3%，即（开盘价 − 收盘价）÷ 开盘价 > 3%。\nE. 放大量。当日成交量与此前 29 个交易日合计 30 日的成交量比较，排名为最高或次高（并列同样成立）。\nF. 高位十字星。\n  十字星体可有上下影线，实体绝对幅度小于 0.5%，即| 收盘价 − 开盘价| ÷ 开盘价 < 0.5%。\n  高位：从本次买入的收盘价到当日收盘价的累计涨幅至少 15%，即（当日收盘价 ÷ 买入收盘价）− 1 ≥ 15%\nG. 破MA10。当日收盘价<MA10，盘中跌破、但收盘重新站回 MA10，不卖出。\nH. 死叉。DIF 下穿 DEA，形成死叉。即前一日：DIF > DEA，当日：DIF ≤ DEA。\n 卖出点为当日收盘前5分钟的价格。以当日收盘价作为策略买入点。实盘中可参考收盘前 5 分钟的价格和成交量预判，但以收盘结果最终确认。\n\n4. 执行与仓位规则\n当日同时出现买入与卖出信号时，优先卖出，当天不再买入。\n\n若卖出时因跌停、停牌或流动性不足无法成交，保留卖出意图，在下一个可交易时点继续优先卖出。\n全部可用资金一次只持有一只股票。\n卖出后不设冷静期；后续交易日若再次满足全部买入条件，可以重新买入。\n\n5. 尚可补充但不影响当前规则运行的项目\n适用的股票范围；\n是否排除 ST、停牌复牌、上市时间较短等标的；\n回测时的手续费、滑点与涨跌停成交规则。",
     "strategy": {
       "schema_version": "0.3",
       "strategy_name": "叠加大盘指数",
@@ -8314,6 +8314,7 @@
                 "indicator": {
                   "indicator": "market_index_macd_line",
                   "index_symbol": "^IXIC",
+                  "field": "close",
                   "fast_window": 10,
                   "slow_window": 24,
                   "signal_window": 8
@@ -8321,7 +8322,7 @@
               },
               "right": {
                 "kind": "scalar",
-                "value": 0
+                "value": 0.0
               }
             },
             {
@@ -8387,7 +8388,7 @@
                   },
                   "right": {
                     "kind": "scalar",
-                    "value": 26
+                    "value": 26.0
                   }
                 },
                 {
@@ -8436,7 +8437,7 @@
                       },
                       "right": {
                         "kind": "scalar",
-                        "value": 0
+                        "value": 0.0
                       }
                     },
                     {
@@ -8455,7 +8456,7 @@
                       },
                       "right": {
                         "kind": "scalar",
-                        "value": 0
+                        "value": 0.0
                       }
                     },
                     {
@@ -8500,7 +8501,7 @@
                       },
                       "right": {
                         "kind": "scalar",
-                        "value": 0
+                        "value": 0.0
                       }
                     },
                     {
@@ -8563,18 +8564,22 @@
           "start_offset_days": 1,
           "end_offset_days": 1
         },
-        "execution": "open"
+        "condition": null,
+        "execution": "open",
+        "branches": null,
+        "defer_when": null,
+        "resume_when": null
       },
       "exit_rules": [
         {
           "rule_id": "early_macd_dead_cross",
           "priority": 1,
-          "relative_to": "entry",
           "active_days": {
             "anchor": "t0",
             "start_offset_days": 1,
             "end_offset_days": 5
           },
+          "relative_to": "entry",
           "kind": "close_condition",
           "condition": {
             "node_type": "group",
@@ -8632,17 +8637,20 @@
               }
             ]
           },
-          "execution": "close"
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
         },
         {
           "rule_id": "early_macd_two_day_decline",
           "priority": 2,
-          "relative_to": "entry",
           "active_days": {
             "anchor": "t0",
             "start_offset_days": 1,
             "end_offset_days": 5
           },
+          "relative_to": "entry",
           "kind": "close_condition",
           "condition": {
             "node_type": "group",
@@ -8701,17 +8709,20 @@
               }
             ]
           },
-          "execution": "close"
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
         },
         {
           "rule_id": "early_break_ma5",
           "priority": 3,
-          "relative_to": "entry",
           "active_days": {
             "anchor": "t0",
             "start_offset_days": 1,
             "end_offset_days": 5
           },
+          "relative_to": "entry",
           "kind": "close_condition",
           "condition": {
             "node_type": "comparison",
@@ -8729,32 +8740,40 @@
               }
             }
           },
-          "execution": "close"
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
         },
         {
           "rule_id": "late_large_bearish",
           "priority": 4,
-          "relative_to": "entry",
           "active_days": {
             "anchor": "t0",
-            "start_offset_days": 6
+            "start_offset_days": 6,
+            "end_offset_days": null
           },
+          "relative_to": "entry",
           "kind": "close_condition",
           "condition": {
             "node_type": "candlestick_pattern",
             "pattern": "large_bearish",
             "body_to_open_threshold": 0.03
           },
-          "execution": "close"
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
         },
         {
           "rule_id": "late_top_two_volume",
           "priority": 5,
-          "relative_to": "entry",
           "active_days": {
             "anchor": "t0",
-            "start_offset_days": 6
+            "start_offset_days": 6,
+            "end_offset_days": null
           },
+          "relative_to": "entry",
           "kind": "close_condition",
           "condition": {
             "node_type": "comparison",
@@ -8766,19 +8785,23 @@
             },
             "right": {
               "kind": "scalar",
-              "value": 2
+              "value": 2.0
             }
           },
-          "execution": "close"
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
         },
         {
           "rule_id": "late_high_doji",
           "priority": 6,
-          "relative_to": "entry",
           "active_days": {
             "anchor": "t0",
-            "start_offset_days": 6
+            "start_offset_days": 6,
+            "end_offset_days": null
           },
+          "relative_to": "entry",
           "kind": "close_condition",
           "condition": {
             "node_type": "group",
@@ -8803,16 +8826,20 @@
               }
             ]
           },
-          "execution": "close"
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
         },
         {
           "rule_id": "late_break_ma10",
           "priority": 7,
-          "relative_to": "entry",
           "active_days": {
             "anchor": "t0",
-            "start_offset_days": 6
+            "start_offset_days": 6,
+            "end_offset_days": null
           },
+          "relative_to": "entry",
           "kind": "close_condition",
           "condition": {
             "node_type": "comparison",
@@ -8830,16 +8857,20 @@
               }
             }
           },
-          "execution": "close"
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
         },
         {
           "rule_id": "late_macd_dead_cross",
           "priority": 8,
-          "relative_to": "entry",
           "active_days": {
             "anchor": "t0",
-            "start_offset_days": 6
+            "start_offset_days": 6,
+            "end_offset_days": null
           },
+          "relative_to": "entry",
           "kind": "close_condition",
           "condition": {
             "node_type": "group",
@@ -8897,9 +8928,13 @@
               }
             ]
           },
-          "execution": "close"
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
         }
       ],
+      "persistent_states": [],
       "lifecycle_policy": {
         "sample_end_open_position": "leave_open_excluded",
         "allow_reentry_after_exit": true
@@ -8993,6 +9028,584 @@
         "disposition": "not_applicable",
         "dsl_paths": [],
         "explanation": "原文明确为不影响当前规则运行的后续研究设置，未写入执行 DSL。"
+      }
+    ]
+  },
+  {
+    "strategy_id": "a134ccbe-33b7-4cbf-be82-45191268c5bf",
+    "strategy_name": "大均线mmacd 2",
+    "created_at": "2026-08-09T10:02:07.337130Z",
+    "original_language": "SHORT:=12;LONG:=26;MID:=9;\nDIF:=(EMA(C,SHORT)-EMA(C,LONG))/C*100;\n买入条件：\n1. 60ma&gt;REF(60ma,1);\n2. Count(cross(20ma,60ma),5)&gt;=1;\n3. DIF&gt;=3 and DIF&gt;REF(DIF,1);\n或者\n1. 60ma&gt;REF(60ma,1);\n2. Count(cross(30ma,60ma),3)&gt;=1；\n3. DIF&gt;=6 and DIF&gt;REF(DIF,1);\n或者\n1. 20MA&gt;60Ma;\n2. 30Ma&gt;60Ma;\n3. Count(cross(20Ma,60Ma),5)&gt;=1;\n4. Cross(20MA,30Ma);\n5. DIF&gt;=2 and DIF&gt;REF(DIF,1);\n卖出条件：\nCross(20ma,Close);",
+    "strategy": {
+      "schema_version": "0.3",
+      "strategy_name": "大均线mmacd 2",
+      "symbol": "AAON",
+      "frequency": "1d",
+      "direction": "long_only",
+      "position_mode": "fully_invested_or_flat",
+      "data_requirement": "daily_ohlcv",
+      "anchor": {
+        "name": "t0",
+        "condition": {
+          "node_type": "group",
+          "operator": "or",
+          "conditions": [
+            {
+              "node_type": "group",
+              "operator": "and",
+              "conditions": [
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "rolling_cross_count",
+                  "lookback_days": 5,
+                  "minimum_true_count": 1,
+                  "operator": "cross_above",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 20
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "group",
+                  "operator": "and",
+                  "conditions": [
+                    {
+                      "node_type": "comparison",
+                      "operator": "greater_than_or_equal",
+                      "left": {
+                        "kind": "indicator",
+                        "indicator": {
+                          "indicator": "macd_percent_line",
+                          "field": "close",
+                          "fast_window": 12,
+                          "slow_window": 26,
+                          "signal_window": 9
+                        }
+                      },
+                      "right": {
+                        "kind": "scalar",
+                        "value": 3.0
+                      }
+                    },
+                    {
+                      "node_type": "comparison",
+                      "operator": "greater_than",
+                      "left": {
+                        "kind": "indicator",
+                        "indicator": {
+                          "indicator": "macd_percent_line",
+                          "field": "close",
+                          "fast_window": 12,
+                          "slow_window": 26,
+                          "signal_window": 9
+                        }
+                      },
+                      "right": {
+                        "kind": "lagged_indicator",
+                        "offset_days": -1,
+                        "indicator": {
+                          "indicator": "macd_percent_line",
+                          "field": "close",
+                          "fast_window": 12,
+                          "slow_window": 26,
+                          "signal_window": 9
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "node_type": "group",
+              "operator": "and",
+              "conditions": [
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  },
+                  "right": {
+                    "kind": "lagged_indicator",
+                    "offset_days": -1,
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "rolling_cross_count",
+                  "lookback_days": 3,
+                  "minimum_true_count": 1,
+                  "operator": "cross_above",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 30
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "group",
+                  "operator": "and",
+                  "conditions": [
+                    {
+                      "node_type": "comparison",
+                      "operator": "greater_than_or_equal",
+                      "left": {
+                        "kind": "indicator",
+                        "indicator": {
+                          "indicator": "macd_percent_line",
+                          "field": "close",
+                          "fast_window": 12,
+                          "slow_window": 26,
+                          "signal_window": 9
+                        }
+                      },
+                      "right": {
+                        "kind": "scalar",
+                        "value": 6.0
+                      }
+                    },
+                    {
+                      "node_type": "comparison",
+                      "operator": "greater_than",
+                      "left": {
+                        "kind": "indicator",
+                        "indicator": {
+                          "indicator": "macd_percent_line",
+                          "field": "close",
+                          "fast_window": 12,
+                          "slow_window": 26,
+                          "signal_window": 9
+                        }
+                      },
+                      "right": {
+                        "kind": "lagged_indicator",
+                        "offset_days": -1,
+                        "indicator": {
+                          "indicator": "macd_percent_line",
+                          "field": "close",
+                          "fast_window": 12,
+                          "slow_window": 26,
+                          "signal_window": 9
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "node_type": "group",
+              "operator": "and",
+              "conditions": [
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 20
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "comparison",
+                  "operator": "greater_than",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 30
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "rolling_cross_count",
+                  "lookback_days": 5,
+                  "minimum_true_count": 1,
+                  "operator": "cross_above",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 20
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 60
+                    }
+                  }
+                },
+                {
+                  "node_type": "cross",
+                  "operator": "cross_above",
+                  "left": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 20
+                    }
+                  },
+                  "right": {
+                    "kind": "indicator",
+                    "indicator": {
+                      "indicator": "sma",
+                      "field": "close",
+                      "window": 30
+                    }
+                  }
+                },
+                {
+                  "node_type": "group",
+                  "operator": "and",
+                  "conditions": [
+                    {
+                      "node_type": "comparison",
+                      "operator": "greater_than_or_equal",
+                      "left": {
+                        "kind": "indicator",
+                        "indicator": {
+                          "indicator": "macd_percent_line",
+                          "field": "close",
+                          "fast_window": 12,
+                          "slow_window": 26,
+                          "signal_window": 9
+                        }
+                      },
+                      "right": {
+                        "kind": "scalar",
+                        "value": 2.0
+                      }
+                    },
+                    {
+                      "node_type": "comparison",
+                      "operator": "greater_than",
+                      "left": {
+                        "kind": "indicator",
+                        "indicator": {
+                          "indicator": "macd_percent_line",
+                          "field": "close",
+                          "fast_window": 12,
+                          "slow_window": 26,
+                          "signal_window": 9
+                        }
+                      },
+                      "right": {
+                        "kind": "lagged_indicator",
+                        "offset_days": -1,
+                        "indicator": {
+                          "indicator": "macd_percent_line",
+                          "field": "close",
+                          "fast_window": 12,
+                          "slow_window": 26,
+                          "signal_window": 9
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "constraints": []
+      },
+      "entry": {
+        "mode": "fixed",
+        "active_day": {
+          "anchor": "t0",
+          "start_offset_days": 0,
+          "end_offset_days": 0
+        },
+        "condition": null,
+        "execution": "close",
+        "branches": null,
+        "defer_when": null,
+        "resume_when": null
+      },
+      "exit_rules": [
+        {
+          "rule_id": "ma20_crosses_above_close",
+          "priority": 1,
+          "active_days": {
+            "anchor": "t0",
+            "start_offset_days": 1,
+            "end_offset_days": null
+          },
+          "relative_to": "entry",
+          "kind": "close_condition",
+          "condition": {
+            "node_type": "cross",
+            "operator": "cross_above",
+            "left": {
+              "kind": "indicator",
+              "indicator": {
+                "indicator": "sma",
+                "field": "close",
+                "window": 20
+              }
+            },
+            "right": {
+              "kind": "market_field",
+              "field": "close"
+            }
+          },
+          "price_trigger": null,
+          "execution": "close",
+          "requires_state": null,
+          "forbids_state": null
+        }
+      ],
+      "persistent_states": [],
+      "lifecycle_policy": {
+        "sample_end_open_position": "leave_open_excluded",
+        "allow_reentry_after_exit": true
+      }
+    },
+    "assumptions": [
+      {
+        "code": "daily_close_execution_default",
+        "message": "原公式未说明成交时点；为运行当前日线回测，采用产品日线政策：C/t0 当日收盘成交，卖出信号日收盘成交。"
+      },
+      {
+        "code": "sample_end_open_position_policy",
+        "message": "原公式未定义样本结束处理；为保证回测可重复，期末未平仓头寸保留且从已平仓 KPI 中排除。"
+      },
+      {
+        "code": "reentry_policy",
+        "message": "原公式未禁止再次入场；平仓后允许从下一交易日继续扫描新的 C/t0 信号。"
+      }
+    ],
+    "warnings": [
+      {
+        "code": "formula_language_compilation",
+        "message": "DIF 按原文定义为相对收盘价的百分比 DIF；CROSS(A,B) 按公式语言语义表示 A 从下向上穿越 B。"
+      }
+    ],
+    "source_clauses": [
+      {
+        "clause_id": "C01",
+        "text": "SHORT:=12;LONG:=26;MID:=9;\nDIF:=(EMA(C,SHORT)-EMA(C,LONG))/C*100;\n买入条件："
+      },
+      {
+        "clause_id": "C02",
+        "text": "1. 60ma&gt;REF(60ma,1);"
+      },
+      {
+        "clause_id": "C03",
+        "text": "2. Count(cross(20ma,60ma),5)&gt;=1;"
+      },
+      {
+        "clause_id": "C04",
+        "text": "3. DIF&gt;=3 and DIF&gt;REF(DIF,1);\n或者"
+      },
+      {
+        "clause_id": "C05",
+        "text": "1. 60ma&gt;REF(60ma,1);"
+      },
+      {
+        "clause_id": "C06",
+        "text": "2. Count(cross(30ma,60ma),3)&gt;=1；"
+      },
+      {
+        "clause_id": "C07",
+        "text": "3. DIF&gt;=6 and DIF&gt;REF(DIF,1);\n或者"
+      },
+      {
+        "clause_id": "C08",
+        "text": "1. 20MA&gt;60Ma;"
+      },
+      {
+        "clause_id": "C09",
+        "text": "2. 30Ma&gt;60Ma;"
+      },
+      {
+        "clause_id": "C10",
+        "text": "3. Count(cross(20Ma,60Ma),5)&gt;=1;"
+      },
+      {
+        "clause_id": "C11",
+        "text": "4. Cross(20MA,30Ma);"
+      },
+      {
+        "clause_id": "C12",
+        "text": "5. DIF&gt;=2 and DIF&gt;REF(DIF,1);\n卖出条件：\nCross(20ma,Close);"
+      }
+    ],
+    "coverage": [
+      {
+        "clause_id": "C01",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition"
+        ],
+        "explanation": "SHORT、LONG、MID 与百分比 DIF 的计算口径已显式映射。"
+      },
+      {
+        "clause_id": "C02",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0].conditions[0]"
+        ],
+        "explanation": "MA60 相对前一日上升。"
+      },
+      {
+        "clause_id": "C03",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0].conditions[1]"
+        ],
+        "explanation": "近 5 日 MA20 上穿 MA60 事件至少一次。"
+      },
+      {
+        "clause_id": "C04",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[0].conditions[2]"
+        ],
+        "explanation": "百分比 DIF 不低于 3 且较前一日上升。"
+      },
+      {
+        "clause_id": "C05",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[1].conditions[0]"
+        ],
+        "explanation": "MA60 相对前一日上升。"
+      },
+      {
+        "clause_id": "C06",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[1].conditions[1]"
+        ],
+        "explanation": "近 3 日 MA30 上穿 MA60 事件至少一次。"
+      },
+      {
+        "clause_id": "C07",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[1].conditions[2]"
+        ],
+        "explanation": "百分比 DIF 不低于 6 且较前一日上升。"
+      },
+      {
+        "clause_id": "C08",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[0]"
+        ],
+        "explanation": "MA20 高于 MA60。"
+      },
+      {
+        "clause_id": "C09",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[1]"
+        ],
+        "explanation": "MA30 高于 MA60。"
+      },
+      {
+        "clause_id": "C10",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[2]"
+        ],
+        "explanation": "近 5 日 MA20 上穿 MA60 事件至少一次。"
+      },
+      {
+        "clause_id": "C11",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[3]"
+        ],
+        "explanation": "MA20 当日上穿 MA30。"
+      },
+      {
+        "clause_id": "C12",
+        "disposition": "mapped",
+        "dsl_paths": [
+          "anchor.condition.conditions[2].conditions[4]",
+          "exit_rules[0].condition"
+        ],
+        "explanation": "百分比 DIF 不低于 2 且较前一日上升；MA20 上穿收盘价时退出。"
       }
     ]
   }

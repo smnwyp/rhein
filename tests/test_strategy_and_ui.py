@@ -201,7 +201,9 @@ def test_interpreter_loads_saved_run_and_renders_the_trade_chart() -> None:
 
     assert not app.exception
     assert any(widget.value.endswith("：交易 K 线") for widget in app.subheader)
-    assert any(widget.label == "出场条件核对" for widget in app.get("expander"))
+    # Entry / exit audit is now drawn inside the price chart after the exit
+    # marker, so loading a saved result must not create a second dashboard
+    # sidecar for it.
     # The first Vega-Lite chart is the trade chart; the second is the review
     # timeline. Both must survive loading a saved result.
     assert len(app.get("vega_lite_chart")) >= 2
@@ -212,3 +214,31 @@ def test_trade_chart_keeps_price_macd_and_dmi_legends_independent() -> None:
     page = Path("pages/1_Strategy_Interpreter.py").read_text()
 
     assert '"resolve": {"scale": {"color": "independent"}}' in page
+
+
+def test_trade_chart_marker_click_opens_an_in_chart_condition_overlay() -> None:
+    """The chart must expose entry/exit clicks and draw the card after exit."""
+    page = Path("pages/1_Strategy_Interpreter.py").read_text()
+
+    assert '"name": "trade_event"' in page
+    assert '"fields": ["EventId"]' in page
+    assert 'on_select="rerun"' in page
+    assert 'selection_mode="trade_event"' in page
+    assert '"fillOpacity": 0.94' in page
+    assert 'exit_index + 3' in page
+    assert 'compact_audit_overlay_lines(event_audit_rows(event_audit))' in page
+
+
+def test_compact_audit_overlay_lines_keep_evidence_and_limit_card_height() -> None:
+    from rhein.ui.trade_chart import compact_audit_overlay_lines
+
+    rows = [
+        {"左侧": "SMA(60)", "左侧数值": 12.1, "比较": ">", "右侧": "SMA(60)[-1]", "右侧数值": 12.0, "结果": "通过"},
+        {"左侧": "DIF", "左侧数值": 2.0, "比较": "≥", "右侧": "2", "右侧数值": 2, "结果": "通过"},
+        {"左侧": "MA20", "左侧数值": 10, "比较": "上穿", "右侧": "MA60", "右侧数值": 9, "结果": "未通过"},
+    ]
+
+    assert compact_audit_overlay_lines(rows, maximum=2) == [
+        "✓ SMA(60) > SMA(60)[-1]  [12.1 / 12.0]",
+        "✓ DIF ≥ 2  [2.0 / 2]",
+    ]

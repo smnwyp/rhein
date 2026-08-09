@@ -53,6 +53,19 @@ class MACDSignal(MACDLine):
     indicator: Literal["macd_signal"]
 
 
+class MACDPercentLine(MACDLine):
+    """Formula-language DIF normalised by the current close and expressed in percent.
+
+    ``(EMA(close, fast) - EMA(close, slow)) / close * 100`` is not the same
+    quantity as the usual absolute-price MACD fast line.  Keeping it as a
+    separate indicator prevents percentage thresholds from being silently
+    reinterpreted as price units. ``signal_window`` preserves the declared
+    MACD tuple although it does not change the DIF calculation itself.
+    """
+
+    indicator: Literal["macd_percent_line"]
+
+
 class MarketIndexMACDLine(DSLModel):
     """DIF line calculated from a named external market-index close series."""
 
@@ -70,4 +83,4 @@ class MarketIndexMACDLine(DSLModel):
         return self
 
 
-IndicatorDefinition = Annotated[SMA | EMA | RSI | RollingReturn | RollingMinimum | RollingMaximum | RollingMeanVolume | ADX | DMIADX | MACDLine | MACDSignal | MarketIndexMACDLine, Field(discriminator="indicator")]
+IndicatorDefinition = Annotated[SMA | EMA | RSI | RollingReturn | RollingMinimum | RollingMaximum | RollingMeanVolume | ADX | DMIADX | MACDLine | MACDSignal | MACDPercentLine | MarketIndexMACDLine, Field(discriminator="indicator")]

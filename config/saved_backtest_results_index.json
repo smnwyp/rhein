@@ -418,5 +418,25 @@
     "trade_count": 1715,
     "artifact_file": "1603928d-816c-4684-8761-da5824a41f46.json.gz",
     "created_at": "2026-08-08T12:17:13.890829Z"
+  },
+  {
+    "run_id": "23e51fc5-7a22-4ac8-abdf-c5cd2bd85bc5",
+    "strategy_id": "a134ccbe-33b7-4cbf-be82-45191268c5bf",
+    "strategy_name": "大均线mmacd 2",
+    "strategy_fingerprint": "f070937629b42b75d9f1ca1d87f857bb49ba9a3f240ebb32b687dd7fb2d89beb",
+    "schema_version": "0.3",
+    "group_label": "02 高流动性 中波动（347 个标的）",
+    "data_path": "data/nasdaq_10y/groups/02_高流动性_中波动",
+    "input_file_count": 347,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 347,
+    "trade_count": 2391,
+    "artifact_file": "23e51fc5-7a22-4ac8-abdf-c5cd2bd85bc5.json.gz",
+    "created_at": "2026-08-09T10:28:33.146781Z"
   }
 ]
