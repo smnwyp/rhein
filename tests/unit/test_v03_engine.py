@@ -26,7 +26,15 @@ def test_percent_dif_and_rolling_cross_count_preserve_formula_strategy_semantics
     close = np.concatenate([np.full(30, 10.0), np.linspace(10, 14, 20)])
     frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=len(close), freq="B"), "Open": close, "High": close + 1, "Low": close - 1, "Close": close, "Volume": 100.0})
     percent_dif = MACDPercentLine(indicator="macd_percent_line", fast_window=12, slow_window=26, signal_window=9)
-    assert _indicator_values(frame, percent_dif)[-1] > 0
+    expected_percent_dif = (
+        (
+            frame["Close"].ewm(span=12, adjust=False, min_periods=26).mean()
+            - frame["Close"].ewm(span=26, adjust=False, min_periods=26).mean()
+        )
+        / frame["Close"]
+        * 100
+    ).to_numpy()
+    np.testing.assert_allclose(_indicator_values(frame, percent_dif), expected_percent_dif, equal_nan=True)
     condition = RollingCrossCountCondition(
         node_type="rolling_cross_count", lookback_days=5, minimum_true_count=1,
         operator="cross_above",
