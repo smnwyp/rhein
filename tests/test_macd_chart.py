@@ -8,6 +8,7 @@ from rhein.ui.macd import (
     MACD_SIGNAL_WINDOW,
     MACD_SLOW_WINDOW,
     add_display_macd,
+    add_display_mmacd,
 )
 from rhein.ui.dmi import DMI_ADX_WINDOW, DMI_DIRECTIONAL_WINDOW, add_display_dmi
 
@@ -34,6 +35,22 @@ def test_display_macd_does_not_mutate_input_frame() -> None:
 
     assert list(frame.columns) == ["Close"]
     assert {"MACD_DIF", "MACD_DEA", "MACD_HIST"}.issubset(result.columns)
+
+
+def test_display_mmacd_uses_normalised_dd_and_formula_histogram() -> None:
+    frame = pd.DataFrame({"Close": [10.0, 11.0, 10.0, 12.0, 13.0]})
+
+    actual = add_display_mmacd(frame)
+    dd = (
+        frame["Close"].ewm(span=10, adjust=False, min_periods=1).mean()
+        - frame["Close"].ewm(span=24, adjust=False, min_periods=1).mean()
+    ) / frame["Close"] * 100
+    ded = dd.ewm(span=8, adjust=False, min_periods=1).mean()
+
+    assert actual["MMACD_DD"].tolist() == pytest.approx(dd.tolist())
+    assert actual["MMACD_DED"].tolist() == pytest.approx(ded.tolist())
+    assert actual["MMACD_HIST"].tolist() == pytest.approx((2 * (dd - ded)).tolist())
+    assert list(frame.columns) == ["Close"]
 
 
 def test_display_dmi_uses_fixed_10_6_and_does_not_mutate_input_frame() -> None:

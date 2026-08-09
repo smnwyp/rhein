@@ -34,7 +34,11 @@ def _indicator(indicator: object) -> str:
     if isinstance(indicator, ADX): return f"ADX({indicator.window})"
     if isinstance(indicator, DMIADX): return f"DMI ADX({indicator.directional_window},{indicator.adx_window})"
     if isinstance(indicator, MarketIndexMACDLine): return f"指数 {indicator.index_symbol} DIF({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
-    if isinstance(indicator, MACDPercentLine): return f"百分比 DIF({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
+    if isinstance(indicator, MACDPercentLine):
+        windows = f"{indicator.fast_window},{indicator.slow_window}"
+        if indicator.signal_window is not None:
+            windows += f",{indicator.signal_window}"
+        return f"{indicator.label or '归一化 EMA 差值'}({windows})"
     if isinstance(indicator, MACDSignal): return f"MACD 慢线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     if isinstance(indicator, MACDLine): return f"MACD 快线({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
     raise TypeError(f"unknown indicator: {type(indicator).__name__}")

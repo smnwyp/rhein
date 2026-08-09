@@ -36,10 +36,10 @@ from rhein.backtest import input_files as backtest_input_files, load_ohlc as bac
 from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.summaries import style_by_drawdown
-from rhein.ui.trade_chart import compact_audit_overlay_lines, event_text_layer, selected_event_id, trade_selector_options
+from rhein.ui.trade_chart import compact_audit_overlay_lines, decisive_entry_audit_rows, event_text_layer, selected_event_id, trade_selector_options
 from rhein.ui.chart_theme import event_annotation_style
 from rhein.ui.dmi import add_display_dmi
-from rhein.ui.macd import add_display_macd
+from rhein.ui.macd import add_display_macd, add_display_mmacd
 from rhein.ui.history_paths import portable_data_path, resolve_history_data_path, same_data_scope
 
 # The project-local file is the explicit source of truth for this local app.
@@ -742,6 +742,7 @@ if matching_result is not None:
                     elif st.session_state.get("dsl_chart_trade_id") not in trade_labels:
                         st.session_state["dsl_chart_trade_id"] = trade_option_ids[0]
                     trade_id = st.selectbox("选择交易段", trade_option_ids, format_func=trade_labels.__getitem__, key="dsl_chart_trade_id")
+                    st.caption("操作：点击图中带蓝色“入场 ⓘ”或红色“出场 ⓘ”的圆点，即可在同一张 K 线图内查看对应条件与实际数值。")
                     trade = symbol_trades.iloc[trade_option_ids.index(trade_id)]
                     source_matches = kpis.loc[kpis["标的"] == selected_symbol, "源文件"]
                     source_path = (
@@ -762,6 +763,10 @@ if matching_result is not None:
                         # MACD(12, 24, 8), and is calculated before slicing so
                         # it retains the preceding price history for EMA warmup.
                         chart = add_display_macd(chart)
+                        # MMACD is the formula-language, price-normalised
+                        # counterpart: DD=(EMA10-EMA24)/Close×100,
+                        # DED=EMA(DD,8), histogram=(DD-DED)×2.
+                        chart = add_display_mmacd(chart)
                         # DMI(10, 6) is likewise a display-only overlay. It
                         # is calculated before slicing, never changes trade
                         # execution, and does not require a group rerun.
@@ -892,6 +897,7 @@ if matching_result is not None:
                                         "EventPrice": float(price) if isinstance(price, (int, float)) else float(chart.loc[position, "Close"]),
                                         "EventId": event_id,
                                         "EventLabel": "入场条件" if event_id == "entry" else "出场条件",
+                                        "ClickLabel": "入场 ⓘ" if event_id == "entry" else "出场 ⓘ",
                                     })
                             chart["Date"] = pd.to_datetime(chart["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
                             # A tightly packed ordinal date band gives each
@@ -937,6 +943,12 @@ if matching_result is not None:
                                 {"field":"MACD_DEA","type":"quantitative","title":"DEA (8)","format":".4f"},
                                 {"field":"MACD_HIST","type":"quantitative","title":"MACD 柱（×2）","format":".4f"},
                             ]
+                            mmacd_tooltip = [
+                                {"field":"Date","type":"nominal","title":"日期"},
+                                {"field":"MMACD_DD","type":"quantitative","title":"DD (10,24，%)","format":".4f"},
+                                {"field":"MMACD_DED","type":"quantitative","title":"DED (8)","format":".4f"},
+                                {"field":"MMACD_HIST","type":"quantitative","title":"MMAACD 柱（×2）","format":".4f"},
+                            ]
                             dmi_tooltip = [
                                 {"field":"Date","type":"nominal","title":"日期"},
                                 {"field":"DMI_PDI","type":"quantitative","title":"PDI (10)","format":".2f"},
@@ -965,7 +977,12 @@ if matching_result is not None:
                                         event=selected_event_id_for_detail,
                                         market_index=audit_market_index,
                                     )
-                                    audit_overlay_lines = compact_audit_overlay_lines(event_audit_rows(event_audit))
+                                    event_rows = event_audit_rows(event_audit)
+                                    if selected_event_id_for_detail == "entry":
+                                        branch_label, event_rows = decisive_entry_audit_rows(event_rows)
+                                        audit_overlay_lines = ([branch_label] if branch_label else []) + compact_audit_overlay_lines(event_rows)
+                                    else:
+                                        audit_overlay_lines = compact_audit_overlay_lines(event_rows)
                                 except (ValueError, UnsupportedStrategyFeature):
                                     # The chart itself must remain visible even
                                     # when an optional evidence replay cannot be
@@ -1023,10 +1040,19 @@ if matching_result is not None:
                                             # layer. A top-level selection on a vconcat chart can
                                             # cause Vega-Lite to bind to every child view and leave
                                             # the whole chart blank.
-                                            {"data": {"values": audit_markers}, "params": [{"name": "trade_event", "select": {"type": "point", "fields": ["EventId"], "on": "click", "clear": "dblclick"}}], "mark": {"type": "point", "filled": True, "size": 520, "opacity": 0.015, "cursor": "pointer"}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "tooltip": clickable_event_tooltip}},
+                                            {"data": {"values": audit_markers}, "params": [{"name": "trade_event", "select": {"type": "point", "fields": ["EventId"], "on": "click", "clear": "dblclick"}}], "mark": {"type": "point", "filled": True, "size": 230, "stroke": "#ffffff", "strokeWidth": 2, "cursor": "pointer"}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "color": {"condition": {"test": "datum.EventId === 'entry'", "value": "#2563eb"}, "value": "#dc2626"}, "tooltip": clickable_event_tooltip}},
+                                            {"data": {"values": audit_markers}, "mark": {"type": "text", "align": "left", "baseline": "middle", "dx": 10, "dy": -12, "fontSize": 12, "fontWeight": "bold", "color": "#334155"}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "text": {"field": "ClickLabel", "type": "nominal"}, "tooltip": clickable_event_tooltip}},
                                         ],
                                     },
                                     {"height": 100, "mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Volume", "type": "quantitative"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
+                                    {
+                                        "height": 145,
+                                        "layer": [
+                                            {"mark": {"type": "rule", "color": "#94a3b8", "strokeWidth": 1}, "encoding": {"y": {"datum": 0, "type": "quantitative"}}},
+                                            {"mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "MMACD_HIST", "type": "quantitative", "title": "MMACD"}, "color": {"condition": {"test": "datum.MMACD_HIST >= 0", "value": "#ef4444"}, "value": "#16a34a"}, "tooltip": mmacd_tooltip}},
+                                            {"transform": [{"fold": ["MMACD_DD", "MMACD_DED"], "as": ["Line", "Value"]}], "mark": {"type": "line", "strokeWidth": 1.5}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative", "title": "MMACD"}, "color": {"field": "Line", "type": "nominal", "scale": {"domain": ["MMACD_DD", "MMACD_DED"], "range": ["#2563eb", "#f59e0b"]}, "legend": {"title": "MMACD (10,24,8)", "labelExpr": "datum.label === 'MMACD_DD' ? 'DD（归一化 DIF）' : 'DED'"}}, "tooltip": mmacd_tooltip}},
+                                        ],
+                                    },
                                     {
                                         "height": 145,
                                         "layer": [

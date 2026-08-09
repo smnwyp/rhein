@@ -248,8 +248,14 @@ def _anchor_operand_label(operand: Operand) -> str:
 
 def _indicator_label(indicator: object) -> str:
     if isinstance(indicator, (MACDLine, MACDSignal, MACDPercentLine)):
-        component = "慢线" if isinstance(indicator, MACDSignal) else ("百分比 DIF" if isinstance(indicator, MACDPercentLine) else "快线")
-        return f"MACD{component}({indicator.fast_window},{indicator.slow_window},{indicator.signal_window})"
+        if isinstance(indicator, MACDPercentLine):
+            component = indicator.label or "归一化 EMA 差值"
+        else:
+            component = "慢线" if isinstance(indicator, MACDSignal) else "快线"
+        windows = f"{indicator.fast_window},{indicator.slow_window}"
+        if indicator.signal_window is not None:
+            windows += f",{indicator.signal_window}"
+        return f"{component}({windows})" if isinstance(indicator, MACDPercentLine) else f"MACD{component}({windows})"
     if isinstance(indicator, DMIADX):
         return f"DMI ADX({indicator.directional_window},{indicator.adx_window})"
     if isinstance(indicator, MarketIndexMACDLine):
@@ -890,6 +896,12 @@ def _resolve_entry(df: pd.DataFrame, strategy: TimedStrategyDefinition, anchor_i
         if entry_index >= len(df):
             continue
         entry_price = _entry_price_at(df, strategy, entry_index)
+        # An absent/non-positive daily Open or Close cannot be treated as a
+        # filled order. For a fixed next-day entry this means the candidate is
+        # abandoned, exactly as the formula source specifies; the scanner can
+        # then evaluate a new anchor on later bars.
+        if not np.isfinite(entry_price) or entry_price <= 0:
+            continue
         # An omitted fixed-entry condition means “enter whenever the anchor
         # qualifies”. It is not a permissive fallback for branch entries.
         if condition is None or _temporal_condition(df, condition, index=entry_index, anchor_index=anchor_index, entry_index=entry_index, entry_price=entry_price):
@@ -954,7 +966,13 @@ def run_v03_backtest(
         entry_index, entry_price = resolved_entry
         exit_index, reason = None, None
         state_values = {state.state_id: False for state in strategy.persistent_states}
-        for day in range(entry_index + 1, n):
+        # A close entry cannot be exited on that same close.  A next-day open
+        # entry, however, is already held throughout that bar, so a source
+        # rule may legitimately sell at the same day's close.  Treating both
+        # cases as ``entry_index + 1`` silently drops that open-to-close risk
+        # window.
+        first_exit_day = entry_index if strategy.entry.execution == "open" else entry_index + 1
+        for day in range(first_exit_day, n):
             # State transitions happen before exits, so a state entered today
             # can intentionally activate an exit rule on the same close.
             for state in strategy.persistent_states:

@@ -226,7 +226,9 @@ def test_trade_chart_marker_click_opens_an_in_chart_condition_overlay() -> None:
     assert 'selection_mode="trade_event"' in page
     assert '"fillOpacity": 0.94' in page
     assert 'exit_index + 3' in page
-    assert 'compact_audit_overlay_lines(event_audit_rows(event_audit))' in page
+    assert 'decisive_entry_audit_rows(event_rows)' in page
+    assert '"ClickLabel": "入场 ⓘ"' in page
+    assert '点击图中带蓝色“入场 ⓘ”或红色“出场 ⓘ”' in page
 
 
 def test_compact_audit_overlay_lines_keep_evidence_and_limit_card_height() -> None:
@@ -241,4 +243,24 @@ def test_compact_audit_overlay_lines_keep_evidence_and_limit_card_height() -> No
     assert compact_audit_overlay_lines(rows, maximum=2) == [
         "✓ SMA(60) > SMA(60)[-1]  [12.1 / 12.0]",
         "✓ DIF ≥ 2  [2.0 / 2]",
+    ]
+
+
+def test_entry_overlay_shows_only_the_or_branch_that_admitted_the_trade() -> None:
+    from rhein.ui.trade_chart import decisive_entry_audit_rows
+
+    rows = [
+        {"DSL 路径": "anchor.condition.conditions[0].conditions[0]", "比较": ">", "结果": "未通过"},
+        {"DSL 路径": "anchor.condition.conditions[0]", "比较": "group_result", "结果": "未通过"},
+        {"DSL 路径": "anchor.condition.conditions[2].conditions[0]", "比较": ">", "结果": "通过"},
+        {"DSL 路径": "anchor.condition.conditions[2]", "比较": "group_result", "结果": "通过"},
+        {"DSL 路径": "anchor.condition", "比较": "group_result", "结果": "通过"},
+    ]
+
+    label, selected = decisive_entry_audit_rows(rows)
+
+    assert label == "命中买入分支：第 3 组"
+    assert [row["DSL 路径"] for row in selected] == [
+        "anchor.condition.conditions[2].conditions[0]",
+        "anchor.condition.conditions[2]",
     ]

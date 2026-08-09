@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+import re
 
 import pandas as pd
 
@@ -66,6 +67,11 @@ def compact_audit_overlay_lines(rows: Iterable[Mapping[str, object]], *, maximum
         if len(lines) >= maximum:
             break
         left, operator, right = str(row.get("左侧", "")), str(row.get("比较", "")), str(row.get("右侧", ""))
+        # Group-result rows are useful in the full audit tree, but duplicate
+        # their leaves inside the constrained in-chart card and can make an
+        # unselected OR branch look like an entry requirement.
+        if operator == "group_result" or left.startswith("组合条件"):
+            continue
         left_value, right_value = row.get("左侧数值"), row.get("右侧数值")
         passed = row.get("结果") == "通过"
         prefix = "✓" if passed else "×"
@@ -74,3 +80,27 @@ def compact_audit_overlay_lines(rows: Iterable[Mapping[str, object]], *, maximum
             values = f"  [{left_value if left_value is not None else '—'} / {right_value if right_value is not None else '—'}]"
         lines.append(f"{prefix} {left} {operator} {right}{values}".strip())
     return lines
+
+
+def decisive_entry_audit_rows(rows: Iterable[Mapping[str, object]]) -> tuple[str | None, list[Mapping[str, object]]]:
+    """Return only the OR entry branches that actually admitted this trade.
+
+    ``build_trade_event_audit`` intentionally records every leaf in an OR tree
+    for forensic completeness. A compact chart card must not lead with a
+    rejected branch, though: it would visually suggest a false condition was
+    accepted. This helper finds the passed top-level anchor branches and keeps
+    their descendants. It returns ``None`` for non-OR/simple anchors.
+    """
+    snapshots = list(rows)
+    root_pattern = re.compile(r"^anchor\.condition\.conditions\[(\d+)]$")
+    passed_indices: list[int] = []
+    for row in snapshots:
+        match = root_pattern.match(str(row.get("DSL 路径", "")))
+        if match and row.get("比较") == "group_result" and row.get("结果") == "通过":
+            passed_indices.append(int(match.group(1)))
+    if not passed_indices:
+        return None, snapshots
+    prefixes = tuple(f"anchor.condition.conditions[{index}]" for index in passed_indices)
+    selected = [row for row in snapshots if str(row.get("DSL 路径", "")).startswith(prefixes)]
+    branch_label = "命中买入分支：" + "、".join(f"第 {index + 1} 组" for index in passed_indices)
+    return branch_label, selected

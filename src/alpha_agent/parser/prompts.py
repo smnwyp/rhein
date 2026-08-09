@@ -121,8 +121,9 @@ must be a market field or indicator evaluated on that same relative bar; do
 not misuse `scaled_entry_price`, which is only for the fixed actual entry
 price.
 For a formula explicitly defining `DIF=(EMA(close,fast)-EMA(close,slow))/close*100`,
-use `indicator=macd_percent_line` with the stated fast, slow, and signal windows.
-Its thresholds are percentage-point values: preserve them exactly, do not replace
+use `indicator=macd_percent_line` with the stated fast and slow windows; set its
+optional `label` to the source name (for example DD or DIF), and include
+`signal_window` only if the source explicitly declares it. Its thresholds are percentage-point values: preserve them exactly, do not replace
 this with `macd_line`, and do not ask the user to convert them. For
 `COUNT(CROSS(left,right), N) >= K`, use `node_type=rolling_cross_count`,
 `operator=cross_above`, its two series operands, `lookback_days=N`, and

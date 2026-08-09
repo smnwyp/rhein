@@ -53,17 +53,32 @@ class MACDSignal(MACDLine):
     indicator: Literal["macd_signal"]
 
 
-class MACDPercentLine(MACDLine):
+class MACDPercentLine(DSLModel):
     """Formula-language DIF normalised by the current close and expressed in percent.
 
     ``(EMA(close, fast) - EMA(close, slow)) / close * 100`` is not the same
     quantity as the usual absolute-price MACD fast line.  Keeping it as a
     separate indicator prevents percentage thresholds from being silently
-    reinterpreted as price units. ``signal_window`` preserves the declared
-    MACD tuple although it does not change the DIF calculation itself.
+    reinterpreted as price units. A formula may declare only the two EMA
+    windows; ``signal_window`` is therefore optional metadata and has no
+    influence on this DIF calculation.
     """
 
     indicator: Literal["macd_percent_line"]
+    field: Literal["close"] = "close"
+    fast_window: PositiveInt
+    slow_window: PositiveInt
+    signal_window: PositiveInt | None = None
+    # User-facing source aliases such as DD or DIF.  The calculation remains
+    # a generic normalised EMA spread; this field prevents an internal class
+    # name from inventing a user-visible "MACD" concept.
+    label: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def fast_must_precede_slow(self) -> "MACDPercentLine":
+        if self.fast_window >= self.slow_window:
+            raise ValueError("percentage DIF fast_window must be less than slow_window")
+        return self
 
 
 class MarketIndexMACDLine(DSLModel):

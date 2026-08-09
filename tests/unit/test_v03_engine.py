@@ -12,7 +12,7 @@ from alpha_agent.domain.sequence import (
     TemporalScalarOperand,
     TimedStrategyDefinition,
 )
-from alpha_agent.research.v03_engine import attach_market_index_context, build_trade_event_audit, _anchor_condition_checks, _anchor_constraints_hold, _indicator_values, _resolve_entry, _static_condition, _temporal_condition, _temporal_operand, run_v03_backtest
+from alpha_agent.research.v03_engine import attach_market_index_context, build_trade_event_audit, _anchor_condition_checks, _anchor_constraints_hold, _indicator_label, _indicator_values, _resolve_entry, _static_condition, _temporal_condition, _temporal_operand, run_v03_backtest
 from alpha_agent.errors import UnsupportedStrategyFeature
 from alpha_agent.parser.validation import validate_strategy
 
@@ -26,6 +26,7 @@ def test_percent_dif_and_rolling_cross_count_preserve_formula_strategy_semantics
     close = np.concatenate([np.full(30, 10.0), np.linspace(10, 14, 20)])
     frame = pd.DataFrame({"Date": pd.date_range("2020-01-01", periods=len(close), freq="B"), "Open": close, "High": close + 1, "Low": close - 1, "Close": close, "Volume": 100.0})
     percent_dif = MACDPercentLine(indicator="macd_percent_line", fast_window=12, slow_window=26, signal_window=9)
+    two_window_percent_dif = MACDPercentLine(indicator="macd_percent_line", fast_window=10, slow_window=24)
     expected_percent_dif = (
         (
             frame["Close"].ewm(span=12, adjust=False, min_periods=26).mean()
@@ -35,6 +36,8 @@ def test_percent_dif_and_rolling_cross_count_preserve_formula_strategy_semantics
         * 100
     ).to_numpy()
     np.testing.assert_allclose(_indicator_values(frame, percent_dif), expected_percent_dif, equal_nan=True)
+    assert two_window_percent_dif.signal_window is None
+    assert _indicator_label(MACDPercentLine(indicator="macd_percent_line", fast_window=10, slow_window=24, label="DD")) == "DD(10,24)"
     condition = RollingCrossCountCondition(
         node_type="rolling_cross_count", lookback_days=5, minimum_true_count=1,
         operator="cross_above",
@@ -42,6 +45,43 @@ def test_percent_dif_and_rolling_cross_count_preserve_formula_strategy_semantics
         right=IndicatorOperand(kind="indicator", indicator=SMA(indicator="sma", field="close", window=8)),
     )
     assert any(_static_condition(frame, condition, index) for index in range(8, len(frame)))
+
+
+def test_next_day_open_entry_can_exit_on_its_same_day_close():
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-01", periods=4, freq="B"),
+        "Open": [10.0, 10.0, 10.0, 10.0], "High": [11.0] * 4,
+        "Low": [9.0] * 4, "Close": [10.0] * 4, "Volume": [100.0] * 4,
+    })
+    strategy = TimedStrategyDefinition.model_validate({
+        "schema_version": "0.3", "symbol": "TEST", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": _cmp(_field("close"), {"kind": "scalar", "value": 0}), "constraints": []},
+        "entry": {"mode": "fixed", "active_day": {"start_offset_days": 1, "end_offset_days": 1}, "execution": "open"},
+        "exit_rules": [{"rule_id": "same_day_close", "priority": 1, "relative_to": "entry", "active_days": {"start_offset_days": 0}, "kind": "close_condition", "condition": _cmp(_field("close"), {"kind": "scalar", "value": 1_000}, "less_than"), "execution": "close"}],
+        "lifecycle_policy": {"sample_end_open_position": "leave_open_excluded", "allow_reentry_after_exit": False},
+    })
+    trades, _ = run_v03_backtest(frame, strategy=strategy, capital=10_000, compound=False)
+    assert len(trades) == 1
+    assert trades.iloc[0].entry == trades.iloc[0].exit
+
+
+def test_next_day_open_entry_is_abandoned_when_daily_open_is_not_available():
+    frame = pd.DataFrame({
+        "Date": pd.date_range("2020-01-01", periods=2, freq="B"),
+        "Open": [10.0, np.nan], "High": [11.0] * 2,
+        "Low": [9.0] * 2, "Close": [10.0] * 2, "Volume": [100.0] * 2,
+    })
+    strategy = TimedStrategyDefinition.model_validate({
+        "schema_version": "0.3", "symbol": "TEST", "frequency": "1d", "direction": "long_only",
+        "position_mode": "fully_invested_or_flat", "data_requirement": "daily_ohlcv",
+        "anchor": {"name": "t0", "condition": _cmp(_field("close"), {"kind": "scalar", "value": 0}), "constraints": []},
+        "entry": {"mode": "fixed", "active_day": {"start_offset_days": 1, "end_offset_days": 1}, "execution": "open"},
+        "exit_rules": [{"rule_id": "exit", "priority": 1, "active_days": {"start_offset_days": 1}, "kind": "close_condition", "condition": _cmp(_field("close"), {"kind": "scalar", "value": -1}, "less_than"), "execution": "close"}],
+        "lifecycle_policy": {"sample_end_open_position": "leave_open_excluded", "allow_reentry_after_exit": False},
+    })
+    trades, _ = run_v03_backtest(frame, strategy=strategy, capital=10_000, compound=False)
+    assert trades.empty
 
 
 def _strategy() -> TimedStrategyDefinition:
