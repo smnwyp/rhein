@@ -1,0 +1,32 @@
+schema_version = "1.0"
+study_name = "Nasdaq 板块萌芽现象统计检验"
+sector_definition = "Nasdaq screener 细分行业（非 GICS）"
+mapping_path = "data/nasdaq_10y/industry_group_map.csv"
+adjustment_required = true
+static_universe_bias_notice = "基于当前股票池与静态行业快照回填历史，存在幸存者偏差和行业归属漂移；结论偏乐观，真实表现只会更差。"
+
+[features]
+steady_window = 20
+cap_window = 250
+cap_quantile = 0.98
+steady_target_days = 12.0
+breadth_window = 5
+breadth_scale = 0.10
+
+[features.weights]
+steady = 0.4
+breadth = 0.4
+volume_ramp = 0.2
+
+[statistics]
+horizons = [20, 40, 60]
+quantiles = 5
+minimum_sectors = 5
+minimum_same_sign_years = 5
+verdict_scope = "each_horizon_separately"
+
+[synthetic_gate]
+synthetic_days = 480
+synthetic_sectors = 30
+synthetic_repetitions = 200
+random_seed = 20260809

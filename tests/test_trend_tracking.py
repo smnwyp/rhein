@@ -239,7 +239,7 @@ def test_fixed_holding_diagnostics_enumerate_six_entries_times_three_periods_on_
     assert not any(column.startswith("检验段") and column != "检验段起始日（未使用）" for column in diagnostics.columns)
 
 
-def test_trend_tracking_has_its_own_calibration_page_without_locked_threshold_inputs() -> None:
+def test_trend_tracking_page_is_statistical_research_without_trading_inputs() -> None:
     from streamlit.testing.v1 import AppTest
 
     app = AppTest.from_file("pages/2_Trend_Tracking.py")
@@ -249,4 +249,5 @@ def test_trend_tracking_has_its_own_calibration_page_without_locked_threshold_in
     labels = {widget.label for widget in app.text_input}
     assert "校准后的进场阈值（0–100）" not in labels
     assert "校准后的离场阈值（0–100）" not in labels
-    assert any(widget.label == "运行前七年阈值网格标定" for widget in app.button)
+    assert any(widget.label == "运行统计检验研究" for widget in app.button)
+    assert not any("网格" in widget.label or "回测" in widget.label for widget in app.button)
