@@ -10,6 +10,8 @@ from emergence_runner import RealStudyResult, load_research_config, run_real_stu
 from rhein.emergence_reporting import write_research_report
 from rhein.emergence_study import EmergenceStudyError
 from rhein.paths import REPORTS_ROOT
+from rhein.steady_supplement_reporting import write_steady_supplement_report
+from steady_supplement_runner import SteadySupplementResult, load_steady_supplement_config, run_steady_supplement
 
 
 def _render_error(error: EmergenceStudyError) -> None:
@@ -62,12 +64,45 @@ def _show_result(result: RealStudyResult, report_path: Path) -> None:
     st.download_button("下载研究报告 Markdown", report_path.read_bytes(), file_name=report_path.name, mime="text/markdown")
 
 
+def _show_steady_supplement(result: SteadySupplementResult, report_path: Path) -> None:
+    st.subheader("steady 分量单独检验 · v1.1")
+    st.caption("仅将既有 steady 分量作为 score；合成萌芽分的 v1.0 否决结论保持不变。")
+    st.info(result.verdict.outcome)
+    rows = []
+    for horizon, verdict in result.horizon_verdicts.items():
+        study = result.steady_horizon_results[horizon]
+        spread_hac = study.quantiles.hac
+        rows.append({
+            "Horizon（交易日）": horizon,
+            "五档严格向上": verdict.quantiles_strictly_upward,
+            "Q5 > 0": verdict.q5_positive,
+            "Top−Bottom HAC 通过": verdict.top_bottom_positive_and_significant,
+            "正价差年份数": verdict.positive_spread_years,
+            "2017–2020 全负": verdict.early_years_all_negative,
+            "非重叠核对一致": verdict.non_overlapping_consistent,
+            "Top−Bottom HAC t": spread_hac.t_statistic if spread_hac else None,
+        })
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    for horizon, study in result.steady_horizon_results.items():
+        with st.expander(f"steady Horizon {horizon}：逐年价差与全部图表", expanded=horizon == 20):
+            st.dataframe(study.yearly, hide_index=True, width="stretch")
+            comparison = report_path.parent / f"steady_vs_composite_quintiles_n{horizon}.png"
+            if comparison.is_file():
+                st.image(str(comparison), caption=f"steady 与已否决合成分的五档对照（N={horizon}）", width="stretch")
+            for stem in ("steady_ic_time_series", "steady_cumulative_ic", "steady_ic_histogram", "steady_quintile_bar", "steady_quintile_cumulative", "steady_yearly_ic"):
+                image = report_path.parent / f"{stem}_n{horizon}.png"
+                if image.is_file():
+                    st.image(str(image), caption=f"{stem}（N={horizon}）", width="stretch")
+    st.download_button("下载 steady 增补研究报告 Markdown", report_path.read_bytes(), file_name=report_path.name, mime="text/markdown")
+
+
 def render_trend_tracking(*, data_path: str, scope_label: str) -> None:
     """渲染仅做统计检验的板块萌芽研究页面。"""
     st.title("板块萌芽现象 · 统计检验研究")
     st.caption("研究问题是萌芽分是否横截面预示随后板块强弱；本页面不包含交易、成本、净值或回撤。")
     try:
         config = load_research_config()
+        steady_config = load_steady_supplement_config()
     except EmergenceStudyError as error:
         _render_error(error)
         return
@@ -77,6 +112,7 @@ def render_trend_tracking(*, data_path: str, scope_label: str) -> None:
         st.text_input("细粒度行业映射路径", value=str(config.mapping_path.relative_to(Path.cwd())), disabled=True)
         confirmed = st.checkbox("我确认日线价格已一致复权", value=False, key="emergence_adjustment_confirmed")
         submitted = st.button("运行统计检验研究", type="primary", width="stretch")
+        steady_submitted = st.button("运行 steady 分量增补检验", width="stretch")
     if submitted:
         try:
             with st.status("正在运行合成对照闸门、宽表聚合、特征与统计检验…", expanded=True) as status:
@@ -91,11 +127,33 @@ def render_trend_tracking(*, data_path: str, scope_label: str) -> None:
             _render_error(error)
         except Exception as error:
             st.error(f"emergence_study_unexpected_failure: 统计研究失败：{error}")
+    if steady_submitted:
+        try:
+            with st.status("正在复用 v1.0 管线运行 steady 分量单独检验…", expanded=True) as status:
+                status.write("• 先运行同一四道合成对照，再仅替换 score 为既有 steady 分量")
+                steady_result = run_steady_supplement(data_path=data_path, adjustment_confirmed=confirmed, config=steady_config)
+                steady_directory = REPORTS_ROOT / "steady_supplement"
+                steady_report = write_steady_supplement_report(steady_result, output_directory=steady_directory)
+                status.update(label="steady 分量增补检验完成", state="complete", expanded=False)
+            st.session_state["steady_supplement_result"] = {"scope": str(Path(data_path).resolve()), "result": steady_result, "report_path": str(steady_report)}
+        except EmergenceStudyError as error:
+            _render_error(error)
+        except Exception as error:
+            st.error(f"steady_supplement_unexpected_failure: steady 增补研究失败：{error}")
     state = st.session_state.get("emergence_study_result")
-    if not isinstance(state, dict) or state.get("scope") != str(Path(data_path).resolve()):
+    steady_state = st.session_state.get("steady_supplement_result")
+    has_base_result = isinstance(state, dict) and state.get("scope") == str(Path(data_path).resolve())
+    has_steady_result = isinstance(steady_state, dict) and steady_state.get("scope") == str(Path(data_path).resolve())
+    if not has_base_result and not has_steady_result:
         st.info("确认复权状态后，点击左侧“运行统计检验研究”。真实数据运行前会自动通过四道合成对照。")
         return
-    result = state.get("result")
-    report_path = state.get("report_path")
-    if isinstance(result, RealStudyResult) and isinstance(report_path, str) and Path(report_path).is_file():
-        _show_result(result, Path(report_path))
+    if has_base_result and isinstance(state, dict):
+        result = state.get("result")
+        report_path = state.get("report_path")
+        if isinstance(result, RealStudyResult) and isinstance(report_path, str) and Path(report_path).is_file():
+            _show_result(result, Path(report_path))
+    if has_steady_result and isinstance(steady_state, dict):
+        steady_result = steady_state.get("result")
+        steady_report = steady_state.get("report_path")
+        if isinstance(steady_result, SteadySupplementResult) and isinstance(steady_report, str) and Path(steady_report).is_file():
+            _show_steady_supplement(steady_result, Path(steady_report))

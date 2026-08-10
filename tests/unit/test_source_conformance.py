@@ -76,6 +76,22 @@ def test_source_conformance_accepts_dif_zero_axis_cross_as_current_prior_scalar_
     validate_source_conformance(source, coverage, payload)
 
 
+def test_source_conformance_accepts_price_downcross_written_as_ma_crosses_above_close():
+    source = [SourceClause(clause_id="C01", text="Cross(20ma,Close);{股价下穿20Ma}")]
+    coverage = [ClauseCoverage(
+        clause_id="C01", disposition="mapped", dsl_paths=["exit_rules[0].condition"],
+        explanation="公式的左操作数是 MA20；其上穿 Close 等价于股价下穿 MA20。",
+    )]
+    payload = {
+        "exit_rules": [{"condition": {
+            "node_type": "cross", "operator": "cross_above",
+            "left": {"kind": "indicator", "indicator": {"indicator": "sma", "field": "close", "window": 20}},
+            "right": {"kind": "market_field", "field": "close"},
+        }}],
+    }
+    validate_source_conformance(source, coverage, payload)
+
+
 def test_timed_semantic_validation_rejects_strict_current_vs_anchor_price_on_t0():
     payload = {
         "schema_version": "0.3", "symbol": "AAPL", "frequency": "1d", "direction": "long_only",

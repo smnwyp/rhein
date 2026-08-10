@@ -1,6 +1,7 @@
 from alpha_agent.domain.strategy import StrategyDefinition
 from alpha_agent.domain.sequence import TimedStrategyDefinition
-from alpha_agent.strategy_library import JsonStrategyLibrary, SavedStrategy
+from alpha_agent.strategy_library import JsonStrategyLibrary, SavedStrategy, StrategyLibraryError
+import pytest
 
 def strategy() -> StrategyDefinition:
     return StrategyDefinition.model_validate({"schema_version":"0.1","symbol":"AAPL","frequency":"1d","direction":"long_only","position_mode":"fully_invested_or_flat","entry_condition":{"node_type":"comparison","operator":"greater_than","left":{"kind":"market_field","field":"close"},"right":{"kind":"indicator","indicator":{"indicator":"sma","field":"close","window":20}}},"exit_condition":{"node_type":"comparison","operator":"less_than","left":{"kind":"market_field","field":"close"},"right":{"kind":"indicator","indicator":{"indicator":"sma","field":"close","window":20}}}})
@@ -19,6 +20,17 @@ def test_library_can_save_original_language_before_a_dsl_exists(tmp_path):
         SavedStrategy(strategy_name="待解释策略", original_language="t0 涨幅后 t1 尾盘买入")
     )
     assert stored.strategy is None
+
+
+def test_library_read_failure_contains_machine_readable_parse_diagnostic(tmp_path):
+    path = tmp_path / "saved_strategies.json"
+    path.write_text('{"not": "an array"}', encoding="utf-8")
+
+    with pytest.raises(StrategyLibraryError) as error:
+        JsonStrategyLibrary(path).list()
+
+    assert error.value.details["path"] == str(path)
+    assert error.value.details["reason"] == "ValueError: saved strategy library root must be a JSON array"
 
 
 def test_library_replaces_a_draft_in_place_after_interpretation(tmp_path):

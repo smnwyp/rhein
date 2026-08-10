@@ -250,4 +250,5 @@ def test_trend_tracking_page_is_statistical_research_without_trading_inputs() ->
     assert "校准后的进场阈值（0–100）" not in labels
     assert "校准后的离场阈值（0–100）" not in labels
     assert any(widget.label == "运行统计检验研究" for widget in app.button)
+    assert any(widget.label == "运行 steady 分量增补检验" for widget in app.button)
     assert not any("网格" in widget.label or "回测" in widget.label for widget in app.button)

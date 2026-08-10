@@ -305,6 +305,8 @@ else:
             st.sidebar.info("还没有已保存策略。")
     except StrategyLibraryError as error:
         st.sidebar.error(f"无法读取策略库：{error.message}")
+        if error.details:
+            st.sidebar.caption(f"诊断：{json.dumps(error.details, ensure_ascii=False)}")
 
 last_result = st.session_state.get("last_parsed_strategy")
 matching_result = last_result if st.session_state.get("last_strategy_text") == strategy_text else None

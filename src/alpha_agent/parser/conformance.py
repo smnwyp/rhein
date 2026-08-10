@@ -107,6 +107,34 @@ def _has_macd_zero_axis_cross_pair(node: object) -> bool:
     return current_found and prior_found
 
 
+def _has_reciprocal_price_ma_cross(node: object, *, direction: str) -> bool:
+    """Recognise a price/MA cross written with the MA as the left operand.
+
+    Formula languages often write ``CROSS(MA20, Close)`` for a price moving
+    below MA20.  Its typed cross direction is necessarily ``cross_above``
+    because the *left* series (MA20) moves above the right series (Close).
+    This is semantically equivalent to ``CROSS(Close, MA20)`` with
+    ``cross_below`` and must not be rejected solely because the operands are
+    written in the reciprocal order.
+    """
+    if not isinstance(node, Mapping):
+        if isinstance(node, list):
+            return any(_has_reciprocal_price_ma_cross(item, direction=direction) for item in node)
+        return False
+    expected_operator = "cross_above" if direction == "below" else "cross_below"
+    if (
+        node.get("node_type") == "cross"
+        and node.get("operator") == expected_operator
+        and isinstance(node.get("left"), Mapping)
+        and node["left"].get("kind") == "indicator"
+        and isinstance(node.get("right"), Mapping)
+        and node["right"].get("kind") == "market_field"
+        and node["right"].get("field") == "close"
+    ):
+        return True
+    return any(_has_reciprocal_price_ma_cross(value, direction=direction) for value in node.values())
+
+
 def _source_defines_inclusive_macd_pair(text: str, *, direction: str) -> bool:
     if "DIF" not in text or "DEA" not in text or "前一日" not in text or "当日" not in text:
         return False
@@ -134,10 +162,11 @@ def validate_source_conformance(source_clauses: Iterable[SourceClause], coverage
                 issues.append({"path": f"source.{clause.clause_id}", "rule": "cross_requires_cross_node", "message": "an ‘上穿’ source clause must map to a cross_above node"})
         if re.search(r"(?:下穿|向下穿越)", text):
             has_strict_cross = any(_has(value, "operator", "cross_below") for value in mapped)
+            has_reciprocal_price_ma_cross = any(_has_reciprocal_price_ma_cross(value, direction="below") for value in mapped)
             has_inclusive_pair = _source_defines_inclusive_macd_pair(text, direction="below") and any(
                 _has_explicit_inclusive_macd_pair(value, direction="below") for value in mapped
             )
-            if not has_strict_cross and not has_inclusive_pair:
+            if not has_strict_cross and not has_reciprocal_price_ma_cross and not has_inclusive_pair:
                 issues.append({"path": f"source.{clause.clause_id}", "rule": "cross_requires_cross_node", "message": "a ‘下穿’ source clause must map to a cross_below node"})
         if re.search(r"(?:相对(?:前一|上一)(?:个)?交易日(?:收盘价)?|单日).*?(?:涨幅|收益|回报)", text):
             if not any(_has(value, "indicator", "rolling_return") and _has(value, "window", 1) for value in mapped):

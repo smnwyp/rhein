@@ -1,0 +1,13 @@
+schema_version = "1.1"
+study_name = "板块萌芽现象 · steady 分量单独检验"
+source_study_config = "config/emergence_study.toml"
+score_component = "steady"
+static_universe_bias_notice = "沿用 v1.0：基于当前股票池与静态行业快照回填历史，存在幸存者偏差和行业归属漂移；结论偏乐观，真实表现只会更差。"
+
+[preregistered_criteria]
+required_monotonic_horizons = [20, 60]
+required_all_horizons = [20, 40, 60]
+minimum_positive_spread_years = 6
+early_years = [2017, 2018, 2019, 2020]
+q5_must_be_positive = true
+top_bottom_hac_abs_t_minimum = 2.0

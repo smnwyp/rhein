@@ -42,9 +42,17 @@ class JsonStrategyLibrary:
             return []
         try:
             payload = json.loads(self._path.read_text(encoding="utf-8"))
+            if not isinstance(payload, list):
+                raise ValueError("saved strategy library root must be a JSON array")
             return [SavedStrategy.model_validate_json(json.dumps(item)) for item in payload]
         except (OSError, ValueError) as error:
-            raise StrategyLibraryError("saved strategy library cannot be read", details={"path": str(self._path)}) from error
+            raise StrategyLibraryError(
+                "saved strategy library cannot be read",
+                details={
+                    "path": str(self._path),
+                    "reason": f"{type(error).__name__}: {error}",
+                },
+            ) from error
 
     def save(self, strategy: SavedStrategy) -> SavedStrategy:
         entries = self.list()
