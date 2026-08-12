@@ -13,7 +13,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 from dotenv import load_dotenv
+from rhein.data.a_share_package import ensure_a_share_data
 from rhein.data.discovery import input_files
+from rhein.paths import DATA_ROOT
 from rhein.ui.presets import available_data_scopes
 from alpha_agent.domain.interpretation import ClarificationAnswer, StrategyInterpretationRequest
 from alpha_agent.domain.interpretation import ParsedStrategy
@@ -226,6 +228,13 @@ backtest_history = JsonBacktestHistory(ROOT / "config" / "saved_backtest_results
 # Provider configuration is infrastructure, not a research-user control.
 model = os.getenv("BEDROCK_MODEL", "us.anthropic.claude-sonnet-4-6")
 region = os.getenv("AWS_REGION", "us-east-1")
+
+try:
+    with st.sidebar:
+        with st.spinner("正在准备 A 股回测数据…"):
+            ensure_a_share_data(data_root=DATA_ROOT)
+except (OSError, ValueError) as error:
+    st.sidebar.warning(f"A 股数据暂不可用：{error}")
 
 scope_options = available_data_scopes()
 scope_labels = list(scope_options)

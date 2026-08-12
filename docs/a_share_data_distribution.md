@@ -23,3 +23,5 @@
 ```
 
 安装后数据位于 `data/a_share_ohlcv/`，UI 会自动出现“全部 A 股”数据范围。若要替换已有数据，追加 `--replace`。
+
+部署到 Streamlit 时，主回测页面会在数据目录不存在时自动下载当前 Release、校验 SHA-256 并安装。可通过 `A_SHARE_DATA_URL` 与 `A_SHARE_DATA_SHA256` 环境变量覆盖发布地址或校验值。

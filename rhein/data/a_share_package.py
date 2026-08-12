@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import tarfile
 import tempfile
@@ -12,6 +13,12 @@ from .discovery import input_files
 
 
 PACKAGE_ROOT = "a_share_ohlcv"
+PACKAGE_MARKER = ".rhein_a_share_package_ready"
+DEFAULT_A_SHARE_DATA_URL = (
+    "https://github.com/smnwyp/rhein/releases/download/"
+    "a-share-data-2026-08-12/a_share_ohlcv.tar.gz"
+)
+DEFAULT_A_SHARE_DATA_SHA256 = "c6dcbd94f5ee4e1d2f95fa57cecedc3dc73e80e50bf1a13f1bcc58278d83118e"
 
 
 def sha256sum(path: Path) -> str:
@@ -74,3 +81,33 @@ def download_archive(*, url: str, destination: Path, expected_sha256: str | None
     if expected_sha256 and sha256sum(destination).lower() != expected_sha256.lower():
         destination.unlink(missing_ok=True)
         raise ValueError("下载的数据包 SHA-256 校验失败")
+
+
+def ensure_a_share_data(*, data_root: Path, url: str | None = None, sha256: str | None = None) -> tuple[Path, bool]:
+    """Ensure the UI's A-share data directory exists, downloading it only once.
+
+    A deployment may override the public release asset through
+    ``A_SHARE_DATA_URL`` and ``A_SHARE_DATA_SHA256`` environment variables or
+    Streamlit secrets exposed as environment variables.  The pinned public
+    release is the default for the feature/poc deployment.
+    """
+    target = data_root / PACKAGE_ROOT
+    marker = target / PACKAGE_MARKER
+    if marker.is_file():
+        return target, False
+    try:
+        if target.is_dir() and input_files(target):
+            marker.touch()
+            return target, False
+    except ValueError:
+        # A partial prior install is replaced only after the new package has
+        # downloaded and passed its SHA-256 check.
+        pass
+    package_url = url or os.getenv("A_SHARE_DATA_URL") or DEFAULT_A_SHARE_DATA_URL
+    expected_sha256 = sha256 or os.getenv("A_SHARE_DATA_SHA256") or DEFAULT_A_SHARE_DATA_SHA256
+    with tempfile.TemporaryDirectory(dir=data_root.parent, prefix="a_share_download_") as temporary:
+        archive_path = Path(temporary) / "a_share_ohlcv.tar.gz"
+        download_archive(url=package_url, destination=archive_path, expected_sha256=expected_sha256)
+        installed = install_archive(archive_path=archive_path, data_root=data_root, replace=target.exists())
+    (installed / PACKAGE_MARKER).touch()
+    return installed, True

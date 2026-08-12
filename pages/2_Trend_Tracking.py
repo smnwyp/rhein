@@ -12,6 +12,8 @@ if str(SRC) not in sys.path:
 
 import streamlit as st
 
+from rhein.data.a_share_package import ensure_a_share_data
+from rhein.paths import DATA_ROOT
 from rhein.ui.presets import available_data_scopes
 import rhein.trend_tracking as _trend_tracking_core
 import rhein.ui.trend_tracking as _trend_tracking
@@ -25,6 +27,12 @@ render_trend_tracking = _trend_tracking.render_trend_tracking
 
 
 st.set_page_config(page_title="板块萌芽统计研究", layout="wide")
+
+try:
+    with st.spinner("正在准备 A 股回测数据…"):
+        ensure_a_share_data(data_root=DATA_ROOT)
+except (OSError, ValueError) as error:
+    st.warning(f"A 股数据暂不可用：{error}")
 
 scope_options = available_data_scopes()
 scope_labels = list(scope_options)

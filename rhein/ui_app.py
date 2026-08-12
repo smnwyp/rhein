@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import rhein.backtest as _backtest
+from rhein.data.a_share_package import ensure_a_share_data
 from rhein.paths import DATA_ROOT, GROUP_ROOT
 from rhein.strategy import (
     ATOMIC_TOGGLE_KEYS,
@@ -219,6 +220,14 @@ def kpi_formulas() -> None:
 
 st.title("Momentum Breakout 参数回测")
 st.caption("策略条件已原子化：每条 t0、入场与出场规则均可独立启停；确认窗口只考察 tN-1、tN，不使用未来数据。")
+
+try:
+    with st.spinner("首次启动正在准备 A 股回测数据（仅首次下载）…"):
+        _, a_share_downloaded = ensure_a_share_data(data_root=DATA_ROOT)
+    if a_share_downloaded:
+        st.success("A 股回测数据已下载并完成校验。")
+except (OSError, ValueError) as error:
+    st.warning(f"A 股数据暂不可用：{error}")
 
 with st.sidebar:
     st.header("单组策略参数")
