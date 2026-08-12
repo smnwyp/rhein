@@ -35,8 +35,8 @@ from alpha_agent.research.reporting import aggregate_gross_pnl, presentation_kpi
 from rhein.backtest import input_files as backtest_input_files, load_ohlc as backtest_load_ohlc, run_backtest as legacy_run_backtest
 from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
-from rhein.ui.summaries import style_by_drawdown
-from rhein.ui.trade_chart import compact_audit_overlay_lines, decisive_entry_audit_rows, event_text_layer, selected_event_id, trade_selector_options
+from rhein.ui.trade_chart import compact_audit_overlay_lines, decisive_entry_audit_rows, event_text_layer, selected_event_id
+from rhein.ui.trade_table import TRADE_RANK_OPTIONS, build_trade_ranking
 from rhein.ui.chart_theme import event_annotation_style
 from rhein.ui.dmi import add_display_dmi
 from rhein.ui.macd import add_display_macd, add_display_mmacd
@@ -136,11 +136,10 @@ def replace_backtest_view(
     else:
         st.session_state["dsl_backtest_loaded_run"] = loaded_run
     for key in (
-        "dsl_symbols_table",
+        "dsl_trades_table",
         "dsl_chart_result_scope",
         "dsl_chart_selected_symbol",
-        "dsl_chart_trade_scope",
-        "dsl_chart_trade_id",
+        "dsl_chart_trade_row_id",
     ):
         st.session_state.pop(key, None)
 
@@ -688,64 +687,42 @@ if matching_result is not None:
                 with st.expander(f"样本末尾未平仓头寸（{len(open_position_rows)}）", expanded=False):
                     st.caption("这些头寸按策略要求保留，未计入已平仓交易 KPI 或全部标的表中的交易统计。")
                     st.dataframe(pd.DataFrame(open_position_rows), hide_index=True, width="stretch")
-            st.subheader(f"全部标的（{len(kpis)}）")
-            options = {"盈利因子（高→低）": "profit_factor", "累计收益率（高→低）": "cumulative_return_pct", "年化收益率（高→低）": "annualized_return_pct", "夏普比率（高→低）": "sharpe_ratio", "胜率（高→低）": "win_rate_pct", "最大回撤（低→高）": "max_drawdown_pct"}
-            rank_label = st.selectbox("排序指标", list(options), key="dsl_rank_metric")
-            min_trades = st.number_input("最少交易次数", min_value=0, value=0, step=1, key="dsl_min_trades")
-            metric = options[rank_label]
-            ranked = kpis[kpis["n_trades"] >= min_trades].sort_values(
-                metric,
-                ascending=metric == "max_drawdown_pct",
-                na_position="last",
-            )
-            display = ranked[["标的", "n_trades", "sharpe_ratio", "annualized_return_pct", "max_drawdown_pct", "win_rate_pct", "cumulative_return_pct", "payoff_ratio", "profit_factor", "avg_return_pct", "avg_days_held"]].rename(columns={"n_trades":"交易次数", "sharpe_ratio":"夏普比率", "annualized_return_pct":"全样本年化收益率 (%)", "max_drawdown_pct":"最大回撤 (%)", "win_rate_pct":"胜率 (%)", "cumulative_return_pct":"累计收益率 (%)", "payoff_ratio":"盈亏比", "profit_factor":"盈利因子", "avg_return_pct":"平均单笔收益 (%)", "avg_days_held":"平均持仓天数"})
-            st.caption(f"展示当前分组全部 {len(display)} 个标的。绿色行符合回撤阈值；红色行超过阈值。选择行后可查看该标的交易。")
-            selection = st.dataframe(style_by_drawdown(display, "最大回撤 (%)", -limit, integer_columns=("交易次数",)), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key="dsl_symbols_table")
-            rows = selection.selection.rows if selection else []
-            selected_symbol = None
-            if rows:
-                selected_symbol = str(display.iloc[rows[0]]["标的"])
-                st.session_state["dsl_chart_result_scope"] = current_backtest_view_scope
-                st.session_state["dsl_chart_selected_symbol"] = selected_symbol
-            elif (
-                st.session_state.get("dsl_chart_result_scope") == current_backtest_view_scope
-                and st.session_state.get("dsl_chart_selected_symbol") in set(display["标的"].astype(str))
-            ):
-                # Selectbox interactions rerun the page but do not necessarily
-                # preserve a dataframe's transient row-selection payload.
-                # Keep showing the chart for the symbol chosen in this exact
-                # result set instead of making the user reload the strategy.
-                selected_symbol = str(st.session_state["dsl_chart_selected_symbol"])
+            trades = st.session_state.get("dsl_backtest_trades", pd.DataFrame())
+            if trades.empty:
+                st.info("本次回测没有已平仓交易可供排名或绘图。")
             else:
-                # A loaded historical result starts with no transient table
-                # selection.  Show the first ranked symbol with a completed
-                # trade immediately, so the chart does not appear to vanish
-                # until the user happens to click a row.
-                tradable_symbols = display.loc[display["交易次数"] > 0, "标的"]
-                if not tradable_symbols.empty:
-                    selected_symbol = str(tradable_symbols.iloc[0])
+                st.subheader(f"全部已平仓交易（{len(trades)}）")
+                trade_rank_label = st.selectbox("交易排序指标", list(TRADE_RANK_OPTIONS), key="dsl_trade_rank_metric")
+                ranked_trades, display = build_trade_ranking(trades, metric=TRADE_RANK_OPTIONS[trade_rank_label])
+                st.caption(f"每行是一笔已平仓交易；按所选单项指标在当前分组的全部 {len(display)} 笔交易中排序。点击一行可直接查看该笔交易的 K 线与审计。")
+                selection = st.dataframe(display, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key="dsl_trades_table")
+                rows = selection.selection.rows if selection else []
+                selected_trade = None
+                if rows:
+                    trade_row_id = int(ranked_trades.iloc[rows[0]]["_trade_row_id"])
+                    selected_trade = ranked_trades[ranked_trades["_trade_row_id"] == trade_row_id].iloc[0]
                     st.session_state["dsl_chart_result_scope"] = current_backtest_view_scope
-                    st.session_state["dsl_chart_selected_symbol"] = selected_symbol
-            if selected_symbol is not None:
-                symbol_trades = st.session_state.get("dsl_backtest_trades", pd.DataFrame())
-                symbol_trades = symbol_trades[symbol_trades["symbol"] == selected_symbol].reset_index(drop=True)
-                if symbol_trades.empty:
-                    st.info(f"{selected_symbol} 没有可展示的已平仓交易。")
+                    st.session_state["dsl_chart_trade_row_id"] = trade_row_id
+                elif (
+                    st.session_state.get("dsl_chart_result_scope") == current_backtest_view_scope
+                    and st.session_state.get("dsl_chart_trade_row_id") in set(ranked_trades["_trade_row_id"])
+                ):
+                    trade_row_id = int(st.session_state["dsl_chart_trade_row_id"])
+                    selected_trade = ranked_trades[ranked_trades["_trade_row_id"] == trade_row_id].iloc[0]
                 else:
-                    st.subheader(f"{selected_symbol}：交易 K 线")
-                    trade_option_ids, trade_labels = trade_selector_options(symbol_trades)
-                    # A table click reruns the page. Scope the dropdown to the
-                    # selected symbol plus its stable trade IDs so that a choice
-                    # from the previous symbol can never index the new table.
-                    trade_scope = f"{selected_symbol}::{'||'.join(trade_option_ids)}"
-                    if st.session_state.get("dsl_chart_trade_scope") != trade_scope:
-                        st.session_state["dsl_chart_trade_scope"] = trade_scope
-                        st.session_state["dsl_chart_trade_id"] = trade_option_ids[0]
-                    elif st.session_state.get("dsl_chart_trade_id") not in trade_labels:
-                        st.session_state["dsl_chart_trade_id"] = trade_option_ids[0]
-                    trade_id = st.selectbox("选择交易段", trade_option_ids, format_func=trade_labels.__getitem__, key="dsl_chart_trade_id")
-                    st.caption("操作：点击图中带蓝色“入场 ⓘ”或红色“出场 ⓘ”的圆点，即可在同一张 K 线图内查看对应条件与实际数值。")
-                    trade = symbol_trades.iloc[trade_option_ids.index(trade_id)]
+                    selected_trade = ranked_trades.iloc[0]
+                    trade_row_id = int(selected_trade["_trade_row_id"])
+                    st.session_state["dsl_chart_result_scope"] = current_backtest_view_scope
+                    st.session_state["dsl_chart_trade_row_id"] = trade_row_id
+                selected_symbol = str(selected_trade["symbol"])
+                st.session_state["dsl_chart_selected_symbol"] = selected_symbol
+                st.subheader(f"{selected_symbol}：交易 K 线")
+                trade_return = pd.to_numeric(pd.Series([selected_trade["ret_pct"]]), errors="coerce").iloc[0]
+                return_text = f"{float(trade_return):+.2f}%" if pd.notna(trade_return) else "收益率缺失"
+                st.caption(f"当前交易：t0 {selected_trade['signal']}｜入场 {selected_trade['entry']}｜出场 {selected_trade['exit']}｜{return_text}")
+                st.caption("操作：点击图中带蓝色“入场 ⓘ”或红色“出场 ⓘ”的圆点，即可在同一张 K 线图内查看对应条件与实际数值。")
+                trade = selected_trade
+                if selected_trade is not None:
                     source_matches = kpis.loc[kpis["标的"] == selected_symbol, "源文件"]
                     source_path = (
                         resolve_history_data_path(source_matches.iloc[0], project_root=ROOT)
@@ -962,7 +939,7 @@ if matching_result is not None:
                             # the bars after the exit point.  It is built from
                             # the deterministic replay audit, never a chart
                             # approximation or LLM explanation.
-                            event_detail_key = f"dsl_chart_event_detail::{current_backtest_view_scope}::{selected_symbol}::{trade_id}"
+                            event_detail_key = f"dsl_chart_event_detail::{current_backtest_view_scope}::{selected_symbol}::{trade_row_id}"
                             selected_event_id_for_detail = st.session_state.get(event_detail_key)
                             event_audit: dict[str, object] | None = None
                             audit_overlay_lines: list[str] = []
@@ -1089,7 +1066,7 @@ if matching_result is not None:
                                 chart,
                                 spec,
                                 width="stretch",
-                                key=f"dsl_chart_{selected_symbol}_{trade_id}",
+                                key=f"dsl_chart_{selected_symbol}_{trade_row_id}",
                                 on_select="rerun",
                                 selection_mode="trade_event",
                             )
