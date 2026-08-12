@@ -30,3 +30,9 @@ output/
 node_modules/
 cypress/videos/
 cypress/screenshots/
+
+# Full A-share market-data universe is distributed as a release asset, not a
+# Git blob collection.  Keep the local conversion workflow and UI usable.
+data/A股/
+data/a_share_ohlcv/
+artifacts/

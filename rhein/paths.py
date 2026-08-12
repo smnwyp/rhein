@@ -5,5 +5,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = PROJECT_ROOT / "data"
 NASDAQ_ROOT = DATA_ROOT / "nasdaq_10y"
 GROUP_ROOT = NASDAQ_ROOT / "groups"
+A_SHARE_ROOT = DATA_ROOT / "a_share_ohlcv"
 REPORTS_ROOT = PROJECT_ROOT / "reports"
 CONFIG_ROOT = PROJECT_ROOT / "config"

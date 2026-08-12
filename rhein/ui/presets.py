@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from rhein.paths import DATA_ROOT, GROUP_ROOT
+from rhein.paths import A_SHARE_ROOT, DATA_ROOT, GROUP_ROOT
 
 
 def available_data_scopes() -> dict[str, str]:
@@ -15,6 +15,11 @@ def available_data_scopes() -> dict[str, str]:
         "示例数据（NVDA、TSLA）": str(DATA_ROOT),
         "全部 Nasdaq 当前股票池": str(DATA_ROOT / "nasdaq_10y"),
     }
+    if A_SHARE_ROOT.is_dir():
+        # Conversion failures lack the standard OHLCV header and are excluded
+        # by input_files; the label makes that universe explicit in the UI.
+        a_share_count = sum(1 for path in A_SHARE_ROOT.glob("*.csv") if path.name not in {"conversion_failures.csv"})
+        scopes[f"全部 A 股（{a_share_count} 个可回测标的，前复权日线）"] = str(A_SHARE_ROOT)
     if GROUP_ROOT.is_dir():
         for folder in sorted(path for path in GROUP_ROOT.iterdir() if path.is_dir()):
             manifest = folder / "group_manifest.csv"

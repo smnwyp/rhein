@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from rhein.paths import GROUP_ROOT
+from rhein.paths import A_SHARE_ROOT, GROUP_ROOT
+from rhein.ui.presets import available_data_scopes
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
 from rhein.ui.strategy_text import params_to_text, strategy_narrative
@@ -119,6 +120,14 @@ def test_current_settings_updates_when_t0_09_is_toggled() -> None:
 def test_nine_mature_group_directories_exist() -> None:
     groups = [path for path in GROUP_ROOT.glob("[0-9][0-9]_*") if path.is_dir() and not path.name.startswith("10_")]
     assert len(groups) == 9
+
+
+def test_a_share_universe_is_available_as_a_peer_data_scope() -> None:
+    scopes = available_data_scopes()
+    a_share_scope = next(label for label in scopes if label.startswith("全部 A 股"))
+
+    assert scopes[a_share_scope] == str(A_SHARE_ROOT)
+    assert "前复权日线" in a_share_scope
 
 
 def test_streamlit_entrypoint_renders() -> None:
