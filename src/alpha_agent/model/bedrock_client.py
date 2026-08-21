@@ -1,6 +1,8 @@
 """Amazon Bedrock Converse adapter for the provider-independent interpreter client."""
 import json
 import os
+import struct
+import zlib
 from collections.abc import Mapping
 from time import sleep as default_sleep
 from typing import Any, Callable
@@ -10,12 +12,13 @@ import requests
 
 from alpha_agent.domain.interpretation import ModelInterpretationEnvelope, StrategyInterpretationRequest
 from alpha_agent.domain.semantic_inventory import SemanticInventory
+from alpha_agent.domain.sequence import TimedStrategyDefinition
 from alpha_agent.errors import ModelClientFailure
 from alpha_agent.parser.prompts import SYSTEM_PROMPT, inventory_system_instruction, inventory_user_prompt, user_prompt
 
 
 class BedrockStrategyModelClient:
-    def __init__(self, *, model: str = "us.anthropic.claude-sonnet-4-6", region: str = "us-east-1", api_key: str | None = None, session: requests.Session | None = None, max_tokens: int = 8192, timeout_seconds: int = 180, transient_retry_attempts: int = 1, retry_backoff_seconds: float = 0.75, sleep: Callable[[float], None] = default_sleep) -> None:
+    def __init__(self, *, model: str = "us.anthropic.claude-sonnet-4-6", region: str = "us-east-1", api_key: str | None = None, session: requests.Session | None = None, max_tokens: int = 16384, timeout_seconds: int = 180, transient_retry_attempts: int = 1, retry_backoff_seconds: float = 0.75, sleep: Callable[[float], None] = default_sleep) -> None:
         if transient_retry_attempts < 0:
             raise ValueError("transient_retry_attempts must be non-negative")
         if retry_backoff_seconds < 0:
@@ -48,7 +51,11 @@ class BedrockStrategyModelClient:
                 "inferenceConfig": {"maxTokens": self._max_tokens, "temperature": 0},
             }
             try:
-                return self._extract_interpretation(self._post_payload(payload))
+                # The final recursive DSL can be substantially larger than the
+                # inventory.  Keep its connection alive by consuming Bedrock's
+                # event stream, while retaining the exact same local JSON and
+                # semantic validation contract below this adapter.
+                return self._extract_interpretation(self._post_interpretation_stream(payload))
             except ModelClientFailure as error:
                 if format_attempt == 0 and self._is_format_failure(error):
                     continue
@@ -104,6 +111,17 @@ class BedrockStrategyModelClient:
             details={"model": self._model, "phase": "inventory_format_retry", "attempts": 2},
         )
 
+    def interpret_compact_strategy(self, request: StrategyInterpretationRequest) -> Mapping[str, Any]:
+        """Compile a large strategy as bare DSL, omitting verbose audit coverage."""
+        if not self._api_key:
+            raise ModelClientFailure("Bedrock API key is missing", details={"required_env": "AWS_BEARER_TOKEN_BEDROCK"})
+        payload = {
+            "system": [{"text": self._compact_system_instruction()}],
+            "messages": [{"role": "user", "content": [{"text": user_prompt(request)}]}],
+            "inferenceConfig": {"maxTokens": self._max_tokens, "temperature": 0},
+        }
+        return self._extract_interpretation(self._post_interpretation_stream(payload))
+
     @staticmethod
     def _format_retry_request(request: StrategyInterpretationRequest) -> StrategyInterpretationRequest:
         instruction = (
@@ -150,6 +168,156 @@ class BedrockStrategyModelClient:
             except requests.RequestException as error:
                 provider_message = error.response.text if error.response is not None else str(error)
                 raise ModelClientFailure("Bedrock strategy interpretation request failed", details={"exception_type": type(error).__name__, "http_status": getattr(error.response, "status_code", None), "provider_message": provider_message, "model": self._model, "region": self._region, "timeout_seconds": self._timeout_seconds}) from error
+
+    def _post_interpretation_stream(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Return a ConverseStream response reconstructed from text deltas.
+
+        Bedrock streams are AWS EventStream frames, not newline-delimited JSON.
+        A connection may close after the complete JSON object but before the
+        final ``messageStop`` event; that result is safe to retain.  Otherwise
+        retry the whole idempotent compilation request a bounded number of
+        times.  We intentionally do not attempt to stitch two partial model
+        generations together.
+        """
+        url = f"https://bedrock-runtime.{self._region}.amazonaws.com/model/{quote(self._model, safe='.:_-')}/converse-stream"
+        last_error: Exception | None = None
+        last_text = ""
+        for attempt in range(self._transient_retry_attempts + 1):
+            try:
+                response = self._session.post(
+                    url,
+                    json=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/vnd.amazon.eventstream",
+                        "Authorization": f"Bearer {self._api_key}",
+                    },
+                    timeout=self._timeout_seconds,
+                    stream=True,
+                )
+                response.raise_for_status()
+                text, stop_reason = self._read_converse_stream(response)
+                return self._stream_response_envelope(text, stop_reason)
+            except (requests.ConnectionError, requests.Timeout) as error:
+                last_error, last_text = error, getattr(error, "streamed_text", "") or last_text
+                if last_text and self._is_complete_json_object(last_text):
+                    return self._stream_response_envelope(last_text, None)
+                if attempt < self._transient_retry_attempts:
+                    self._sleep(self._retry_backoff_seconds * (2 ** attempt))
+                    continue
+                provider_message = error.response.text if error.response is not None else str(error)
+                raise ModelClientFailure(
+                    "Bedrock transient connection failed while streaming after bounded retry",
+                    details={
+                        "exception_type": type(error).__name__,
+                        "http_status": getattr(error.response, "status_code", None),
+                        "provider_message": provider_message,
+                        "model": self._model,
+                        "region": self._region,
+                        "timeout_seconds": self._timeout_seconds,
+                        "attempts": attempt + 1,
+                        "retryable": True,
+                        "streamed_characters": len(last_text),
+                    },
+                ) from error
+            except ModelClientFailure as error:
+                # These arrive as normal EventStream frames (rather than an
+                # HTTP status) after Bedrock has accepted the request. They
+                # are safe to retry because interpretation is side-effect free.
+                event_type = error.details.get("event_type") if isinstance(error.details, Mapping) else None
+                retryable_events = {
+                    "internalServerException", "modelStreamErrorException",
+                    "serviceUnavailableException", "throttlingException",
+                }
+                if event_type in retryable_events and attempt < self._transient_retry_attempts:
+                    self._sleep(self._retry_backoff_seconds * (2 ** attempt))
+                    continue
+                raise
+            except requests.RequestException as error:
+                provider_message = error.response.text if error.response is not None else str(error)
+                raise ModelClientFailure(
+                    "Bedrock strategy interpretation streaming request failed",
+                    details={
+                        "exception_type": type(error).__name__,
+                        "http_status": getattr(error.response, "status_code", None),
+                        "provider_message": provider_message,
+                        "model": self._model,
+                        "region": self._region,
+                        "timeout_seconds": self._timeout_seconds,
+                    },
+                ) from error
+        raise ModelClientFailure("Bedrock interpretation stream completed without a usable result", details={"model": self._model, "exception_type": type(last_error).__name__ if last_error else None})
+
+    def _read_converse_stream(self, response: Any) -> tuple[str, str | None]:
+        """Decode AWS EventStream frames and collect only text deltas."""
+        if not hasattr(response, "iter_content"):
+            raise ModelClientFailure(
+                "Bedrock streaming response does not support incremental reads",
+                details={"model": self._model, "response_type": type(response).__name__},
+            )
+        decoder = _AwsEventStreamDecoder()
+        text_parts: list[str] = []
+        event_kinds: list[list[str]] = []
+        stop_reason: str | None = None
+        try:
+            for chunk in response.iter_content(chunk_size=8192):
+                if not chunk:
+                    continue
+                for headers, payload in decoder.feed(chunk):
+                    event = _decode_stream_event(headers, payload)
+                    event_kinds.append(sorted(str(key) for key in event))
+                    delta = event.get("contentBlockDelta")
+                    if isinstance(delta, Mapping):
+                        content_delta = delta.get("delta")
+                        if isinstance(content_delta, Mapping) and isinstance(content_delta.get("text"), str):
+                            text_parts.append(content_delta["text"])
+                    # The bearer-token Bedrock gateway emits the same fields
+                    # in a compact flat event (``delta`` / ``stopReason``)
+                    # rather than wrapping them under the public API event
+                    # name.  Accept it without depending on undocumented
+                    # values carried in its auxiliary ``p`` field.
+                    flat_delta = event.get("delta")
+                    if isinstance(flat_delta, Mapping) and isinstance(flat_delta.get("text"), str):
+                        text_parts.append(flat_delta["text"])
+                    message_stop = event.get("messageStop")
+                    if isinstance(message_stop, Mapping):
+                        reason = message_stop.get("stopReason")
+                        stop_reason = reason if isinstance(reason, str) else None
+                    flat_stop_reason = event.get("stopReason")
+                    if isinstance(flat_stop_reason, str):
+                        stop_reason = flat_stop_reason
+                    for error_key in ("internalServerException", "modelStreamErrorException", "validationException", "throttlingException", "serviceUnavailableException"):
+                        if error_key in event:
+                            raise ModelClientFailure(
+                                "Bedrock returned an error event while streaming strategy interpretation",
+                                details={"model": self._model, "event_type": error_key},
+                            )
+            decoder.finish()
+        except (requests.ConnectionError, requests.Timeout) as error:
+            # Preserve the completed prefix for the caller's safe JSON check.
+            setattr(error, "streamed_text", "".join(text_parts))
+            raise
+        text = "".join(text_parts)
+        if not text and stop_reason is None:
+            raise ModelClientFailure(
+                "Bedrock stream completed without a text or stop event",
+                details={"model": self._model, "event_kinds": event_kinds},
+            )
+        return text, stop_reason
+
+    @staticmethod
+    def _stream_response_envelope(text: str, stop_reason: str | None) -> Mapping[str, Any]:
+        payload: dict[str, Any] = {"output": {"message": {"content": [{"text": text}]}}}
+        if stop_reason is not None:
+            payload["stopReason"] = stop_reason
+        return payload
+
+    def _is_complete_json_object(self, text: str) -> bool:
+        try:
+            self._parse_json_object(text)
+        except (json.JSONDecodeError, TypeError):
+            return False
+        return True
 
     def _extract_interpretation(self, response_payload: object) -> Mapping[str, Any]:
         """Read raw JSON text, while retaining compatibility with old tool output.
@@ -292,6 +460,17 @@ class BedrockStrategyModelClient:
         )
 
     @staticmethod
+    def _compact_system_instruction() -> str:
+        schema = json.dumps(TimedStrategyDefinition.model_json_schema(), ensure_ascii=False, separators=(",", ":"))
+        return (
+            f"{SYSTEM_PROMPT}\n\n"
+            "COMPACT LARGE-DSL MODE. Return only the complete inner timed strategy DSL JSON object, "
+            "with no status envelope, coverage, assumptions, warnings, Markdown, or prose. "
+            "Local deterministic validation will create the audit mapping. "
+            f"The DSL must conform exactly to this JSON Schema:\n{schema}"
+        )
+
+    @staticmethod
     def _parse_json_object(output: str) -> Mapping[str, Any]:
         """Accept a JSON object even when a model wraps it in Markdown prose/fences."""
         cleaned = output.strip()
@@ -319,6 +498,119 @@ class BedrockStrategyModelClient:
                 if isinstance(parsed, Mapping):
                     return parsed
             raise original_error
+
+
+class _AwsEventStreamDecoder:
+    """Minimal, validated AWS EventStream frame decoder for Bedrock text events."""
+
+    _PRELUDE_SIZE = 12
+    _MIN_MESSAGE_SIZE = 16
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+
+    def feed(self, chunk: bytes) -> list[tuple[Mapping[str, object], bytes]]:
+        self._buffer.extend(chunk)
+        payloads: list[tuple[Mapping[str, object], bytes]] = []
+        while len(self._buffer) >= self._PRELUDE_SIZE:
+            total_length, headers_length, expected_prelude_crc = struct.unpack(
+                ">III", self._buffer[:self._PRELUDE_SIZE]
+            )
+            actual_prelude_crc = zlib.crc32(self._buffer[:8]) & 0xFFFFFFFF
+            if actual_prelude_crc != expected_prelude_crc:
+                raise ModelClientFailure("Bedrock stream prelude checksum failed", details={"phase": "dsl_compilation"})
+            if total_length < self._MIN_MESSAGE_SIZE or headers_length > total_length - self._MIN_MESSAGE_SIZE:
+                raise ModelClientFailure("Bedrock stream frame has invalid length", details={"phase": "dsl_compilation"})
+            if len(self._buffer) < total_length:
+                break
+            frame = bytes(self._buffer[:total_length])
+            del self._buffer[:total_length]
+            expected_message_crc = struct.unpack(">I", frame[-4:])[0]
+            actual_message_crc = zlib.crc32(frame[:-4]) & 0xFFFFFFFF
+            if actual_message_crc != expected_message_crc:
+                raise ModelClientFailure("Bedrock stream frame checksum failed", details={"phase": "dsl_compilation"})
+            payload_start = self._PRELUDE_SIZE + headers_length
+            payloads.append((_decode_event_headers(frame[self._PRELUDE_SIZE:payload_start]), frame[payload_start:-4]))
+        return payloads
+
+    def finish(self) -> None:
+        if self._buffer:
+            raise requests.ConnectionError("Bedrock stream ended with an incomplete event frame")
+
+
+def _decode_event_headers(encoded: bytes) -> Mapping[str, object]:
+    """Decode the subset of AWS EventStream headers used by Bedrock."""
+    headers: dict[str, object] = {}
+    offset = 0
+    while offset < len(encoded):
+        if offset + 2 > len(encoded):
+            raise ModelClientFailure("Bedrock stream header was truncated", details={"phase": "dsl_compilation"})
+        name_length = encoded[offset]
+        offset += 1
+        if offset + name_length + 1 > len(encoded):
+            raise ModelClientFailure("Bedrock stream header has invalid length", details={"phase": "dsl_compilation"})
+        name = encoded[offset:offset + name_length].decode("utf-8")
+        offset += name_length
+        value_type = encoded[offset]
+        offset += 1
+        if value_type == 0:
+            headers[name] = True
+        elif value_type == 1:
+            headers[name] = False
+        elif value_type in {2, 3, 4, 5}:
+            size = {2: 1, 3: 2, 4: 4, 5: 8}[value_type]
+            if offset + size > len(encoded):
+                raise ModelClientFailure("Bedrock stream numeric header was truncated", details={"phase": "dsl_compilation"})
+            headers[name] = int.from_bytes(encoded[offset:offset + size], "big", signed=True)
+            offset += size
+        elif value_type in {6, 7}:
+            if offset + 2 > len(encoded):
+                raise ModelClientFailure("Bedrock stream variable header was truncated", details={"phase": "dsl_compilation"})
+            size = int.from_bytes(encoded[offset:offset + 2], "big")
+            offset += 2
+            if offset + size > len(encoded):
+                raise ModelClientFailure("Bedrock stream variable header has invalid length", details={"phase": "dsl_compilation"})
+            value = bytes(encoded[offset:offset + size])
+            headers[name] = value.decode("utf-8") if value_type == 7 else value
+            offset += size
+        elif value_type == 8:
+            if offset + 8 > len(encoded):
+                raise ModelClientFailure("Bedrock stream timestamp header was truncated", details={"phase": "dsl_compilation"})
+            headers[name] = int.from_bytes(encoded[offset:offset + 8], "big", signed=True)
+            offset += 8
+        elif value_type == 9:
+            if offset + 16 > len(encoded):
+                raise ModelClientFailure("Bedrock stream UUID header was truncated", details={"phase": "dsl_compilation"})
+            headers[name] = bytes(encoded[offset:offset + 16])
+            offset += 16
+        else:
+            raise ModelClientFailure("Bedrock stream header has unsupported type", details={"phase": "dsl_compilation", "header_type": value_type})
+    return headers
+
+
+def _decode_stream_event(headers: Mapping[str, object], payload: bytes) -> Mapping[str, Any]:
+    """Decode a single Bedrock event payload without exposing provider prose."""
+    try:
+        decoded = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ModelClientFailure(
+            "Bedrock stream event was not valid JSON",
+            details={"exception_type": type(error).__name__, "phase": "dsl_compilation"},
+        ) from error
+    if not isinstance(decoded, Mapping):
+        raise ModelClientFailure(
+            "Bedrock stream event had an unexpected shape",
+            details={"response_type": type(decoded).__name__, "phase": "dsl_compilation"},
+        )
+    event_type = headers.get(":event-type")
+    compact_payload = decoded.get("p")
+    if isinstance(event_type, str) and isinstance(compact_payload, Mapping):
+        # The Bedrock bearer-token gateway uses the standard AWS EventStream
+        # event type header and a compact ``{"p": ...}`` payload.  Public
+        # Bedrock examples often show the expanded object directly; accept
+        # both forms so the client also works against the native runtime.
+        return {event_type: compact_payload}
+    return decoded
 
 
 def _bedrock_transport_schema() -> dict[str, Any]:

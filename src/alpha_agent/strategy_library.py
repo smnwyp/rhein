@@ -54,6 +54,19 @@ class JsonStrategyLibrary:
                 },
             ) from error
 
+    def latest_parsed_for_source(self, original_language: str) -> SavedStrategy | None:
+        """Return the newest validated record with exactly the same source text.
+
+        A strategy title is product metadata, not strategy semantics.  Reusing
+        an exact, locally revalidated source avoids a second model judgement
+        when a user creates a renamed copy of an already audited strategy.
+        """
+        matches = [
+            entry for entry in self.list()
+            if entry.original_language == original_language and entry.strategy is not None
+        ]
+        return max(matches, key=lambda entry: entry.created_at) if matches else None
+
     def save(self, strategy: SavedStrategy) -> SavedStrategy:
         entries = self.list()
         entries.append(strategy)

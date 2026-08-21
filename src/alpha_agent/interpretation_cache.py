@@ -16,7 +16,7 @@ from typing import Any, Protocol
 from alpha_agent.domain.interpretation import StrategyInterpretationRequest
 
 
-_CACHE_FORMAT_VERSION = "parsed-interpretation-v1"
+_CACHE_FORMAT_VERSION = "parsed-interpretation-v2"
 
 
 def interpretation_cache_key(request: StrategyInterpretationRequest) -> str:

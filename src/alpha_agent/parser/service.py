@@ -14,7 +14,7 @@ from alpha_agent.monitoring import InterpretationMonitoringEvent, InterpreterMon
 from alpha_agent.parser.validation import validate_strategy
 from alpha_agent.parser.completeness import _resolve_dsl_path, enrich_request, preflight_clarifications, validate_coverage
 from alpha_agent.parser.conformance import validate_source_conformance
-from alpha_agent.parser.inventory import inventory_clarification, raise_inventory_unsupported, validate_inventory
+from alpha_agent.parser.inventory import inventory_clarification, raise_inventory_unsupported, source_resolved_inventory_questions, validate_inventory
 from alpha_agent.interpretation_cache import ParsedInterpretationCache
 _RESULT_ADAPTER = TypeAdapter(StrategyInterpretationResult)
 
@@ -32,6 +32,84 @@ _EXPLICIT_NONOPERATIVE_CLAUSE = re.compile(
     r"(?:尚可补充|不影响当前规则运行|不影响.*?(?:当前)?规则|后续(?:再)?补充)",
     flags=re.IGNORECASE | re.DOTALL,
 )
+_SOURCE_NAMED_INSTRUMENT = re.compile(
+    r"(?:股票|标的|证券|代码|ticker)\s*[:：]?\s*(?:[A-Za-z][A-Za-z0-9.^_-]{0,11}|(?:SH|SZ)?\d{6})",
+    flags=re.IGNORECASE,
+)
+_INPUT_GROUP_SYMBOL = "__INPUT_GROUP__"
+_REENTRY_ALLOWED_SOURCE = re.compile(r"卖出后.*?(?:允许|可以).*?(?:重新买入|再(?:次)?入场|再(?:次)?交易|重新寻找)", flags=re.IGNORECASE | re.DOTALL)
+_REENTRY_FORBIDDEN_SOURCE = re.compile(r"卖出后.*?(?:不允许|禁止|不再|不可).*?(?:重新买入|再(?:次)?入场|再(?:次)?交易|重新寻找)", flags=re.IGNORECASE | re.DOTALL)
+
+
+def _resolved_reentry_policy(request: StrategyInterpretationRequest) -> tuple[bool, bool]:
+    """Return (value, came_from_default), preserving explicit user/source intent."""
+    for answer in reversed(request.clarification_answers):
+        if answer.question_id not in {"allow_reentry_after_exit", "Q_REENTRY"}:
+            continue
+        text = answer.answer.strip()
+        if re.search(r"不允许|禁止|不再|不可|仅.*?一次", text, flags=re.IGNORECASE):
+            return False, False
+        if re.search(r"允许|可以|true|是", text, flags=re.IGNORECASE):
+            return True, False
+    if _REENTRY_FORBIDDEN_SOURCE.search(request.strategy_text):
+        return False, False
+    if _REENTRY_ALLOWED_SOURCE.search(request.strategy_text):
+        return True, False
+    return request.policy.allow_reentry_after_exit, True
+
+
+def _apply_policy_defaults(raw: Mapping[str, object], request: StrategyInterpretationRequest | None) -> dict[str, object]:
+    """Materialize confirmed product defaults without overriding explicit rules."""
+    normalized = dict(raw)
+    if request is None:
+        return normalized
+    strategy_key = "strategy" if normalized.get("status") == "parsed" else "partial_strategy"
+    strategy = normalized.get(strategy_key)
+    if not isinstance(strategy, Mapping) or not isinstance(strategy.get("lifecycle_policy"), Mapping):
+        return normalized
+    reentry, from_default = _resolved_reentry_policy(request)
+    lifecycle = dict(strategy["lifecycle_policy"])
+    lifecycle["allow_reentry_after_exit"] = reentry
+    updated_strategy = dict(strategy)
+    updated_strategy["lifecycle_policy"] = lifecycle
+    normalized[strategy_key] = updated_strategy
+    if strategy_key == "strategy" and from_default:
+        assumptions = list(normalized.get("assumptions", [])) if isinstance(normalized.get("assumptions"), list) else []
+        if not any(isinstance(note, Mapping) and note.get("code") == "default_allow_reentry_after_exit" for note in assumptions):
+            assumptions.append({
+                "code": "default_allow_reentry_after_exit",
+                "message": "未指定卖出后的再入场限制；按产品默认设置，卖出后允许重新评估并再次入场。",
+            })
+        normalized["assumptions"] = assumptions
+    return normalized
+
+
+def _normalize_input_group_symbol(raw: Mapping[str, object], request: StrategyInterpretationRequest | None) -> dict[str, object]:
+    """Set the legacy DSL symbol marker when the UI intentionally scopes a group.
+
+    The backtest iterates the selected input group; a ticker is neither needed
+    nor permitted as a model-invented default. A source that explicitly names
+    an instrument remains authoritative and is left untouched.
+    """
+    normalized = dict(raw)
+    if request is None or request.symbol is not None or _SOURCE_NAMED_INSTRUMENT.search(request.strategy_text):
+        return normalized
+    strategy_key = "strategy" if normalized.get("status") == "parsed" else "partial_strategy"
+    strategy = normalized.get(strategy_key)
+    if not isinstance(strategy, Mapping):
+        return normalized
+    scoped_strategy = dict(strategy)
+    scoped_strategy["symbol"] = _INPUT_GROUP_SYMBOL
+    normalized[strategy_key] = scoped_strategy
+    if strategy_key == "strategy":
+        assumptions = list(normalized.get("assumptions", [])) if isinstance(normalized.get("assumptions"), list) else []
+        if not any(isinstance(note, Mapping) and note.get("code") == "input_group_scope" for note in assumptions):
+            assumptions.append({
+                "code": "input_group_scope",
+                "message": "策略适用于当前 UI 选定的数据分组；DSL 的 symbol=__INPUT_GROUP__ 仅为兼容标记，不代表单只股票。",
+            })
+        normalized["assumptions"] = assumptions
+    return normalized
 
 
 def _normalize_provider_result(
@@ -90,6 +168,8 @@ def _normalize_provider_result(
     for field_name, empty_value in inactive_empty_fields.get(normalized.get("status"), {}).items():
         if normalized.get(field_name, object()) == empty_value:
             normalized.pop(field_name, None)
+    normalized = _normalize_input_group_symbol(normalized, request)
+    normalized = _apply_policy_defaults(normalized, request)
     return _repair_provider_envelope_paths(_repair_anchor_indicator_encoding(normalized))
 
 
@@ -586,8 +666,10 @@ def _targeted_repair_instruction(
     }
     if not source_ids or candidate is None:
         return (
-            "Your previous candidate was rejected by deterministic validation. "
+            "FULL RESULT REPAIR MODE. Your previous candidate was rejected by deterministic validation. "
             "Reinterpret the original strategy from scratch; preserve every source clause and return a complete corrected result. "
+            "The top-level JSON MUST contain status=parsed or status=clarification_required. Never return a condition node, "
+            "a DSL field fragment, a JSON array, or an explanation by itself. "
             f"Validation details: {details}"
         )
     source_by_id = {clause.clause_id: clause.text for clause in request.source_clauses}
@@ -605,7 +687,9 @@ def _targeted_repair_instruction(
     return (
         "TARGETED REPAIR MODE. Repair only the following failed source clause(s), and only their listed DSL paths. "
         "All other strategy fields and all other coverage entries are locked: preserve them exactly in semantic meaning. "
-        "Return the complete corrected interpretation result, including complete coverage. "
+        "Return the complete corrected interpretation result, including complete coverage. The top-level JSON MUST contain "
+        "status=parsed or status=clarification_required. Never return a condition node, a DSL field fragment, a JSON array, "
+        "or an explanation by itself. "
         f"Targets: {json.dumps(targets, ensure_ascii=False)}\n"
         f"Validation details: {json.dumps(details, ensure_ascii=False)}\n"
         f"Locked strategy candidate: {json.dumps(locked_strategy, ensure_ascii=False, separators=(',', ':'))}"
@@ -760,17 +844,34 @@ class StrategyInterpreterService:
                 if inventory is None:
                     raise ModelClientFailure("semantic inventory phase completed without a result", details={"phase": "semantic_inventory", "attempts": 2})
                 if inventory.status == "clarification_required":
-                    result = inventory_clarification(inventory, request)
-                    self._record(request_id, request, result, perf_counter() - start)
-                    return result
+                    remaining_questions, suppressed_ids = source_resolved_inventory_questions(inventory.questions, request)
+                    if suppressed_ids:
+                        self._report_progress(
+                            "语义清单提出的部分问题已被原文明确语义消除；继续编译 DSL…"
+                        )
+                    if remaining_questions:
+                        result = inventory_clarification(
+                            inventory.model_copy(update={"questions": remaining_questions}), request,
+                        )
+                        self._record(
+                            request_id, request, result, perf_counter() - start,
+                            clarification_phase="semantic_inventory",
+                        )
+                        return result
                 if inventory.status == "unsupported":
                     raise_inventory_unsupported(inventory)
             repair_error: AlphaAgentError | None = None
             candidate_result: StrategyInterpretationResult | None = None
+            compact_mode = False
             for attempt in range(2):
                 try:
                     self._report_progress("正在将语义清单编译为策略 DSL…" if attempt == 0 else "DSL 未通过本地校验；正在请求仅修复受影响条款…")
-                    raw = _normalize_provider_result(self._client.interpret_strategy(request), request)
+                    if compact_mode and callable(getattr(self._client, "interpret_compact_strategy", None)):
+                        self._report_progress("完整审阅 JSON 过大；正在以紧凑 DSL 重新编译…")
+                        provider_result = self._client.interpret_compact_strategy(request)
+                    else:
+                        provider_result = self._client.interpret_strategy(request)
+                    raw = _normalize_provider_result(provider_result, request)
                     raw = _direct_dsl_fallback_coverage(raw, request)
                     raw = _repair_explicit_nonoperative_coverage(raw, request)
                     raw = _repair_coverage_paths_to_existing_ancestors(raw)
@@ -785,6 +886,31 @@ class StrategyInterpreterService:
                         raise ModelResponseParsingFailure("model response does not match the interpretation contract", details={"validation_errors": error.errors(include_url=False)}) from error
                     result = result.model_copy(update={"source_clauses": request.source_clauses})
                     candidate_result = result
+                    if isinstance(result, ClarificationRequired):
+                        remaining_questions, suppressed_ids = source_resolved_inventory_questions(result.questions, request)
+                        if suppressed_ids and not remaining_questions:
+                            if attempt == 0:
+                                self._report_progress(
+                                    "DSL 编译器提出的问题已被原文或当前输入分组明确；正在请求定点修复…"
+                                )
+                                request = request.model_copy(update={
+                                    "repair_instruction": (
+                                        "SOURCE-RESOLVED CLARIFICATION REPAIR. Do not ask the user for a ticker when "
+                                        "the request scope is __INPUT_GROUP__; use that exact compatibility marker. Do not "
+                                        "ask about an explicit third-day Open, an explicit OR wait list, or an explicit "
+                                        "entry-relative bounded DD-decline window. Do not ask about post-exit re-entry: "
+                                        "the default post-exit re-entry policy is allow_reentry_after_exit=true. Return a "
+                                        "complete parsed DSL instead."
+                                    ),
+                                })
+                                continue
+                            raise ModelResponseParsingFailure(
+                                "model repeated a clarification contradicted by explicit source or input-scope semantics",
+                                details={"suppressed_question_ids": suppressed_ids, "phase": "dsl_compilation"},
+                            )
+                        if suppressed_ids:
+                            result = result.model_copy(update={"questions": remaining_questions})
+                            candidate_result = result
                     strategy = result.strategy if isinstance(result, ParsedStrategy) else result.partial_strategy
                     if strategy is not None:
                         self._report_progress("正在执行策略语义与时序校验…")
@@ -796,13 +922,17 @@ class StrategyInterpreterService:
                         validate_source_conformance(request.source_clauses, result.coverage, strategy_payload)
                         if self._parsed_cache is not None:
                             self._parsed_cache.put(request, result.model_dump(mode="json"))
-                    self._record(request_id, request, result, perf_counter() - start)
+                    self._record(
+                        request_id, request, result, perf_counter() - start,
+                        clarification_phase="dsl_compilation" if isinstance(result, ClarificationRequired) else None,
+                    )
                     self._report_progress("解释完成。")
                     return result
                 except (ModelResponseParsingFailure, SemanticStrategyValidationFailure) as error:
                     if attempt == 1:
                         raise
                     repair_error = error
+                    compact_mode = True
                     request = request.model_copy(update={
                         "repair_instruction": _targeted_repair_instruction(request, error, candidate_result)
                     })
@@ -819,11 +949,11 @@ class StrategyInterpreterService:
         except Exception as error:
             wrapped = ModelClientFailure("model client raised an unexpected exception", details={"exception_type": type(error).__name__})
             self._record(request_id, request, None, perf_counter() - start, wrapped.code); raise wrapped from error
-    def _record(self, request_id: UUID, request: StrategyInterpretationRequest, result: StrategyInterpretationResult | None, seconds: float, error_code: str | None = None, cache_hit: bool = False) -> None:
+    def _record(self, request_id: UUID, request: StrategyInterpretationRequest, result: StrategyInterpretationResult | None, seconds: float, error_code: str | None = None, cache_hit: bool = False, clarification_phase: str | None = None) -> None:
         if self._monitor is None: return
         outcome = "failed" if error_code else result.status  # type: ignore[union-attr]
         questions = len(result.questions) if isinstance(result, ClarificationRequired) else 0
         warnings = len(result.warnings) if isinstance(result, ParsedStrategy) else 0
         strategy = result.strategy if isinstance(result, ParsedStrategy) else (result.partial_strategy if isinstance(result, ClarificationRequired) else None)
-        self._monitor.record(InterpretationMonitoringEvent(request_id=request_id, input_hash=fingerprint(request.strategy_text), input_character_count=len(request.strategy_text), symbol_supplied=request.symbol is not None, outcome=outcome, duration_ms=seconds * 1000, question_count=questions, warning_count=warnings, error_code=error_code, strategy_fingerprint=fingerprint(strategy.model_dump_json()) if strategy else None, cache_hit=cache_hit))
+        self._monitor.record(InterpretationMonitoringEvent(request_id=request_id, input_hash=fingerprint(request.strategy_text), input_character_count=len(request.strategy_text), symbol_supplied=request.symbol is not None, outcome=outcome, duration_ms=seconds * 1000, question_count=questions, warning_count=warnings, error_code=error_code, strategy_fingerprint=fingerprint(strategy.model_dump_json()) if strategy else None, cache_hit=cache_hit, clarification_phase=clarification_phase))
 StrategyInterpreter = StrategyInterpreterService

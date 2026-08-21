@@ -9,6 +9,9 @@ class InterpretationPolicy(DSLModel):
     # Product-level research policy confirmed by the user: daily backtests use
     # the final daily close, even when source prose describes a pre-close order.
     execution_price_policy: Literal["daily_close"] = "daily_close"
+    # Product default explicitly confirmed by the user: a completed exit does
+    # not retire a symbol from the strategy's future signal evaluation.
+    allow_reentry_after_exit: bool = True
 
 
 class ClarificationAnswer(DSLModel):

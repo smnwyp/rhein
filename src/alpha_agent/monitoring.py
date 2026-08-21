@@ -23,6 +23,7 @@ class InterpretationMonitoringEvent(DSLModel):
     error_code: str | None = None
     strategy_fingerprint: str | None = None
     cache_hit: bool = False
+    clarification_phase: Literal["semantic_inventory", "dsl_compilation"] | None = None
 class InterpretationEvaluation(DSLModel):
     """Human or offline-evaluation judgment; never inferred from model output."""
     request_id: UUID

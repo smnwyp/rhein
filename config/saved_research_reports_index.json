@@ -1,0 +1,30 @@
+[
+  {
+    "report_id": "582b89ca-278c-42cf-b120-cd15230fa5fc",
+    "run_id": "308d0b87-3c07-4bc3-9ef5-56cecd31e683",
+    "strategy_id": "c0bf13a4-c04e-40c8-ace0-eb29a6b1210d",
+    "strategy_fingerprint": "6140d3a6865854c51750016dfc1a31cdd36797f53997aef3823c3173c71a1993",
+    "skill_id": "dd5",
+    "skill_version": "v1",
+    "research_focus": "检查是否过滤掉小波动",
+    "input_fingerprint": "5933779d590fdef4cf2e01c189797e536b23e2657155d71b479b3ae5ecfe485c",
+    "status": "completed",
+    "artifact_file": "582b89ca-278c-42cf-b120-cd15230fa5fc.json.gz",
+    "created_at": "2026-08-19T12:09:35.088258Z",
+    "updated_at": "2026-08-19T13:04:55.870899Z"
+  },
+  {
+    "report_id": "81cfc150-d30d-4c6e-aa5e-05a6fc7799be",
+    "run_id": "308d0b87-3c07-4bc3-9ef5-56cecd31e683",
+    "strategy_id": "c0bf13a4-c04e-40c8-ace0-eb29a6b1210d",
+    "strategy_fingerprint": "6140d3a6865854c51750016dfc1a31cdd36797f53997aef3823c3173c71a1993",
+    "skill_id": "dd5",
+    "skill_version": "v2",
+    "research_focus": "检查是否过滤掉小波动",
+    "input_fingerprint": "d1b6a01512cab7596d96dd87c82e0431f95fe0c142c713429854f8de3e9b35c9",
+    "status": "completed",
+    "artifact_file": "81cfc150-d30d-4c6e-aa5e-05a6fc7799be.json.gz",
+    "created_at": "2026-08-19T14:39:09.815904Z",
+    "updated_at": "2026-08-19T14:40:14.320131Z"
+  }
+]

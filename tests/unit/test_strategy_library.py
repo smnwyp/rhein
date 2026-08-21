@@ -22,6 +22,18 @@ def test_library_can_save_original_language_before_a_dsl_exists(tmp_path):
     assert stored.strategy is None
 
 
+def test_library_reuses_only_the_newest_parsed_record_with_exact_source_text(tmp_path):
+    library = JsonStrategyLibrary(tmp_path / "saved_strategies.json")
+    draft = library.save(SavedStrategy(strategy_name="同文案草稿", original_language="收盘价上穿均线"))
+    first = library.save(SavedStrategy(strategy_name="同文案旧版", original_language="收盘价上穿均线", strategy=strategy()))
+    newest = library.save(SavedStrategy(strategy_name="同文案新版", original_language="收盘价上穿均线", strategy=strategy()))
+
+    assert draft.strategy is None
+    assert first.strategy is not None
+    assert library.latest_parsed_for_source("收盘价上穿均线") == newest
+    assert library.latest_parsed_for_source("不同原文") is None
+
+
 def test_library_read_failure_contains_machine_readable_parse_diagnostic(tmp_path):
     path = tmp_path / "saved_strategies.json"
     path.write_text('{"not": "an array"}', encoding="utf-8")

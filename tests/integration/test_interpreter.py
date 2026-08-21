@@ -15,7 +15,15 @@ from alpha_agent.parser.prompts import INVENTORY_SYSTEM_PROMPT, SYSTEM_PROMPT
 def test_interpreter_prompts_require_chinese_user_facing_clarifications():
     assert "Simplified Chinese" in SYSTEM_PROMPT
     assert "English question" in SYSTEM_PROMPT
+    assert "MUST NOT produce a clarification" in SYSTEM_PROMPT
+    assert "confirmed_entry_day: t0+2" in SYSTEM_PROMPT
+    assert "unbounded\ntwo-day-DD-decline rule" in SYSTEM_PROMPT
+    assert "MUST NOT produce an AND/OR clarification" in SYSTEM_PROMPT
     assert "Simplified" in INVENTORY_SYSTEM_PROMPT
+    assert "bounded next-day confirmation entries" in INVENTORY_SYSTEM_PROMPT
+    assert "Do not ask an execution-price, AND/OR, or window-scope question" in INVENTORY_SYSTEM_PROMPT
+    assert "do not ask for a ticker or stock code" in INVENTORY_SYSTEM_PROMPT
+    assert "default policy permits post-exit re-entry" in INVENTORY_SYSTEM_PROMPT
 
 def f(name): return {"kind":"market_field","field":name}
 def i(kind, window): return {"kind":"indicator","indicator":{"indicator":kind,"field":"volume" if kind == "rolling_mean" else "close","window":window}}
@@ -144,7 +152,7 @@ def test_bare_dsl_records_daily_execution_and_volume_proxy_assumptions():
     result = StrategyInterpreterService(FakeModelClient([bare])).interpret(request)
 
     assert isinstance(result, ParsedStrategy)
-    assert {note.code for note in result.assumptions} == {"daily_close_execution_proxy", "daily_volume_proxy"}
+    assert {note.code for note in result.assumptions} == {"daily_close_execution_proxy", "daily_volume_proxy", "input_group_scope", "default_allow_reentry_after_exit"}
     assert all(item.disposition == "assumption" for item in result.coverage)
 
 
@@ -386,7 +394,7 @@ def test_lifecycle_policy_is_clarified_locally_before_the_provider_is_called():
     text = "如用于完整回测，还应另行定义样本结束时未平仓头寸的处理方式，以及卖出后是否允许重新寻找下一次 C 点。"
     result = StrategyInterpreterService(client).interpret(StrategyInterpretationRequest(strategy_text=text))
     assert isinstance(result, ClarificationRequired)
-    assert {question.question_id for question in result.questions} == {"sample_end_open_position", "allow_reentry_after_exit"}
+    assert {question.question_id for question in result.questions} == {"sample_end_open_position"}
     assert not client.requests
 
 
@@ -456,14 +464,126 @@ def test_semantic_inventory_blocks_unsupported_complex_capability_before_full_ds
 def test_semantic_inventory_returns_user_clarification_before_full_dsl_request():
     question = {"question_id": "execution_time", "question": "Which execution price?", "target_path": "execution", "suggested_answers": ["close"], "answer_kind": "choice"}
     final_client = FakeModelClient([])
+    monitor = InMemoryInterpreterMonitor()
     result = StrategyInterpreterService(
         final_client,
         inventory_client=InventoryClient(_inventory("clarification_required", disposition="clarification_required", questions=[question])),
+        monitor=monitor,
     ).interpret(StrategyInterpretationRequest(strategy_text="buy later"))
 
     assert isinstance(result, ClarificationRequired)
     assert result.questions[0].question_id == "execution_time"
     assert not final_client.requests
+    assert monitor.events[-1].clarification_phase == "semantic_inventory"
+
+
+def test_explicit_wait_sequence_questions_are_removed_before_the_inventory_can_block_dsl_compilation():
+    source = (
+        "当天涨幅超过5%，或是一根大阴线，或第二天开盘价低于前一天收盘价2%，则第二天开盘时观望。"
+        "若第二天收盘价符合所有条件，则第三天开盘时买入。"
+        "自买入点的5个交易日内，出现DD连续二天下降，即抛出。"
+    )
+    questions = [
+        {"question_id": "third_day_price", "question": "第三天的入场价格应使用哪种价格？", "target_path": "entry.execution", "suggested_answers": ["第三天的下一交易日开盘价（next_open）", "第三天的当日收盘价（daily_close）"], "answer_kind": "choice"},
+        {"question_id": "dd_window", "question": "DD 连续下降是否仅限买入后5日窗口？", "target_path": "exit_rules[0]", "suggested_answers": ["仅限窗口", "不限窗口"], "answer_kind": "choice"},
+        {"question_id": "wait_logic", "question": "观望条件是 OR 还是 AND？", "target_path": "entry.wait_when", "suggested_answers": ["任意满足", "同时满足"], "answer_kind": "choice"},
+    ]
+    inventory = _inventory("clarification_required", disposition="clarification_required", questions=questions)
+    inventory["items"][0]["source_clause_ids"] = ["C01", "C02", "C03"]
+    inventory["closure"][0]["source_clause_ids"] = ["C01", "C02", "C03"]
+
+    class SourceAwareFinalClient:
+        def __init__(self): self.requests = []
+        def interpret_strategy(self, request):
+            self.requests.append(request)
+            response = parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))
+            response["coverage"] = [
+                {"clause_id": clause.clause_id, "disposition": "mapped", "dsl_paths": ["entry_condition", "exit_condition"], "explanation": "测试 DSL 已覆盖该条款。"}
+                for clause in request.source_clauses
+            ]
+            return response
+
+    final_client = SourceAwareFinalClient()
+    result = StrategyInterpreterService(final_client, inventory_client=InventoryClient(inventory)).interpret(
+        StrategyInterpretationRequest(strategy_text=source)
+    )
+
+    assert isinstance(result, ParsedStrategy)
+    assert len(final_client.requests) == 1
+
+
+def test_current_input_group_neither_requests_nor_invents_a_single_stock_symbol():
+    question = {
+        "question_id": "stock_code", "question": "请提供本策略适用的股票代码（例如 AAPL、TSLA 等）。",
+        "target_path": "symbol", "suggested_answers": ["AAPL", "TSLA"], "answer_kind": "choice",
+    }
+    final_client = FakeModelClient([parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than"))])
+    result = StrategyInterpreterService(
+        final_client,
+        inventory_client=InventoryClient(_inventory("clarification_required", disposition="clarification_required", questions=[question])),
+    ).interpret(StrategyInterpretationRequest(strategy_text="当收盘价高于20日均线时买入，低于时卖出。"))
+
+    assert isinstance(result, ParsedStrategy)
+    assert len(final_client.requests) == 1
+    assert result.strategy.symbol == "__INPUT_GROUP__"
+    assert any(note.code == "input_group_scope" for note in result.assumptions)
+
+
+def test_dsl_compiler_retries_a_source_resolved_stock_code_question_instead_of_showing_it():
+    question = {
+        "question_id": "stock_code", "question": "请提供本策略适用的股票代码（例如 AAPL、TSLA 等）。",
+        "target_path": "symbol", "suggested_answers": ["AAPL", "TSLA"], "answer_kind": "choice",
+    }
+    clarification = {
+        "status": "clarification_required", "questions": [question], "ambiguous_terms": ["适用股票代码"],
+        "coverage": [{"clause_id": "C01", "disposition": "clarification_required", "dsl_paths": [], "explanation": "等待股票代码。"}],
+    }
+    client = FakeModelClient([
+        clarification,
+        parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than")),
+    ])
+    result = StrategyInterpreterService(client).interpret(
+        StrategyInterpretationRequest(strategy_text="当收盘价高于20日均线时买入，低于时卖出。")
+    )
+
+    assert isinstance(result, ParsedStrategy)
+    assert result.strategy.symbol == "__INPUT_GROUP__"
+    assert len(client.requests) == 2
+    assert client.requests[1].repair_instruction is not None
+    assert "SOURCE-RESOLVED CLARIFICATION REPAIR" in client.requests[1].repair_instruction
+
+
+def test_dsl_compiler_uses_default_reentry_policy_instead_of_asking_again():
+    question = {
+        "question_id": "Q_REENTRY", "question": "卖出后是否允许重新买入？",
+        "target_path": "lifecycle_policy.allow_reentry_after_exit",
+        "suggested_answers": ["允许重新买入", "不允许重新买入"], "answer_kind": "choice",
+    }
+    clarification = {
+        "status": "clarification_required", "questions": [question], "ambiguous_terms": ["卖出后再入场"],
+        "coverage": [{"clause_id": "C01", "disposition": "clarification_required", "dsl_paths": [], "explanation": "等待再入场口径。"}],
+    }
+    client = FakeModelClient([
+        clarification,
+        parsed(cmp(f("close"), i("sma", 20)), cmp(f("close"), i("sma", 20), "less_than")),
+    ])
+    result = StrategyInterpreterService(client).interpret(
+        StrategyInterpretationRequest(strategy_text="当收盘价高于20日均线时买入，低于时卖出。")
+    )
+
+    assert isinstance(result, ParsedStrategy)
+    assert len(client.requests) == 2
+    assert "default post-exit re-entry policy" in client.requests[1].repair_instruction
+
+
+def test_repair_instruction_requires_a_full_interpretation_envelope():
+    instruction = __import__("alpha_agent.parser.service", fromlist=["_targeted_repair_instruction"])._targeted_repair_instruction(
+        StrategyInterpretationRequest(strategy_text="买入后卖出。"),
+        ModelResponseParsingFailure("invalid", details={"validation_errors": []}),
+        None,
+    )
+    assert "top-level JSON MUST contain status=parsed or status=clarification_required" in instruction
+    assert "Never return a condition node" in instruction
 
 
 def test_compile_eligible_inventory_allows_existing_final_dsl_pipeline():

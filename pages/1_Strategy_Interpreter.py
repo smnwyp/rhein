@@ -14,7 +14,6 @@ import streamlit.components.v1 as components
 import pandas as pd
 from dotenv import load_dotenv
 from rhein.data.a_share_package import ensure_a_share_data
-from rhein.data.discovery import input_files
 from rhein.paths import DATA_ROOT
 from rhein.ui.presets import available_data_scopes
 from alpha_agent.domain.interpretation import ClarificationAnswer, StrategyInterpretationRequest
@@ -34,6 +33,11 @@ from alpha_agent.research.legacy_adapter import compile_timed_strategy
 from alpha_agent.research.v03_engine import build_trade_event_audit, run_v03_backtest
 from alpha_agent.research.market_index import load_market_index_for_files, required_market_index_symbols
 from alpha_agent.research.reporting import aggregate_gross_pnl, presentation_kpis
+from alpha_agent.research_skill.client import OpenAIResearchClient, ResearchModelFailure
+from alpha_agent.research_skill.definition import RESEARCH_SKILLS
+from alpha_agent.research_skill.history import JsonResearchReportHistory, ResearchHistoryError
+from alpha_agent.research_skill.models import SavedResearchReport
+from alpha_agent.research_skill.service import ResearchExecutionBlocked, ResearchProgress, ResearchSkillService
 from rhein.backtest import input_files as backtest_input_files, load_ohlc as backtest_load_ohlc, run_backtest as legacy_run_backtest
 from rhein.ui.result_runner import collect_results
 from rhein.ui.gauges import kpi_gauge_html
@@ -48,6 +52,50 @@ from rhein.ui.history_paths import portable_data_path, resolve_history_data_path
 load_dotenv(ROOT / ".env", override=True)
 
 st.set_page_config(page_title="自然语言策略解释器", layout="wide")
+st.markdown(
+    """
+    <style>
+    /* The native sidebar header belongs to its scroll container.  Pin the
+       collapse control so it remains available while a long strategy panel
+       is scrolled. */
+    [data-testid="stSidebarHeader"] {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        background: var(--background-color);
+        border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+    }
+    /* Evidence charts are opened from inside the report dialog.  Make that
+       popover a real second-layer, viewport-sized panel while leaving the
+       report visible underneath. */
+    [data-testid="stPopoverBody"] {
+        position: fixed !important;
+        inset: 4vh auto auto 50% !important;
+        transform: translateX(-50%) !important;
+        width: min(94vw, 1500px) !important;
+        max-width: 94vw !important;
+        /* Use an explicit viewport height, rather than merely a max-height:
+           the dialog underneath also scrolls and otherwise receives wheel
+           events when the chart panel has a tall Vega chart. */
+        height: 92vh !important;
+        max-height: 92vh !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        overscroll-behavior: contain !important;
+        pointer-events: auto !important;
+        z-index: 2147483647 !important;
+        background: var(--background-color) !important;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.38) !important;
+    }
+    /* Streamlit's popover content wrapper is the scrollable element in some
+       releases.  Keep the same scroll boundary whichever DOM shape is used. */
+    [data-testid="stPopoverBody"] > div {
+        overscroll-behavior: contain !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 st.title("自然语言策略解释器")
 st.caption("策略解释、逐条审阅与当前分组的确定性回测。解释覆盖关系与合成 K 线仅用于核对，不是市场数据。")
 interpretation_notice = st.session_state.pop("interpretation_notice", None)
@@ -104,7 +152,8 @@ def delete_saved_strategy(strategy_id: object) -> None:
     try:
         library.delete(strategy_id)  # type: ignore[arg-type]
         backtest_history.delete_for_strategy(strategy_id)  # type: ignore[arg-type]
-    except (StrategyLibraryError, BacktestHistoryError) as error:
+        research_history.delete_for_strategy(strategy_id)  # type: ignore[arg-type]
+    except (StrategyLibraryError, BacktestHistoryError, ResearchHistoryError) as error:
         st.session_state["strategy_library_notice"] = ("error", error.message)
         return
     for key in ("strategy_source_saved", "loaded_saved_strategy_id", "confirm_delete_saved_strategy", "active_saved_strategy_id", "active_saved_strategy_text", "active_saved_strategy_fingerprint"):
@@ -223,11 +272,195 @@ def event_audit_rows(audit: dict[str, object]) -> list[dict[str, object]]:
     ]
 
 
+def render_research_trade_chart(trade: object, *, key: str) -> None:
+    """Render a cited saved trade in the same multi-panel visual language as backtest review."""
+    source_path = getattr(trade, "source_path", None)
+    if not isinstance(source_path, str) or not source_path:
+        st.info("这笔证据交易没有可用的 OHLC 源文件。")
+        return
+    try:
+        chart = backtest_load_ohlc(Path(source_path)).copy()
+        for window in (5, 10, 20, 60):
+            chart[f"MA{window}"] = chart["Close"].rolling(window).mean()
+        chart = add_display_mmacd(add_display_macd(add_display_dmi(chart)))
+        dates = pd.to_datetime(chart["Date"], errors="coerce").dt.normalize()
+        event_dates = {
+            "t0": str(getattr(trade, "signal_date")),
+            "入场": str(getattr(trade, "entry_date")),
+            "出场": str(getattr(trade, "exit_date")),
+        }
+        positions = [int(found[0]) for value in event_dates.values() if len(found := chart.index[dates == pd.Timestamp(value).normalize()])]
+        if len(positions) != len(event_dates):
+            st.info("这笔交易的事件日期不在当前 OHLC 数据中，无法安全绘制 K 线。")
+            return
+        start, end = max(0, min(positions) - 15), min(len(chart), max(positions) + 101)
+        if end - start < min(100, len(chart)):
+            end = min(len(chart), max(end, start + 100))
+            start = max(0, end - 100)
+        chart = chart.iloc[start:end].copy().reset_index(drop=True)
+        chart["Date"] = pd.to_datetime(chart["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
+        chart["Index"] = range(len(chart))
+        markers = []
+        for label, value in event_dates.items():
+            found = chart.index[chart["Date"] == pd.Timestamp(value).strftime("%Y-%m-%d")]
+            if len(found):
+                position = int(found[0])
+                markers.append({
+                    "Date": chart.loc[position, "Date"], "EventPrice": float(chart.loc[position, "Close"]),
+                    "LabelPrice": float(chart.loc[position, "High"]) * 1.015, "Label": label,
+                })
+        x = {"field": "Date", "type": "ordinal", "scale": {"paddingInner": 0.06, "paddingOuter": 0.01}, "axis": {"title": "交易日期", "tickCount": 12, "labelAngle": -40, "labelOverlap": "greedy"}}
+        ohlc_tooltip = [{"field": name, "type": "quantitative", "title": title, "format": fmt} for name, title, fmt in (("Open", "开盘", ".4f"), ("High", "最高", ".4f"), ("Low", "最低", ".4f"), ("Close", "收盘", ".4f"), ("Volume", "成交量", ",.0f"))]
+        ohlc_tooltip.insert(0, {"field": "Date", "type": "nominal", "title": "日期"})
+        indicator_tooltip = [{"field": "Date", "type": "nominal", "title": "日期"}]
+        spec = {
+            "width": 1200,
+            "vconcat": [
+                {"height": 360, "layer": [
+                    {"mark": "rule", "encoding": {"x": x, "y": {"field": "Low", "type": "quantitative", "scale": {"zero": False}}, "y2": {"field": "High"}, "tooltip": ohlc_tooltip}},
+                    {"mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Open", "type": "quantitative", "scale": {"zero": False}}, "y2": {"field": "Close"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
+                    {"transform": [{"fold": ["MA5", "MA10", "MA20"], "as": ["MA", "Value"]}], "mark": {"type": "line", "strokeWidth": 1.8}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative", "scale": {"zero": False}}, "color": {"field": "MA", "type": "nominal", "scale": {"domain": ["MA5", "MA10", "MA20"], "range": ["#2563eb", "#f59e0b", "#dc2626"]}, "legend": {"title": "均线"}}}},
+                    {"transform": [{"calculate": "'MA60（60日）'", "as": "MA"}], "mark": {"type": "line", "stroke": "#334155", "strokeWidth": 3, "strokeDash": [7, 3]}, "encoding": {"x": x, "y": {"field": "MA60", "type": "quantitative", "scale": {"zero": False}}, "color": {"field": "MA", "type": "nominal", "scale": {"domain": ["MA5", "MA10", "MA20", "MA60（60日）"], "range": ["#2563eb", "#f59e0b", "#dc2626", "#334155"]}, "legend": {"title": "均线"}}}},
+                    {"data": {"values": markers}, "mark": {"type": "rule", "color": "#334155", "strokeWidth": 1.2}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "y2": {"field": "LabelPrice"}}},
+                    {"data": {"values": markers}, "mark": {"type": "point", "filled": True, "size": 90, "color": "#334155"}, "encoding": {"x": x, "y": {"field": "EventPrice", "type": "quantitative"}, "tooltip": [{"field": "Label", "type": "nominal", "title": "事件"}, {"field": "Date", "type": "nominal", "title": "日期"}, {"field": "EventPrice", "type": "quantitative", "title": "价格", "format": ".4f"}]}},
+                    {"data": {"values": markers}, "mark": {"type": "text", "fontWeight": "bold", "color": "#334155", "dx": 4, "baseline": "bottom"}, "encoding": {"x": x, "y": {"field": "LabelPrice", "type": "quantitative"}, "text": {"field": "Label", "type": "nominal"}}},
+                ]},
+                {"height": 100, "mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "Volume", "type": "quantitative", "title": "成交量"}, "color": {"condition": {"test": "datum.Close >= datum.Open", "value": "#198754"}, "value": "#d62728"}, "tooltip": ohlc_tooltip}},
+                {"height": 145, "layer": [{"mark": {"type": "rule", "color": "#94a3b8"}, "encoding": {"y": {"datum": 0, "type": "quantitative"}}}, {"mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "MMACD_HIST", "type": "quantitative", "title": "MMACD"}, "color": {"condition": {"test": "datum.MMACD_HIST >= 0", "value": "#ef4444"}, "value": "#16a34a"}, "tooltip": indicator_tooltip}}, {"transform": [{"fold": ["MMACD_DD", "MMACD_DED"], "as": ["Line", "Value"]}], "mark": {"type": "line", "strokeWidth": 1.5}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative"}, "color": {"field": "Line", "type": "nominal", "scale": {"domain": ["MMACD_DD", "MMACD_DED"], "range": ["#2563eb", "#f59e0b"]}, "legend": {"title": "MMACD (10,24,8)"}}, "tooltip": indicator_tooltip}}]},
+                {"height": 145, "layer": [{"mark": {"type": "rule", "color": "#94a3b8"}, "encoding": {"y": {"datum": 0, "type": "quantitative"}}}, {"mark": {"type": "bar"}, "encoding": {"x": x, "y": {"field": "MACD_HIST", "type": "quantitative", "title": "MACD"}, "color": {"condition": {"test": "datum.MACD_HIST >= 0", "value": "#ef4444"}, "value": "#16a34a"}, "tooltip": indicator_tooltip}}, {"transform": [{"fold": ["MACD_DIF", "MACD_DEA"], "as": ["Line", "Value"]}], "mark": {"type": "line", "strokeWidth": 1.5}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative"}, "color": {"field": "Line", "type": "nominal", "scale": {"domain": ["MACD_DIF", "MACD_DEA"], "range": ["#2563eb", "#f59e0b"]}, "legend": {"title": "MACD (12,24,8)"}}, "tooltip": indicator_tooltip}}]},
+                {"height": 135, "layer": [{"transform": [{"fold": ["DMI_PDI", "DMI_MDI", "DMI_ADX", "DMI_ADXR"], "as": ["Line", "Value"]}], "mark": {"type": "line", "strokeWidth": 1.5}, "encoding": {"x": x, "y": {"field": "Value", "type": "quantitative", "title": "DMI"}, "color": {"field": "Line", "type": "nominal", "scale": {"domain": ["DMI_PDI", "DMI_MDI", "DMI_ADX", "DMI_ADXR"], "range": ["#dc2626", "#16a34a", "#2563eb", "#7c3aed"]}, "legend": {"title": "DMI (10,6)"}}, "tooltip": indicator_tooltip}}]},
+            ],
+            "resolve": {"scale": {"color": "independent"}},
+        }
+        st.vega_lite_chart(chart, spec, width="stretch", key=key)
+        with st.expander("这笔交易的 DSL 入/出场审计", expanded=False):
+            entry_tab, exit_tab = st.tabs(["入场", "出场"])
+            with entry_tab:
+                st.dataframe(pd.DataFrame(event_audit_rows(getattr(trade, "entry_audit", {}) or {})), hide_index=True, width="stretch")
+            with exit_tab:
+                st.dataframe(pd.DataFrame(event_audit_rows(getattr(trade, "exit_audit", {}) or {})), hide_index=True, width="stretch")
+    except (OSError, ValueError, KeyError) as error:
+        st.warning(f"无法渲染这笔证据交易的 K 线：{error}")
+
+
+@st.dialog("DD5 策略复盘报告", width="large")
+def show_research_report_dialog(report: SavedResearchReport) -> None:
+    """Present the report as an inspectable overlay, not an inline summary."""
+    st.caption(
+        f"{report.skill_id.upper()} {report.skill_version} · "
+        f"{report.research_focus or '无研究重点'} · "
+        f"{report.updated_at.astimezone().strftime('%Y-%m-%d %H:%M')}"
+    )
+    if report.synthesis is None or report.evidence is None:
+        st.info("这份复盘尚未生成完整报告；完成后可在这里查看结论和证据引用。")
+        return
+
+    trade_by_id = {trade.trade_id: trade for trade in report.evidence.trades}
+    def reference_buttons(trade_ids: list[str], *, key_prefix: str) -> None:
+        if not trade_ids:
+            st.caption("旧版报告没有保存可跳转的交易引用。")
+            return
+        st.caption("证据交易（点击会在本报告上方弹出 K 线图窗）")
+        columns = st.columns(min(3, len(trade_ids)))
+        for index, trade_id in enumerate(trade_ids):
+            trade = trade_by_id.get(trade_id)
+            if trade is None:
+                st.caption(f"缺失引用：{trade_id}")
+                continue
+            label = f"{trade.symbol} · {trade.entry_date} · {trade.return_pct:+.2f}%"
+            column = columns[index % len(columns)]
+            with column.popover(
+                f"查看 K 线：{label}",
+                key=f"{key_prefix}::chart::{trade_id}",
+                width="stretch",
+            ):
+                st.header(f"{trade.symbol} · 证据交易 K 线", divider="blue")
+                st.caption(
+                    f"t0 {trade.signal_date} · 入场 {trade.entry_date} · "
+                    f"出场 {trade.exit_date} · {trade.return_pct:+.2f}%"
+                )
+                render_research_trade_chart(
+                    trade,
+                    key=f"research-chart-popover::{report.report_id}::{trade.trade_id}",
+                )
+
+    def finding_section(title: str, findings: object, *, category: str) -> None:
+        st.subheader(title)
+        for index, finding in enumerate(findings if isinstance(findings, list) else [], start=1):
+            # A running Streamlit worker can retain the v1 Pydantic model
+            # while the page itself has reloaded.  Keep old string findings
+            # readable here as well as in the persisted-model migration.
+            if isinstance(finding, str):
+                statement, trade_ids, finding_id = finding, [], f"legacy-{category}-{index}"
+            else:
+                statement = str(getattr(finding, "statement", ""))
+                raw_trade_ids = getattr(finding, "evidence_trade_ids", [])
+                trade_ids = [str(item) for item in raw_trade_ids] if isinstance(raw_trade_ids, list) else []
+                finding_id = str(getattr(finding, "finding_id", f"{category}-{index}"))
+            with st.container(border=True):
+                st.write(statement)
+                reference_buttons(
+                    trade_ids,
+                    key_prefix=f"research-reference::{report.report_id}::{category}::{finding_id}",
+                )
+
+    conclusions_tab, experiments_tab, evidence_tab = st.tabs(["结论与图形观察", "实验卡", "确定性证据"])
+    with conclusions_tab:
+        finding_section("事实", report.synthesis.facts, category="fact")
+        finding_section("视觉观察", report.synthesis.visual_observations, category="visual")
+        finding_section("待验证假设", report.synthesis.hypotheses_to_verify, category="hypothesis")
+    with experiments_tab:
+        if not report.synthesis.experiment_cards:
+            st.info("当前没有证据充分的实验卡。")
+        for index, card in enumerate(report.synthesis.experiment_cards, start=1):
+            with st.container(border=True):
+                st.subheader(f"{index}. {card.title}")
+                st.caption(f"DSL 路径：{card.dsl_path} · 方向：{card.direction}")
+                st.write(f"**变量**：{card.variable}")
+                st.write(f"**评估指标**：{card.evaluation_metric}")
+                st.write(f"**证伪条件**：{card.falsification_condition}")
+                reference_buttons(
+                    card.evidence_trade_ids,
+                    key_prefix=f"research-reference::{report.report_id}::experiment::{index}",
+                )
+        st.caption("实验卡是下一步的受控验证建议；不会自动修改策略或运行回测。")
+    with evidence_tab:
+        coverage = report.evidence.source_coverage
+        st.metric("可审计交易", f"{coverage.readable_trade_count}/{coverage.total_trades}")
+        st.caption("以下是模型结论允许引用的代表交易范围；完整计算仍由保存的确定性证据提供。")
+        selected_ids = {sample.trade_id for sample in report.samples}
+        selected = [trade for trade in report.evidence.trades if trade.trade_id in selected_ids]
+        st.dataframe(
+            pd.DataFrame([
+                {
+                    "交易 ID": trade.trade_id,
+                    "标的": trade.symbol,
+                    "入场": trade.entry_date,
+                    "出场": trade.exit_date,
+                    "收益": trade.return_pct,
+                    "持有天数": trade.days_held,
+                    "出场原因": trade.exit_reason,
+                }
+                for trade in selected
+            ]),
+            hide_index=True,
+            width="stretch",
+        )
+
+
 library = JsonStrategyLibrary(ROOT / "config" / "saved_strategies.json")
 backtest_history = JsonBacktestHistory(ROOT / "config" / "saved_backtest_results.json")
+research_history = JsonResearchReportHistory(ROOT / "config" / "saved_research_reports.json")
 # Provider configuration is infrastructure, not a research-user control.
 model = os.getenv("BEDROCK_MODEL", "us.anthropic.claude-sonnet-4-6")
 region = os.getenv("AWS_REGION", "us-east-1")
+# Complex timed strategies can produce a large recursive DSL and coverage
+# payload. Keep Claude as the interpreter, but permit a longer provider round
+# trip than the generic client default. This is infrastructure-only.
+try:
+    bedrock_timeout_seconds = max(1, int(os.getenv("BEDROCK_TIMEOUT_SECONDS", "360")))
+except ValueError:
+    bedrock_timeout_seconds = 360
 
 try:
     with st.sidebar:
@@ -238,6 +471,23 @@ except (OSError, ValueError) as error:
 
 scope_options = available_data_scopes()
 scope_labels = list(scope_options)
+if not st.session_state.get("interpreter_defaults_initialized"):
+    # Entering this page should open the product's broadest local universe and
+    # the newest runnable strategy, but later widget reruns must preserve the
+    # user's explicit choices.
+    all_a_share_scope = next((label for label in scope_labels if label.startswith("全部 A 股")), None)
+    if all_a_share_scope is not None:
+        st.session_state["data_scope"] = all_a_share_scope
+    try:
+        runnable_strategies = [item for item in library.list() if item.strategy is not None]
+        if runnable_strategies:
+            newest_strategy = max(runnable_strategies, key=lambda item: item.created_at)
+            st.session_state["strategy_source"] = "已保存策略"
+            st.session_state["strategy_source_saved"] = str(newest_strategy.strategy_id)
+    except StrategyLibraryError:
+        # The normal sidebar branch will show the detailed, user-visible error.
+        pass
+    st.session_state["interpreter_defaults_initialized"] = True
 main_scope = st.session_state.get("data_scope")
 default_scope_index = scope_labels.index(main_scope) if main_scope in scope_options else 0
 selected_scope = st.sidebar.selectbox(
@@ -252,21 +502,6 @@ if selected_scope == "自定义路径":
 else:
     data_path = scope_options[selected_scope]
     st.sidebar.caption(f"当前数据范围：`{data_path}`")
-try:
-    group_symbols = [path.stem.upper() for path in input_files(Path(data_path))]
-except ValueError as error:
-    st.sidebar.error(f"无法加载此分组的标的：{error}")
-    group_symbols = []
-if group_symbols:
-    symbol = st.sidebar.selectbox(
-        "标的",
-        group_symbols,
-        index=group_symbols.index("AAPL") if "AAPL" in group_symbols else 0,
-        key="interpreter_symbol",
-        help="仅显示当前所选组（或数据范围）中的标的。",
-    )
-else:
-    symbol = None
 st.sidebar.divider()
 st.sidebar.subheader("策略")
 library_notice = st.session_state.pop("strategy_library_notice", None)
@@ -362,8 +597,44 @@ if strategy_source == "新建策略":
             st.sidebar.error(f"{error.code}: {error.message}")
 
 
+def seed_exact_source_cache_from_library(request: StrategyInterpretationRequest) -> StrategyInterpretationRequest:
+    """Make a renamed exact copy reuse its saved, auditable interpretation.
+
+    The service validates this cache entry again before use, so an old record
+    can never bypass newer schema or semantic checks. A non-identical source
+    still takes the normal two-phase interpretation path.
+    """
+    enriched = request if request.source_clauses else request.model_copy(
+        update={"source_clauses": segment_source_clauses(request.strategy_text)}
+    )
+    cache = JsonParsedInterpretationCache(ROOT / ".cache" / "parsed_interpretations.json")
+    if cache.get(enriched) is not None:
+        return enriched
+    try:
+        saved = library.latest_parsed_for_source(enriched.strategy_text)
+    except StrategyLibraryError:
+        # Library reuse is only an optimisation. A transient read failure must
+        # not prevent the normal model-backed interpreter from remaining usable.
+        return enriched
+    if saved is None or saved.strategy is None:
+        return enriched
+    cache.put(enriched, ParsedStrategy(
+        status="parsed",
+        strategy=saved.strategy,
+        assumptions=saved.assumptions,
+        warnings=saved.warnings,
+        source_clauses=saved.source_clauses,
+        coverage=saved.coverage,
+    ).model_dump(mode="json"))
+    return enriched
+
+
 def interpret_and_render(request: StrategyInterpretationRequest, source_text: str) -> None:
-    model_client = BedrockStrategyModelClient(model=model, region=region)
+    model_client = BedrockStrategyModelClient(
+        model=model,
+        region=region,
+        timeout_seconds=bedrock_timeout_seconds,
+    )
     try:
         # This is intentionally a phase log rather than a fake percentage: a
         # provider call has variable latency, while the deterministic checks
@@ -381,7 +652,7 @@ def interpret_and_render(request: StrategyInterpretationRequest, source_text: st
                 progress=show_interpretation_progress,
             )
             try:
-                result = service.interpret(request)
+                result = service.interpret(seed_exact_source_cache_from_library(request))
             except Exception:
                 interpretation_status.update(label="解释未完成：已停止在最后一个可见步骤。", state="error", expanded=True)
                 raise
@@ -413,18 +684,20 @@ def interpret_and_render(request: StrategyInterpretationRequest, source_text: st
 
 
 if strategy_source == "新建策略" and st.sidebar.button("解释策略", type="primary", width="stretch"):
-    if not symbol:
-        st.error("先选择一个包含有效 OHLC 数据的标的分组。")
-    elif not os.getenv("AWS_BEARER_TOKEN_BEDROCK"):
+    if not os.getenv("AWS_BEARER_TOKEN_BEDROCK"):
         st.error("未找到 API 密钥。请在项目根目录 `.env` 中设置 AWS_BEARER_TOKEN_BEDROCK 后重试。")
     else:
-        interpret_and_render(StrategyInterpretationRequest(strategy_text=strategy_text, symbol=symbol), strategy_text)
+        interpret_and_render(StrategyInterpretationRequest(strategy_text=strategy_text), strategy_text)
 
 pending_clarification = st.session_state.get("pending_clarification")
 pending_text = st.session_state.get("pending_clarification_text")
 if pending_clarification is not None and pending_text is not None:
     st.subheader("补充澄清信息")
     st.caption("回答会以问题 ID 关联原策略，并由同一个解释器再次处理；不会启动另一个澄清 Agent。")
+    last_event = st.session_state.interpreter_monitor.events[-1] if st.session_state.interpreter_monitor.events else None
+    if last_event is not None and last_event.clarification_phase is not None:
+        phase_name = {"semantic_inventory": "语义清单", "dsl_compilation": "DSL 编译"}[last_event.clarification_phase]
+        st.caption(f"本次澄清来源：{phase_name}阶段。")
     with st.form("clarification_answers"):
         answer_values: dict[str, str] = {}
         for question in pending_clarification.questions:
@@ -439,16 +712,14 @@ if pending_clarification is not None and pending_text is not None:
                 )
         submitted_answers = st.form_submit_button("提交补充并重新解释", type="primary")
     if submitted_answers:
-        if not symbol:
-            st.error("先选择一个包含有效 OHLC 数据的标的分组。")
-        elif any(not answer.strip() for answer in answer_values.values()):
+        if any(not answer.strip() for answer in answer_values.values()):
             st.error("请回答全部澄清问题后再继续。")
         else:
             answers = [ClarificationAnswer(question_id=question_id, answer=answer.strip()) for question_id, answer in answer_values.items()]
-            interpret_and_render(StrategyInterpretationRequest(strategy_text=pending_text, symbol=symbol, clarification_answers=answers), pending_text)
+            interpret_and_render(StrategyInterpretationRequest(strategy_text=pending_text, clarification_answers=answers), pending_text)
 
 if matching_result is not None:
-    backtest_tab, review_tab = st.tabs(["回测结果", "解释审阅"])
+    backtest_tab, research_tab, review_tab = st.tabs(["回测结果", "回测复盘", "解释审阅"])
     review_tab.__enter__()
     st.subheader("策略解释映射")
     st.caption("请先核对每一段原文 C01…Cn 是否被正确落实到 DSL 路径与中文规则中；这比查看底层 JSON 更直接。")
@@ -570,10 +841,10 @@ if matching_result is not None:
             st.caption("此已保存策略尚未在当前数据组保存过回测。运行后会自动建立第一条记录。")
     else:
         st.caption("当前是未保存策略或已修改版本：仍可临时回测；先保存策略后，结果才会按“策略 × 数据组”持久化。")
-    st.subheader("研究设置")
-    st.caption("v0.3 的此类策略只按日线收盘价成交；旧 v0.2 的日内触发才会采用当日 Low 的保守近似。")
-    initial_capital = st.number_input("初始资金", min_value=1_000.0, value=10_000.0, step=1_000.0, key="dsl_initial_capital")
-    cost_bps = st.number_input("单边费用（bps）", min_value=0.0, value=0.0, step=0.5, key="dsl_cost_bps")
+    # These are product defaults, not research controls.  Keeping them out of
+    # the UI prevents a review from accidentally changing the baseline run.
+    initial_capital = 10_000.0
+    cost_bps = 0.0
     if st.button("运行当前组回测", type="primary", key="run_dsl_backtest"):
         if matching_result.strategy.schema_version == "0.1":
             st.error("当前仅可回测时序 DSL（v0.2/v0.3）；静态 v0.1 通用执行器将在下一步接入。")
@@ -650,11 +921,148 @@ if matching_result is not None:
             except Exception as error:
                 st.error(f"回测失败：{error}")
 
+    backtest_tab.__exit__(None, None, None)
+    research_tab.__enter__()
     if st.session_state.get("dsl_backtest_view_scope") == current_backtest_view_scope:
-        st.subheader("回测结果")
+        st.subheader("回测复盘")
         loaded_run = st.session_state.get("dsl_backtest_loaded_run")
         if loaded_run is not None:
             st.caption(f"当前展示已保存运行：{loaded_run.strategy_name} · {loaded_run.created_at.astimezone().strftime('%Y-%m-%d %H:%M')} · {loaded_run.group_label} · 设置 {dict(loaded_run.settings)}")
+        st.divider()
+        with st.container(border=True):
+            st.header("回测复盘工作台", divider="blue")
+            st.caption("从全量交易统计、代表性 K 线核对，到受控实验卡：复盘已保存回测，不会自动修改策略或重新回测。")
+        if (
+            loaded_run is None
+            or loaded_run.schema_version != "0.3"
+            or loaded_run.strategy_fingerprint != current_strategy_fingerprint
+        ):
+            st.info("请先载入与当前 DSL fingerprint 完全匹配的已保存 DSL v0.3 回测，才能启动可恢复复盘。")
+        else:
+            try:
+                report_summaries = research_history.list_for_run(loaded_run.run_id)
+            except ResearchHistoryError as error:
+                st.warning(f"无法读取复盘历史：{error.message}")
+                report_summaries = []
+            new_review_tab, saved_review_tab = st.tabs(["新建 / 继续复盘", "查看历史报告"])
+            with new_review_tab:
+                steps = st.columns(3)
+                steps[0].markdown("""**1. 选择 skill**
+固定、版本化的复盘协议""")
+                steps[1].markdown("""**2. 输入研究重点**
+聚焦你当前想验证的问题""")
+                steps[2].markdown("""**3. 启动或继续**
+保存证据并可中断恢复""")
+                st.divider()
+                skills_by_id = {skill.skill_id: skill for skill in RESEARCH_SKILLS}
+                selected_skill_id = st.selectbox(
+                    "复盘 skill", list(skills_by_id),
+                    format_func=lambda item: skills_by_id[item].display_name,
+                    key=f"research_skill::{loaded_run.run_id}",
+                    help="每个 skill 是固定、版本化的复盘协议；研究重点只能提供上下文，不能改变策略或执行规则。",
+                )
+                selected_skill = skills_by_id[selected_skill_id]
+                st.caption(
+                    f"{selected_skill.purpose} 固定抽取最多 {selected_skill.visual_sample_target} 张交易图"
+                    f"（每批 {selected_skill.visual_batch_size} 张）。统计与 DSL 审计由 Python 完成；"
+                    "模型只观察图像和综合已保存证据。预估模型费用约 $0.15–0.25，实际 token 用量会随报告保存。"
+                )
+                focus = st.text_area(
+                    "研究重点（仅作文本上下文，不改变策略或执行）",
+                    key=f"research_focus::{loaded_run.run_id}::{selected_skill.skill_id}",
+                    placeholder="例如：检查 MMACD/DD 是否仍允许小波动入场。", height=82,
+                )
+                if st.button("启动 / 继续复盘", type="primary", key=f"run_research::{loaded_run.run_id}::{selected_skill.skill_id}"):
+                    timed_strategy = TimedStrategyDefinition.model_validate(matching_result.strategy.model_dump(mode="json"))
+                    market_index_state = st.session_state.get("dsl_market_index_by_scope", {})
+                    market_index = market_index_state.get("frame") if market_index_state.get("scope") == current_backtest_view_scope else None
+                    api_key = os.getenv("OPENAI_API_KEY")
+                    try:
+                        research_client = OpenAIResearchClient(
+                            api_key=api_key, observation_model=selected_skill.observation_model,
+                            synthesis_model=selected_skill.synthesis_model,
+                        ) if api_key else None
+                        with st.status("正在运行 DD5 复盘…", expanded=True) as research_status:
+                            progress_bar = st.progress(0, text="正在初始化复盘步骤…")
+                            step_status = st.empty()
+
+                            def update_research_progress(update: ResearchProgress) -> None:
+                                stage_order = ("evidence", "visual", "synthesis", "complete")
+                                stage_labels = {"evidence": "全量统计与 DSL 入/出场审计", "visual": "代表交易图表与视觉观察", "synthesis": "证据综合与实验卡", "complete": "报告保存完成"}
+                                starts, weights = {"evidence": 0.0, "visual": 0.45, "synthesis": 0.90, "complete": 1.0}, {"evidence": 0.45, "visual": 0.45, "synthesis": 0.10, "complete": 0.0}
+                                fraction = min(1.0, update.completed / max(1, update.total))
+                                progress_bar.progress(int(min(1.0, starts[update.stage] + weights[update.stage] * fraction) * 100), text=update.message)
+                                active_index = stage_order.index(update.stage)
+                                step_status.markdown("\n\n".join(
+                                    f"{'✅' if update.stage == 'complete' or index < active_index else '⏳' if index == active_index else '○'} {index + 1}. {stage_labels[stage]}"
+                                    for index, stage in enumerate(stage_order)
+                                ))
+
+                            service = ResearchSkillService(
+                                history=research_history, definition=selected_skill, load_ohlc=backtest_load_ohlc,
+                                resolve_path=lambda item: resolve_history_data_path(item, project_root=ROOT),
+                                model_client=research_client, market_index=market_index, progress=update_research_progress,
+                            )
+                            completed_report = service.start_or_resume(run=loaded_run, strategy=timed_strategy, research_focus=focus)
+                            research_status.update(label="复盘完成" if completed_report.status == "completed" else "复盘已保存，可继续", state="complete", expanded=False)
+                        st.session_state[f"research_report::{loaded_run.run_id}"] = str(completed_report.report_id)
+                        st.session_state["open_research_report_id"] = str(completed_report.report_id)
+                        st.rerun()
+                    except (ResearchExecutionBlocked, ResearchModelFailure, ResearchHistoryError) as error:
+                        st.warning(f"{error.code}: {error.message}")
+            with saved_review_tab:
+                if not report_summaries:
+                    st.info("当前回测还没有已保存的复盘报告。")
+                else:
+                    reports_by_id = {str(item.report_id): item for item in report_summaries}
+                    selected_report_id = st.selectbox(
+                        "已保存复盘报告", list(reports_by_id),
+                        format_func=lambda item: (
+                            f"{reports_by_id[item].updated_at.astimezone().strftime('%Y-%m-%d %H:%M')} · "
+                            f"{reports_by_id[item].skill_id.upper()} {reports_by_id[item].skill_version} · "
+                            f"{reports_by_id[item].status} · {reports_by_id[item].research_focus or '无研究重点'}"
+                        ),
+                        key=f"research_report::{loaded_run.run_id}",
+                    )
+                    if st.button("删除这份复盘报告", key=f"delete_research::{selected_report_id}"):
+                        try:
+                            research_history.delete(reports_by_id[selected_report_id].report_id)
+                            st.rerun()
+                        except ResearchHistoryError as error:
+                            st.error(error.message)
+                    try:
+                        report = research_history.load(reports_by_id[selected_report_id].report_id)
+                        st.caption(f"{report.skill_id.upper()} {report.skill_version} · 状态：{report.status} · 图像批次：{len(report.completed_batch_numbers)} · token：输入 {report.usage.input_tokens} / 输出 {report.usage.output_tokens}")
+                        if report.failure_reason:
+                            st.warning(report.failure_reason)
+                        if report.evidence is not None:
+                            coverage = report.evidence.source_coverage
+                            st.caption(f"源数据审计覆盖：{coverage.readable_trade_count}/{coverage.total_trades}；无法读取 {len(coverage.unreadable_trade_ids)} 笔。")
+                            with st.expander("确定性 cohort 与分层证据"):
+                                st.json(report.evidence.model_dump(mode="json", exclude={"trades"}))
+                        with st.container(border=True):
+                            st.subheader("复盘报告", divider="blue")
+                            if report.synthesis is None:
+                                st.caption("确定性证据与图形观察已保存；证据综合完成后会生成可引用的复盘报告。")
+                            else:
+                                st.caption("在大尺寸报告中查看事实、图形模式、待验证假设和实验卡；每条结论均可回到对应交易。")
+                            if st.button(
+                                "打开复盘报告",
+                                type="primary",
+                                key=f"open_research_report::{report.report_id}",
+                                width="stretch",
+                            ):
+                                st.session_state["open_research_report_id"] = str(report.report_id)
+                                st.rerun()
+                        if st.session_state.pop("open_research_report_id", None) == str(report.report_id):
+                            show_research_report_dialog(report)
+                    except ResearchHistoryError as error:
+                        st.warning(f"无法载入复盘报告：{error.message}")
+    else:
+        st.info("请先在“回测结果”中载入或运行与当前策略匹配的已保存回测，再开始复盘。")
+    research_tab.__exit__(None, None, None)
+    backtest_tab.__enter__()
+    if st.session_state.get("dsl_backtest_view_scope") == current_backtest_view_scope:
         # Saved runs are immutable and may have been created before a newer
         # KPI table column (such as profit_factor) existed.  Build a display
         # view with missing metrics marked unavailable; never mutate the

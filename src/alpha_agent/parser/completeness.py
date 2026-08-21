@@ -121,15 +121,9 @@ def preflight_clarifications(request: StrategyInterpretationRequest) -> Clarific
             answer_kind="choice",
         ))
         ambiguous.append("样本结束未平仓头寸的处理")
-    if re.search(r"卖出后.*重新寻找.*C\s*点", text, flags=re.IGNORECASE) and not _answered(request, "allow_reentry_after_exit"):
-        questions.append(ClarificationQuestion(
-            question_id="allow_reentry_after_exit",
-            question="一笔交易卖出后，是否允许继续寻找下一次 C 点并再次入场？",
-            target_path="lifecycle_policy.allow_reentry_after_exit",
-            suggested_answers=["允许继续寻找下一次 C 点", "不允许；每个标的只执行第一笔交易"],
-            answer_kind="choice",
-        ))
-        ambiguous.append("卖出后是否重新寻找 C 点")
+    # ``allow_reentry_after_exit`` is a confirmed product default. A source
+    # can still explicitly prohibit re-entry and the compiler must preserve
+    # that wording, but absence of such wording is no longer a user question.
     if not questions:
         return None
     coverage = [

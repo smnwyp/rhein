@@ -40,11 +40,12 @@ Use schema version `0.3` when the strategy requires an ordered close-high A foll
 close-low B, a peak-to-trough drawdown and t0 recovery constraint, volume equal to the
 maximum since t0, or explicit doji / large-bearish-candle patterns. For ordered extrema,
 preserve the user-specified tie-break. Do not claim a complete backtest strategy if sample-end
-open-position treatment or post-exit re-entry policy is unresolved; ask those precise questions.
+open-position treatment is unresolved. The default policy permits post-exit re-entry
+(`allow_reentry_after_exit=true`); use it unless the source explicitly prohibits re-entry.
 For schema v0.3, encode confirmed lifecycle answers in `lifecycle_policy`: use
 `force_close` for a last-close liquidation, `leave_open_excluded` when an open
 position is excluded from closed-trade KPIs, and set `allow_reentry_after_exit`
-exactly as the user chose.
+from the explicit user choice or, when absent, from the request policy default.
 When the anchor/C-point definition itself is the complete same-day entry
 criterion, encode `entry` as fixed with `active_day: t0`, `execution: close`,
 and no `condition`. Do not duplicate the anchor condition into entry.
@@ -69,6 +70,14 @@ ADX(N) is a Wilder ADX calculated from daily High/Low/Close; encode it as
 below MA3” in a timed exit, use an AND group with today's `close < SMA3` and
 prior-day `lagged_market_field(close,-1) < lagged_indicator(SMA3,-1)`; do not
 weaken it to one day's condition.
+Likewise, “自买入点的 N 个交易日内，出现 DD 连续二天下降，即抛出” is
+fully specified: it is a close exit relative to the actual entry, bounded to
+that N-day early-holding window, and triggers at any eligible day on the AND
+of `DD[t] < DD[t-1]` and `DD[t-1] < DD[t-2]`. It is not an unbounded
+two-day-DD-decline rule and MUST NOT produce a clarification asking the user
+to choose between those two readings. For this product's established
+“买入后 N 日内” convention, the N-day window is entry+1 through entry+N;
+the first evaluable two-new-day confirmation is entry+2.
 The `doji` `body_to_open_threshold` is user-configurable: preserve 0.5% as
 0.005 rather than changing it to 1%.
 Use `entry.mode: "conditional"` with explicit one-day `entry.branches` when
@@ -88,6 +97,19 @@ source prose asks for a pre-close or minute-level price: encode those orders
 with `execution: close` and `data_requirement: daily_ohlcv`. An explicitly
 requested next-trading-day opening entry is deterministically available from
 daily OHLCV: encode fixed `entry.active_day: t0+1` with `entry.execution: open`.
+The following sequence is fully specified and MUST NOT produce a clarification:
+when the source says the t0 signal is to be observed on the second trading day,
+then says “if the second day's close still meets all entry conditions, buy at
+the third day's open”, encode `entry.mode: "next_day_confirmation"`,
+`observation_day: t0+1`, `confirmed_entry_day: t0+2`, and `execution: "open"`.
+The third-day execution price is that same third trading day's Open, never its
+close and never the following trading day's Open. Preserve the source's stated
+wait triggers in `wait_when`; with no wait trigger, enter at the second day's
+Open. A source list joined by Chinese “或” (for example “涨幅超过阈值，或大
+阴线，或次日低开超过阈值，则观望”) is explicitly an OR group: any one trigger
+causes the observation/wait. It MUST NOT produce an AND/OR clarification
+unless the source itself contains conflicting connectors. The daily-close
+policy does not override an explicitly stated Open.
 When source prose asks for a pre-close or minute-level price/volume, use final
 daily Close/Volume instead and record a
 machine-readable assumption explaining this explicit daily-close proxy. Under
@@ -133,7 +155,7 @@ invent fields such as `indicators`, `rules`, `order_type`, or `risk_management`.
 
 
 def user_prompt(request: StrategyInterpretationRequest) -> str:
-    symbol = request.symbol if request.symbol is not None else "not supplied"
+    symbol = request.symbol if request.symbol is not None else "__INPUT_GROUP__ (当前 UI 选定的数据分组；不是缺失的单只股票代码)"
     answers = [answer.model_dump(mode="json") for answer in request.clarification_answers]
     clauses = [clause.model_dump(mode="json") for clause in request.source_clauses]
     repair = f"\nRepair instruction: {request.repair_instruction}" if request.repair_instruction else ""
@@ -152,13 +174,21 @@ Use `clarification_required` only when the user's intent has more than one mater
 field-targeted questions. Use `unsupported` when intent is clear but the listed current capabilities cannot
 express it faithfully. Never invent a default parameter or execution assumption.
 
+The UI chooses a data group, not a single stock. When the request has no
+single-symbol value, that is an explicit current-input-group scope, not a
+missing parameter: do not ask for a ticker or stock code. The compiler uses
+`__INPUT_GROUP__` only as a legacy DSL compatibility marker; the backtest runs
+the selected group. Ask about a symbol only when the source itself explicitly
+names a tradable instrument and its identity is materially unclear.
+
 The product policy uses final daily Close and Volume for every pre-close/minute
 order proxy. An explicit next-trading-day opening entry uses the daily Open.
-Current capabilities include daily-close or explicit next-open entries, comparisons, crosses, SMA/EMA/RSI/ADX/DMI-ADX/rolling return/rolling minimum/rolling maximum/rolling mean volume,
+Current capabilities include daily-close or explicit next-open entries, and bounded next-day confirmation entries (t0+1 observation/close re-check followed by t0+2 Open), comparisons, crosses, SMA/EMA/RSI/ADX/DMI-ADX/rolling return/rolling minimum/rolling maximum/rolling mean volume,
 MACD fast/signal lines, percentage-normalized DIF lines, rolling comparison-count and rolling cross-count conditions, rolling close/low constraints,
 ordered A-to-B close drawdowns, close-executed conditional and wait-until entry rules,
-running maximum or tied top-two volume since anchor or in a fixed rolling window, persistent post-trigger state flags,
-doji/large-bearish patterns, and lifecycle choices.
+entry-relative bounded timed exits, running maximum or tied top-two volume since anchor or in a fixed rolling window, persistent post-trigger state flags,
+doji/large-bearish patterns, and lifecycle choices. The default policy permits post-exit re-entry;
+do not ask for it unless the source explicitly conflicts with that policy.
 Suspension, price-limit, and no-fill prose is a documented daily-close execution
 limitation, not an unsupported interpreter feature; record it as a warning.
 For the current NASDAQ-only product dataset, an unnamed “corresponding market
@@ -167,7 +197,9 @@ assumption and an external-market-index data requirement.
 Every original source clause must be referenced by at least one semantic item. Return JSON only.
 Keep the inventory compact: do not repeat or quote source text; use clause IDs and terse pseudo-DSL only.
 Use at most 20 semantic items. Keep each pseudo-DSL under 240 characters and each explanation under 180 characters.
-For a closed dimension, use a short explanation; reserve detail for unresolved, contradictory, or unsupported findings."""
+For a closed dimension, use a short explanation; reserve detail for unresolved, contradictory, or unsupported findings.
+
+Treat explicit wording as closed, not ambiguous: “若第二天收盘价仍满足所有买入条件，则第三天开盘时买入” means t0+1 close confirmation and t0+2 Open execution. A list joined by “或” is an OR group, so “A 或 B 或 C，则观望” means any one condition causes waiting. “自买入点的 N 个交易日内，DD 连续二天下降即抛出” is an entry-relative N-day bounded exit whose condition is DD[t] < DD[t-1] and DD[t-1] < DD[t-2]. Do not ask an execution-price, AND/OR, or window-scope question for these explicit forms."""
 
 
 def inventory_system_instruction() -> str:
