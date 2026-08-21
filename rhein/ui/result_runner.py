@@ -52,12 +52,18 @@ def annualized_sharpe(ohlc: pd.DataFrame, trades: pd.DataFrame) -> float | None:
 
 
 def collect_results(paths: list[Path], params: dict, capital: float, compound: bool,
-                    *, load_ohlc, run_backtest, progress_label: str = "回测中") -> tuple[pd.DataFrame, pd.DataFrame]:
+                    *, load_ohlc, run_backtest, progress_label: str = "回测中", completed_sources: set[str] | None = None,
+                    existing_kpis: pd.DataFrame | None = None, existing_trades: pd.DataFrame | None = None, checkpoint=None) -> tuple[pd.DataFrame, pd.DataFrame]:
     progress = st.progress(0, text=progress_label)
     status = st.empty()
-    kpis, trades, errors = [], [], []
+    completed_sources = completed_sources or set()
+    kpis = [] if existing_kpis is None else existing_kpis.to_dict("records")
+    trades = [] if existing_trades is None or existing_trades.empty else [existing_trades]
+    errors = []
     total = len(paths)
     for index, path in enumerate(paths, start=1):
+        if str(path) in completed_sources:
+            continue
         try:
             ohlc = load_ohlc(path)
             trade_df, stats = run_backtest(ohlc, capital=capital, compound=compound, **params)
@@ -80,6 +86,10 @@ def collect_results(paths: list[Path], params: dict, capital: float, compound: b
         if index == total or index % max(1, total // 100) == 0:
             progress.progress(index / total, text=f"{progress_label}：{index}/{total}")
             status.caption(f"已处理 {index}/{total} 个标的")
+        if checkpoint is not None:
+            current_kpis = pd.DataFrame(kpis)
+            current_trades = pd.concat(trades, ignore_index=True) if trades else pd.DataFrame()
+            checkpoint(current_kpis, current_trades, completed_sources | {str(item["源文件"]) for item in kpis})
     progress.empty()
     status.empty()
     if errors:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from hashlib import sha256
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,7 @@ from alpha_agent.parser.service import StrategyInterpreterService
 from alpha_agent.interpretation_cache import JsonParsedInterpretationCache
 from alpha_agent.strategy_library import JsonStrategyLibrary, SavedStrategy, StrategyLibraryError
 from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHistory, SavedBacktestRun, dataframe_records, recalculated_trade_level_kpis, strategy_fingerprint
+from alpha_agent.backtest_checkpoint import JsonBacktestCheckpoint
 from alpha_agent.domain.sequence import TimedStrategyDefinition
 from alpha_agent.research.legacy_adapter import compile_timed_strategy
 from alpha_agent.research.v03_engine import build_trade_event_audit, run_v03_backtest
@@ -845,7 +847,15 @@ if matching_result is not None:
     # the UI prevents a review from accidentally changing the baseline run.
     initial_capital = 10_000.0
     cost_bps = 0.0
-    if st.button("运行当前组回测", type="primary", key="run_dsl_backtest"):
+    checkpoint_key = None
+    checkpoint_payload = None
+    if saved_backtest_strategy_id is not None:
+        checkpoint_key = sha256(f"{saved_backtest_strategy_id}:{strategy_fingerprint(matching_result.strategy.model_dump_json())}:{selected_scope}".encode()).hexdigest()
+        checkpoint_payload = JsonBacktestCheckpoint(ROOT / "config" / "backtest_checkpoint.json").load(checkpoint_key)
+        if checkpoint_payload is not None:
+            st.info(f"发现未完成回测：已完成 {len(checkpoint_payload.get('completed_sources', []))} 个标的。关闭页面后可继续。")
+    run_label = "继续未完成回测" if checkpoint_payload is not None else "运行当前组回测"
+    if st.button(run_label, type="primary", key="run_dsl_backtest"):
         if matching_result.strategy.schema_version == "0.1":
             st.error("当前仅可回测时序 DSL（v0.2/v0.3）；静态 v0.1 通用执行器将在下一步接入。")
         else:
@@ -857,6 +867,13 @@ if matching_result is not None:
                     params, runner, label = compile_timed_strategy(timed_strategy, approximate_intraday_with_daily_low=True), legacy_run_backtest, "DSL v0.2 分组回测"
                     params["cost_bps"] = cost_bps
                 paths = backtest_input_files(Path(data_path))
+                checkpoint_store = JsonBacktestCheckpoint(ROOT / "config" / "backtest_checkpoint.json") if checkpoint_key else None
+                existing_kpis = pd.DataFrame(checkpoint_payload.get("kpis", [])) if checkpoint_payload else None
+                existing_trades = pd.DataFrame(checkpoint_payload.get("trades", [])) if checkpoint_payload else None
+                completed_sources = set(checkpoint_payload.get("completed_sources", [])) if checkpoint_payload else set()
+                def save_checkpoint(kpi_frame, trade_frame, completed):
+                    if checkpoint_store is not None and checkpoint_key is not None:
+                        checkpoint_store.save({"key": checkpoint_key, "completed_sources": sorted(completed), "kpis": dataframe_records(kpi_frame), "trades": dataframe_records(trade_frame)})
                 if timed_strategy.schema_version == "0.3" and timed_strategy.data_requirement == "daily_ohlcv_with_market_index":
                     index_symbols = required_market_index_symbols(timed_strategy.model_dump(mode="json"))
                     if len(index_symbols) != 1:
@@ -879,7 +896,7 @@ if matching_result is not None:
                         "symbol": index_symbol,
                         "frame": market_index,
                     }
-                kpis, trades = collect_results(paths, params, initial_capital, True, load_ohlc=backtest_load_ohlc, run_backtest=runner, progress_label=label)
+                kpis, trades = collect_results(paths, params, initial_capital, True, load_ohlc=backtest_load_ohlc, run_backtest=runner, progress_label=label, completed_sources=completed_sources, existing_kpis=existing_kpis, existing_trades=existing_trades, checkpoint=save_checkpoint)
                 if kpis.empty:
                     st.warning("本次所有标的均运行失败，未保存为空白回测记录；请检查上方逐文件错误后重试。")
                     raise BacktestHistoryError("all input files failed; no empty backtest result was saved")
@@ -913,6 +930,8 @@ if matching_result is not None:
                         trades=dataframe_records(trades),
                     )
                     backtest_history.save(saved_run)
+                    if checkpoint_store is not None and checkpoint_key is not None:
+                        checkpoint_store.clear(checkpoint_key)
                     st.success(f"回测已保存：{selected_scope} · {saved_run.run_id}")
                 else:
                     st.info("本次为临时回测。保存当前策略后再次运行，即可持久保存该数据组的结果。")
