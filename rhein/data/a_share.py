@@ -71,5 +71,10 @@ def convert_a_share_file(source: Path, destination: Path) -> int:
 
     converted = frame[OUTPUT_COLUMNS].sort_values("Date").reset_index(drop=True)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    converted.to_csv(destination, index=False, date_format="%Y-%m-%d", quoting=csv.QUOTE_MINIMAL)
+    if destination.suffix.lower() == ".parquet":
+        converted.to_parquet(destination, index=False)
+    else:
+        # Keep direct callers and old local groups working while the A-share
+        # release moves to Parquet.
+        converted.to_csv(destination, index=False, date_format="%Y-%m-%d", quoting=csv.QUOTE_MINIMAL)
     return len(converted)

@@ -13,13 +13,13 @@ from rhein.data.a_share_package import build_archive
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="打包 A 股 OHLCV CSV，作为 GitHub Release / 对象存储的下载资产")
+    parser = argparse.ArgumentParser(description="打包 A 股 OHLCV Parquet（兼容 CSV），作为 GitHub Release / 对象存储的下载资产")
     parser.add_argument("--source-dir", default="data/a_share_ohlcv")
     parser.add_argument("--output", default="artifacts/a_share_ohlcv.tar.gz")
     args = parser.parse_args()
 
     count, digest = build_archive(source_dir=Path(args.source_dir), destination=Path(args.output))
-    print(f"已打包 {count} 个 CSV：{args.output}")
+    print(f"已打包 {count} 个 OHLCV 文件：{args.output}")
     print(f"SHA-256：{digest}")
     print("请将此文件上传为 GitHub Release asset；它不应提交进 Git。")
 

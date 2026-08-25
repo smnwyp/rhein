@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from rhein.paths import A_SHARE_ROOT, GROUP_ROOT
+from rhein.data.discovery import input_files
 from rhein.ui.presets import available_data_scopes
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
@@ -128,6 +129,17 @@ def test_a_share_universe_is_available_as_a_peer_data_scope() -> None:
 
     assert scopes[a_share_scope] == str(A_SHARE_ROOT)
     assert "前复权日线" in a_share_scope
+
+
+def test_input_discovery_prefers_parquet_over_legacy_csv_for_one_symbol(tmp_path: Path) -> None:
+    frame = pd.DataFrame({
+        "Date": pd.to_datetime(["2025-01-02"]), "Open": [1.0], "High": [2.0],
+        "Low": [1.0], "Close": [1.5], "Volume": [100.0],
+    })
+    frame.to_csv(tmp_path / "SH600001.csv", index=False)
+    frame.to_parquet(tmp_path / "SH600001.parquet", index=False)
+
+    assert input_files(tmp_path) == [tmp_path / "SH600001.parquet"]
 
 
 def test_streamlit_entrypoint_renders() -> None:

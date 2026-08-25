@@ -45,7 +45,7 @@ def test_batch_conversion_continues_after_an_invalid_source(tmp_path: Path, monk
 
     main()
 
-    assert (output_dir / "SH600831.csv").is_file()
+    assert (output_dir / "SH600831.parquet").is_file()
     report = output_dir / "conversion_failures.csv"
     assert report.is_file()
     assert "BJ#920065.txt" in report.read_text(encoding="utf-8")
@@ -53,6 +53,20 @@ def test_batch_conversion_continues_after_an_invalid_source(tmp_path: Path, monk
     assert "转换器 0" in capsys.readouterr().out
     markdown = output_dir / "conversion_report.md"
     assert "源文件问题：1" in markdown.read_text(encoding="utf-8")
+
+
+def test_converter_writes_parquet_that_the_backtest_loader_can_read(tmp_path: Path) -> None:
+    source = tmp_path / "SH#600831.txt"
+    source.write_bytes(
+        "600831 测试股票 日线 前复权\r\n"
+        "      日期\t    开盘\t    最高\t    最低\t    收盘\t    成交量\t    成交额\r\n"
+        "06/03/2015\t16.90\t16.96\t15.61\t15.65\t91746209\t1500110464.00\r\n"
+        "#数据来源:通达信\r\n".encode("gb18030")
+    )
+    output = tmp_path / "SH600831.parquet"
+
+    assert convert_a_share_file(source, output) == 1
+    assert load_ohlc(output)["Close"].tolist() == [15.65]
 
 
 def test_non_positive_adjusted_price_is_reported_as_a_source_problem(tmp_path: Path) -> None:

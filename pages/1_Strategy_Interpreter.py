@@ -2,9 +2,10 @@
 from __future__ import annotations
 import json
 import os
+import subprocess
 import sys
-from hashlib import sha256
 from pathlib import Path
+from uuid import UUID
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -28,30 +29,36 @@ from alpha_agent.parser.mock_timeline import build_mock_candle_timeline
 from alpha_agent.parser.service import StrategyInterpreterService
 from alpha_agent.interpretation_cache import JsonParsedInterpretationCache
 from alpha_agent.strategy_library import JsonStrategyLibrary, SavedStrategy, StrategyLibraryError
-from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHistory, SavedBacktestRun, dataframe_records, recalculated_trade_level_kpis, strategy_fingerprint
-from alpha_agent.backtest_checkpoint import JsonBacktestCheckpoint
+from alpha_agent.backtest_history import BacktestHistoryError, JsonBacktestHistory, recalculated_trade_level_kpis, strategy_fingerprint
+from alpha_agent.backtest_jobs import BacktestJob, BacktestJobError, JsonBacktestJobStore
 from alpha_agent.domain.sequence import TimedStrategyDefinition
-from alpha_agent.research.legacy_adapter import compile_timed_strategy
-from alpha_agent.research.v03_engine import build_trade_event_audit, run_v03_backtest
-from alpha_agent.research.market_index import load_market_index_for_files, required_market_index_symbols
+from alpha_agent.research.v03_engine import build_trade_event_audit
 from alpha_agent.research.reporting import aggregate_gross_pnl, presentation_kpis
 from alpha_agent.research_skill.client import OpenAIResearchClient, ResearchModelFailure
 from alpha_agent.research_skill.definition import RESEARCH_SKILLS
 from alpha_agent.research_skill.history import JsonResearchReportHistory, ResearchHistoryError
 from alpha_agent.research_skill.models import SavedResearchReport
 from alpha_agent.research_skill.service import ResearchExecutionBlocked, ResearchProgress, ResearchSkillService
-from rhein.backtest import input_files as backtest_input_files, load_ohlc as backtest_load_ohlc, run_backtest as legacy_run_backtest
-from rhein.ui.result_runner import collect_results
+from rhein.backtest import input_files as backtest_input_files, load_ohlc as backtest_load_ohlc
 from rhein.ui.gauges import kpi_gauge_html
 from rhein.ui.trade_chart import compact_audit_overlay_lines, decisive_entry_audit_rows, event_text_layer, selected_event_id
 from rhein.ui.trade_table import TRADE_RANK_OPTIONS, build_trade_ranking
 from rhein.ui.chart_theme import event_annotation_style
 from rhein.ui.dmi import add_display_dmi
 from rhein.ui.macd import add_display_macd, add_display_mmacd
-from rhein.ui.history_paths import portable_data_path, resolve_history_data_path, same_data_scope
+from rhein.ui.history_paths import resolve_history_data_path, same_data_scope
 
 # The project-local file is the explicit source of truth for this local app.
 load_dotenv(ROOT / ".env", override=True)
+
+
+def launch_backtest_worker(job_id: UUID) -> None:
+    """Start a detached local worker; its durable job artifact is authoritative."""
+    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(ROOT / "src"), os.environ.get("PYTHONPATH")]))}
+    subprocess.Popen(
+        [sys.executable, "-m", "rhein.backtest_worker", "--project-root", str(ROOT), "--job-id", str(job_id)],
+        cwd=ROOT, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+    )
 
 st.set_page_config(page_title="自然语言策略解释器", layout="wide")
 st.markdown(
@@ -490,12 +497,13 @@ if not st.session_state.get("interpreter_defaults_initialized"):
         # The normal sidebar branch will show the detailed, user-visible error.
         pass
     st.session_state["interpreter_defaults_initialized"] = True
-main_scope = st.session_state.get("data_scope")
-default_scope_index = scope_labels.index(main_scope) if main_scope in scope_options else 0
 selected_scope = st.sidebar.selectbox(
     "标的分组",
     scope_labels,
-    index=default_scope_index,
+    # ``data_scope`` is deliberately initialized above so this page opens on
+    # 全部 A 股.  Do not also pass an ``index`` default: Streamlit treats that
+    # as two competing initial values for the same keyed widget.
+    index=None,
     key="data_scope",
     help="与主回测页面共享同一个数据范围和 Nasdaq 分组选择。",
 )
@@ -509,7 +517,10 @@ st.sidebar.subheader("策略")
 library_notice = st.session_state.pop("strategy_library_notice", None)
 if library_notice is not None:
     getattr(st.sidebar, library_notice[0])(library_notice[1])
-strategy_source = st.sidebar.radio("策略来源", ["新建策略", "已保存策略"], horizontal=True, key="strategy_source")
+strategy_source = st.sidebar.radio(
+    "策略来源", ["新建策略", "已保存策略"],
+    index=None, horizontal=True, key="strategy_source",
+)
 if strategy_source == "新建策略":
     strategy_text = st.sidebar.text_area("自然语言策略", height=180, key="interpreter_strategy_text")
 else:
@@ -523,7 +534,11 @@ else:
         source_strategies = library.list()
         saved_by_id = {str(item.strategy_id): item for item in source_strategies}
         if saved_by_id:
-            source_id = st.sidebar.selectbox("选择已保存策略", list(saved_by_id), format_func=lambda item: f"{saved_by_id[item].strategy_name} · {'已验证' if saved_by_id[item].strategy else '草稿'}", key="strategy_source_saved", on_change=load_selected_saved_strategy)
+            source_id = st.sidebar.selectbox(
+                "选择已保存策略", list(saved_by_id),
+                format_func=lambda item: f"{saved_by_id[item].strategy_name} · {'已验证' if saved_by_id[item].strategy else '草稿'}",
+                index=None, key="strategy_source_saved", on_change=load_selected_saved_strategy,
+            )
             source_saved = saved_by_id[source_id]
             if st.session_state.get("loaded_saved_strategy_id") != source_id:
                 load_selected_saved_strategy()
@@ -847,95 +862,56 @@ if matching_result is not None:
     # the UI prevents a review from accidentally changing the baseline run.
     initial_capital = 10_000.0
     cost_bps = 0.0
-    checkpoint_key = None
-    checkpoint_payload = None
+    job_store = JsonBacktestJobStore(ROOT / "config" / "backtest_jobs")
+    resumable_job = None
     if saved_backtest_strategy_id is not None:
-        checkpoint_key = sha256(f"{saved_backtest_strategy_id}:{strategy_fingerprint(matching_result.strategy.model_dump_json())}:{selected_scope}".encode()).hexdigest()
-        checkpoint_payload = JsonBacktestCheckpoint(ROOT / "config" / "backtest_checkpoint.json").load(checkpoint_key)
-        if checkpoint_payload is not None:
-            st.info(f"发现未完成回测：已完成 {len(checkpoint_payload.get('completed_sources', []))} 个标的。关闭页面后可继续。")
-    run_label = "继续未完成回测" if checkpoint_payload is not None else "运行当前组回测"
+        resumable_job = job_store.find_resumable(
+            strategy_id=saved_backtest_strategy_id,
+            strategy_fingerprint=strategy_fingerprint(matching_result.strategy.model_dump_json()),
+            data_path=str(Path(data_path).resolve()),
+        )
+        if resumable_job is not None:
+            st.progress(
+                resumable_job.progress_fraction,
+                text=(f"后台回测 · {resumable_job.status} · {resumable_job.completed_sources}/{resumable_job.total_sources}"
+                      + (f" · 当前 {resumable_job.current_symbol}" if resumable_job.current_symbol else "")),
+            )
+            if resumable_job.failure_reason:
+                getattr(st, "error" if resumable_job.status == "failed" else "warning")(resumable_job.failure_reason)
+            if st.button("刷新后台回测状态", key=f"refresh_backtest_job::{resumable_job.job_id}"):
+                st.rerun()
+    run_label = "继续后台回测" if resumable_job is not None else "在后台运行当前组回测"
     if st.button(run_label, type="primary", key="run_dsl_backtest"):
         if matching_result.strategy.schema_version == "0.1":
             st.error("当前仅可回测时序 DSL（v0.2/v0.3）；静态 v0.1 通用执行器将在下一步接入。")
+        elif saved_backtest_strategy_id is None:
+            st.info("请先保存当前策略；后台回测需要稳定的策略 ID 才能在页面关闭后恢复。")
         else:
             try:
                 timed_strategy = TimedStrategyDefinition.model_validate(matching_result.strategy.model_dump(mode="json"))
-                if timed_strategy.schema_version == "0.3":
-                    params, runner, label = {"strategy": timed_strategy, "cost_bps": cost_bps}, run_v03_backtest, "DSL v0.3 分组回测"
-                else:
-                    params, runner, label = compile_timed_strategy(timed_strategy, approximate_intraday_with_daily_low=True), legacy_run_backtest, "DSL v0.2 分组回测"
-                    params["cost_bps"] = cost_bps
-                paths = backtest_input_files(Path(data_path))
-                checkpoint_store = JsonBacktestCheckpoint(ROOT / "config" / "backtest_checkpoint.json") if checkpoint_key else None
-                existing_kpis = pd.DataFrame(checkpoint_payload.get("kpis", [])) if checkpoint_payload else None
-                existing_trades = pd.DataFrame(checkpoint_payload.get("trades", [])) if checkpoint_payload else None
-                completed_sources = set(checkpoint_payload.get("completed_sources", [])) if checkpoint_payload else set()
-                def save_checkpoint(kpi_frame, trade_frame, completed):
-                    if checkpoint_store is not None and checkpoint_key is not None:
-                        checkpoint_store.save({"key": checkpoint_key, "completed_sources": sorted(completed), "kpis": dataframe_records(kpi_frame), "trades": dataframe_records(trade_frame)})
-                if timed_strategy.schema_version == "0.3" and timed_strategy.data_requirement == "daily_ohlcv_with_market_index":
-                    index_symbols = required_market_index_symbols(timed_strategy.model_dump(mode="json"))
-                    if len(index_symbols) != 1:
-                        raise UnsupportedStrategyFeature(
-                            "当前日线引擎一次只支持一个明确声明的大盘指数数据源",
-                            details={"declared_index_symbols": sorted(index_symbols)},
-                        )
-                    index_symbol = next(iter(index_symbols))
-                    with st.spinner(f"正在加载并按日期对齐大盘指数 {index_symbol}…"):
-                        market_index = load_market_index_for_files(
-                            paths,
-                            symbol=index_symbol,
-                            cache_directory=ROOT / ".cache" / "market_indices",
-                        )
-                    # The one shared, date-aligned source is passed to every
-                    # asset run. It is loaded once, never inferred per stock.
-                    params["market_index"] = market_index
-                    st.session_state["dsl_market_index_by_scope"] = {
-                        "scope": current_backtest_view_scope,
-                        "symbol": index_symbol,
-                        "frame": market_index,
-                    }
-                kpis, trades = collect_results(paths, params, initial_capital, True, load_ohlc=backtest_load_ohlc, run_backtest=runner, progress_label=label, completed_sources=completed_sources, existing_kpis=existing_kpis, existing_trades=existing_trades, checkpoint=save_checkpoint)
-                if kpis.empty:
-                    st.warning("本次所有标的均运行失败，未保存为空白回测记录；请检查上方逐文件错误后重试。")
-                    raise BacktestHistoryError("all input files failed; no empty backtest result was saved")
-                assert current_backtest_view_scope is not None
-                replace_backtest_view(
-                    kpis=kpis,
-                    trades=trades,
-                    strategy_text=strategy_text,
-                    view_scope=current_backtest_view_scope,
-                    loaded_run=None,
-                )
-                if saved_backtest_strategy_id is not None:
+                if resumable_job is None:
+                    paths = backtest_input_files(Path(data_path))
                     saved_strategy_name = next(
-                        (
-                            item.strategy_name
-                            for item in library.list()
-                            if item.strategy_id == saved_backtest_strategy_id
-                        ),
+                        (item.strategy_name for item in library.list() if item.strategy_id == saved_backtest_strategy_id),
                         matching_result.strategy.strategy_name or "未命名策略",
                     )
-                    saved_run = SavedBacktestRun(
-                        strategy_id=saved_backtest_strategy_id,
-                        strategy_name=saved_strategy_name,
+                    resumable_job = job_store.create(BacktestJob(
+                        status="queued", strategy_id=saved_backtest_strategy_id, strategy_name=saved_strategy_name,
                         strategy_fingerprint=strategy_fingerprint(timed_strategy.model_dump_json()),
-                        schema_version=timed_strategy.schema_version,
-                        group_label=selected_scope,
-                        data_path=portable_data_path(data_path, project_root=ROOT),
-                        input_file_count=len(paths),
-                        settings={"initial_capital": float(initial_capital), "compound": True, "cost_bps": float(cost_bps), "runner": label},
-                        kpis=dataframe_records(kpis),
-                        trades=dataframe_records(trades),
-                    )
-                    backtest_history.save(saved_run)
-                    if checkpoint_store is not None and checkpoint_key is not None:
-                        checkpoint_store.clear(checkpoint_key)
-                    st.success(f"回测已保存：{selected_scope} · {saved_run.run_id}")
+                        strategy_payload=timed_strategy.model_dump(mode="json"), group_label=selected_scope,
+                        data_path=str(Path(data_path).resolve()),
+                        settings={
+                            "initial_capital": float(initial_capital), "compound": True,
+                            "cost_bps": float(cost_bps),
+                            "runner": f"DSL v{timed_strategy.schema_version} 分组回测",
+                        },
+                        total_sources=len(paths),
+                    ))
                 else:
-                    st.info("本次为临时回测。保存当前策略后再次运行，即可持久保存该数据组的结果。")
-            except (AlphaAgentError, BacktestHistoryError) as error:
+                    resumable_job = job_store.save(resumable_job.model_copy(update={"status": "queued", "failure_reason": None}))
+                launch_backtest_worker(resumable_job.job_id)
+                st.success("后台回测已启动。可以切换页面或关闭浏览器；稍后点击“刷新后台回测状态”查看进度。")
+            except (AlphaAgentError, BacktestHistoryError, BacktestJobError) as error:
                 st.error(f"{error.code}: {error.message}")
             except Exception as error:
                 st.error(f"回测失败：{error}")

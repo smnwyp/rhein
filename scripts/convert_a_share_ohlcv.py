@@ -16,9 +16,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from rhein.data.a_share import SourceDataError, convert_a_share_file
 
 
-def destination_for(source: Path, output_dir: Path) -> Path:
-    """Use a shell-friendly market-prefixed symbol, e.g. SH#600831 -> SH600831.csv."""
-    return output_dir / f"{source.stem.replace('#', '')}.csv"
+def destination_for(source: Path, output_dir: Path, *, suffix: str = ".parquet") -> Path:
+    """Use a shell-friendly market-prefixed symbol, e.g. SH#600831 -> SH600831.parquet."""
+    return output_dir / f"{source.stem.replace('#', '')}{suffix}"
 
 
 def source_files(input_path: Path) -> list[Path]:
@@ -58,7 +58,7 @@ def write_markdown_report(
     if transform_failures:
         lines.append("发现转换器问题；这些需要修复脚本后重试。")
     else:
-        lines.append("未发现转换器问题。失败均来自源文件本身，未生成或覆盖对应的 CSV。")
+        lines.append("未发现转换器问题。失败均来自源文件本身，未生成或覆盖对应的 OHLCV 数据文件。")
     lines += ["", "## 源文件问题", "", "| 源文件 | 分类 | 原因 |", "|---|---|---|"]
     lines.extend(
         f"| {failure['source_file']} | {failure['code']} | {failure['error']} |"
@@ -77,9 +77,10 @@ def write_markdown_report(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="将通达信 A 股日线 TXT 转为 Rhein 回测所需的 OHLCV CSV")
+    parser = argparse.ArgumentParser(description="将通达信 A 股日线 TXT 转为 Rhein 回测所需的 OHLCV Parquet")
     parser.add_argument("--input-path", default="data/A股", help="单个 TXT 文件或包含 TXT 的目录")
-    parser.add_argument("--output-dir", default="data/a_share_ohlcv", help="转换后 CSV 的目录")
+    parser.add_argument("--output-dir", default="data/a_share_ohlcv", help="转换后 OHLCV 数据目录")
+    parser.add_argument("--format", choices=("parquet", "csv"), default="parquet", help="输出格式；默认 parquet，csv 仅用于兼容")
     parser.add_argument("--limit", type=int, help="最多转换 N 个文件，便于试运行")
     parser.add_argument("--overwrite", action="store_true", help="允许覆盖已经存在的 CSV")
     parser.add_argument("--failure-report", help="失败文件清单 CSV 路径；默认写入输出目录")
@@ -98,7 +99,7 @@ def main() -> None:
     converted = skipped = 0
     failures: list[dict[str, str]] = []
     for source in sources:
-        destination = destination_for(source, output_dir)
+        destination = destination_for(source, output_dir, suffix=f".{args.format}")
         if destination.exists() and not args.overwrite:
             print(f"跳过（已存在）：{destination}")
             skipped += 1

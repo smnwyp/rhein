@@ -13,6 +13,7 @@ from typing import Iterable
 import pandas as pd
 
 from alpha_agent.errors import AlphaAgentError
+from rhein.data.ohlc import load_ohlc_dates
 
 
 class MarketIndexDataError(AlphaAgentError):
@@ -157,7 +158,7 @@ def load_market_index_for_files(
     ends: list[pd.Timestamp] = []
     for path in paths:
         try:
-            dates = pd.to_datetime(pd.read_csv(path, usecols=["Date"])["Date"], errors="coerce").dropna()
+            dates = load_ohlc_dates(path)
         except (OSError, ValueError, pd.errors.ParserError) as error:
             raise MarketIndexDataError(
                 "could not inspect the selected group's asset date range",

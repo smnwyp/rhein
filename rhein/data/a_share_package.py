@@ -62,8 +62,8 @@ def install_archive(*, archive_path: Path, data_root: Path, replace: bool = Fals
         staging = Path(temporary)
         _safe_extract(archive_path, staging)
         extracted = staging / PACKAGE_ROOT
-        if not extracted.is_dir() or not any(extracted.glob("*.csv")):
-            raise ValueError("数据包没有可用的 A 股 OHLCV CSV")
+        if not extracted.is_dir() or not input_files(extracted):
+            raise ValueError("数据包没有可用的 A 股 OHLCV 数据文件")
         if target.exists():
             if not replace:
                 raise FileExistsError(f"{target} 已存在；确认覆盖请传入 --replace")
