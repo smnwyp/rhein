@@ -7,6 +7,7 @@ import pandas as pd
 from rhein.paths import A_SHARE_ROOT, GROUP_ROOT
 from rhein.data.discovery import input_files
 from rhein.ui.presets import available_data_scopes
+import rhein.ui.presets as preset_ui
 from rhein.domain import conditions
 from rhein.strategy import CONDITION_IDS, active_condition_ids, parse_ints, parse_percent_ranges
 from rhein.ui.strategy_text import params_to_text, strategy_narrative
@@ -129,6 +130,20 @@ def test_a_share_universe_is_available_as_a_peer_data_scope() -> None:
 
     assert scopes[a_share_scope] == str(A_SHARE_ROOT)
     assert "前复权日线" in a_share_scope
+
+
+def test_online_a_share_only_runtime_does_not_offer_removed_nasdaq_paths(tmp_path: Path, monkeypatch) -> None:
+    a_share = tmp_path / "a_share_ohlcv"
+    a_share.mkdir()
+    (a_share / "SH600001.parquet").write_bytes(b"placeholder")
+    monkeypatch.setattr(preset_ui, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(preset_ui, "NASDAQ_ROOT", tmp_path / "nasdaq_10y")
+    monkeypatch.setattr(preset_ui, "GROUP_ROOT", tmp_path / "nasdaq_10y" / "groups")
+    monkeypatch.setattr(preset_ui, "A_SHARE_ROOT", a_share)
+
+    scopes = preset_ui.available_data_scopes()
+
+    assert list(scopes) == ["全部 A 股（1 个可回测标的，前复权日线）", "自定义路径"]
 
 
 def test_input_discovery_prefers_parquet_over_legacy_csv_for_one_symbol(tmp_path: Path) -> None:

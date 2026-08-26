@@ -36,3 +36,9 @@ cypress/screenshots/
 data/A股/
 data/a_share_ohlcv/
 artifacts/
+
+# Nasdaq and sample data remain available to local analysts but are not part
+# of the deployed A-share product or its Streamlit build context.
+data/nasdaq_10y/
+data/nvda.csv
+data/tesla.csv

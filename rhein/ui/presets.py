@@ -6,21 +6,30 @@ from pathlib import Path
 
 import pandas as pd
 
-from rhein.paths import A_SHARE_ROOT, DATA_ROOT, GROUP_ROOT
+from rhein.paths import A_SHARE_ROOT, DATA_ROOT, GROUP_ROOT, NASDAQ_ROOT
 
 
 def available_data_scopes() -> dict[str, str]:
-    """返回 UI 可选数据范围及其目录；分组不存在时仍可使用基础数据。"""
-    scopes = {
-        "示例数据（NVDA、TSLA）": str(DATA_ROOT),
-        "全部 Nasdaq 当前股票池": str(DATA_ROOT / "nasdaq_10y"),
-    }
+    """Return only data ranges that are actually installed on this runtime."""
+    scopes: dict[str, str] = {}
+    if (DATA_ROOT / "nvda.csv").is_file() and (DATA_ROOT / "tesla.csv").is_file():
+        scopes["示例数据（NVDA、TSLA）"] = str(DATA_ROOT)
+    if NASDAQ_ROOT.is_dir() and any(NASDAQ_ROOT.glob("*.csv")):
+        scopes["全部 Nasdaq 当前股票池"] = str(NASDAQ_ROOT)
     if A_SHARE_ROOT.is_dir():
-        # Conversion failures lack the standard OHLCV header and are excluded
-        # by input_files; the label makes that universe explicit in the UI.
-        a_share_count = sum(1 for path in A_SHARE_ROOT.glob("*.csv") if path.name not in {"conversion_failures.csv"})
+        # A release can contain CSV, Parquet, or both during migration. Count
+        # symbols rather than files so the UI neither loses a Parquet-only
+        # universe nor double-counts the same symbol in both formats.
+        a_share_count = len(
+            {
+                path.stem.upper()
+                for pattern in ("*.parquet", "*.csv")
+                for path in A_SHARE_ROOT.glob(pattern)
+                if path.name != "conversion_failures.csv"
+            }
+        )
         scopes[f"全部 A 股（{a_share_count} 个可回测标的，前复权日线）"] = str(A_SHARE_ROOT)
-    if GROUP_ROOT.is_dir():
+    if NASDAQ_ROOT.is_dir() and GROUP_ROOT.is_dir():
         for folder in sorted(path for path in GROUP_ROOT.iterdir() if path.is_dir()):
             manifest = folder / "group_manifest.csv"
             try:

@@ -1,7 +1,0 @@
-{
-  "classification_standard": "Nasdaq screener 细分行业（非 GICS）",
-  "source_snapshot": "data/nasdaq_10y/industry_map.csv",
-  "mapped_count": 2795,
-  "unique_industry_count": 146,
-  "historical_limit": "当前静态分类快照用于历史研究，存在幸存者偏差和行业归属漂移；研究结论须明确标注偏乐观。"
-}

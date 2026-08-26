@@ -36,7 +36,7 @@ except (OSError, ValueError) as error:
 
 scope_options = available_data_scopes()
 scope_labels = list(scope_options)
-default_scope = "全部 Nasdaq 当前股票池"
+default_scope = next((label for label in scope_labels if label.startswith("全部 A 股")), scope_labels[0])
 with st.sidebar:
     st.header("数据范围")
     selected_scope = st.selectbox(

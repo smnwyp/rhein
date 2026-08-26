@@ -43,7 +43,7 @@ def test_batch_conversion_continues_after_an_invalid_source(tmp_path: Path, monk
 
     main()
 
-    assert (output_dir / "SH600831.csv").is_file()
+    assert (output_dir / "SH600831.parquet").is_file()
     report = output_dir / "conversion_failures.csv"
     assert report.is_file()
     assert "BJ#920065.txt" in report.read_text(encoding="utf-8")
