@@ -778,5 +778,625 @@
     "trade_count": 36600,
     "artifact_file": "36601046-1ae7-4dae-a9eb-9067a7cbb79a.json.gz",
     "created_at": "2026-08-21T10:44:27.870063Z"
+  },
+  {
+    "run_id": "1d3c26b4-8a26-420b-90a4-1f6522be7ecc",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 交通运输",
+    "data_path": "data/a_share_ohlcv/industry_groups/01_交通运输",
+    "input_file_count": 125,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 125,
+    "trade_count": 671,
+    "artifact_file": "1d3c26b4-8a26-420b-90a4-1f6522be7ecc.json.gz",
+    "created_at": "2026-08-31T14:06:56.524548Z"
+  },
+  {
+    "run_id": "e6b8e287-b22c-44dd-8167-d42d43ac602a",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 传媒",
+    "data_path": "data/a_share_ohlcv/industry_groups/02_传媒",
+    "input_file_count": 129,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 129,
+    "trade_count": 1038,
+    "artifact_file": "e6b8e287-b22c-44dd-8167-d42d43ac602a.json.gz",
+    "created_at": "2026-08-31T14:10:38.780197Z"
+  },
+  {
+    "run_id": "6bf86825-bdd3-4641-8351-a63f08cde9fd",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 公用事业",
+    "data_path": "data/a_share_ohlcv/industry_groups/03_公用事业",
+    "input_file_count": 137,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 137,
+    "trade_count": 821,
+    "artifact_file": "6bf86825-bdd3-4641-8351-a63f08cde9fd.json.gz",
+    "created_at": "2026-08-31T14:14:15.996621Z"
+  },
+  {
+    "run_id": "2433c38d-b045-48ca-89ee-71b25ed516ef",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 农林牧渔",
+    "data_path": "data/a_share_ohlcv/industry_groups/04_农林牧渔",
+    "input_file_count": 103,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 103,
+    "trade_count": 621,
+    "artifact_file": "2433c38d-b045-48ca-89ee-71b25ed516ef.json.gz",
+    "created_at": "2026-08-31T14:16:56.159876Z"
+  },
+  {
+    "run_id": "b9d08f39-6e01-4e0c-9971-1385e0911e6c",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 医药生物",
+    "data_path": "data/a_share_ohlcv/industry_groups/05_医药生物",
+    "input_file_count": 476,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 476,
+    "trade_count": 2950,
+    "artifact_file": "b9d08f39-6e01-4e0c-9971-1385e0911e6c.json.gz",
+    "created_at": "2026-08-31T14:27:18.720142Z"
+  },
+  {
+    "run_id": "b17bf6e8-4bec-4a50-9f17-256417a7c189",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 商贸零售",
+    "data_path": "data/a_share_ohlcv/industry_groups/06_商贸零售",
+    "input_file_count": 99,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 99,
+    "trade_count": 650,
+    "artifact_file": "b17bf6e8-4bec-4a50-9f17-256417a7c189.json.gz",
+    "created_at": "2026-08-31T14:29:57.388541Z"
+  },
+  {
+    "run_id": "d9cff6f8-feaf-48cc-85d4-b01737be645b",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 国防军工",
+    "data_path": "data/a_share_ohlcv/industry_groups/07_国防军工",
+    "input_file_count": 136,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 136,
+    "trade_count": 977,
+    "artifact_file": "d9cff6f8-feaf-48cc-85d4-b01737be645b.json.gz",
+    "created_at": "2026-08-31T14:32:51.556629Z"
+  },
+  {
+    "run_id": "fc4c2a9e-6cd6-4040-a550-47d3ff6597b2",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 基础化工",
+    "data_path": "data/a_share_ohlcv/industry_groups/08_基础化工",
+    "input_file_count": 403,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 403,
+    "trade_count": 2583,
+    "artifact_file": "fc4c2a9e-6cd6-4040-a550-47d3ff6597b2.json.gz",
+    "created_at": "2026-08-31T14:41:34.596556Z"
+  },
+  {
+    "run_id": "2dcb217e-63ed-4117-bd85-b037686b668b",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 家用电器",
+    "data_path": "data/a_share_ohlcv/industry_groups/09_家用电器",
+    "input_file_count": 89,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 89,
+    "trade_count": 600,
+    "artifact_file": "2dcb217e-63ed-4117-bd85-b037686b668b.json.gz",
+    "created_at": "2026-08-31T14:43:37.579906Z"
+  },
+  {
+    "run_id": "1484b0b4-f150-4a1b-a76c-b102d7bb62e6",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 建筑材料",
+    "data_path": "data/a_share_ohlcv/industry_groups/10_建筑材料",
+    "input_file_count": 66,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 66,
+    "trade_count": 511,
+    "artifact_file": "1484b0b4-f150-4a1b-a76c-b102d7bb62e6.json.gz",
+    "created_at": "2026-08-31T14:45:21.650372Z"
+  },
+  {
+    "run_id": "c6746fc5-f864-4350-959c-eb2d20746ffd",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 建筑装饰",
+    "data_path": "data/a_share_ohlcv/industry_groups/11_建筑装饰",
+    "input_file_count": 146,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 146,
+    "trade_count": 924,
+    "artifact_file": "c6746fc5-f864-4350-959c-eb2d20746ffd.json.gz",
+    "created_at": "2026-08-31T14:48:48.307306Z"
+  },
+  {
+    "run_id": "3130005c-8291-4034-9223-bf6ea3ef6230",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 房地产",
+    "data_path": "data/a_share_ohlcv/industry_groups/12_房地产",
+    "input_file_count": 95,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 95,
+    "trade_count": 853,
+    "artifact_file": "3130005c-8291-4034-9223-bf6ea3ef6230.json.gz",
+    "created_at": "2026-08-31T14:51:35.854137Z"
+  },
+  {
+    "run_id": "e005ceb9-b010-469c-9ffe-78d36676892e",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 有色金属",
+    "data_path": "data/a_share_ohlcv/industry_groups/13_有色金属",
+    "input_file_count": 138,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 138,
+    "trade_count": 1170,
+    "artifact_file": "e005ceb9-b010-469c-9ffe-78d36676892e.json.gz",
+    "created_at": "2026-08-31T14:54:54.168320Z"
+  },
+  {
+    "run_id": "fbfac1b9-3d20-4310-8a86-e8aa9d05bbe8",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 机械设备",
+    "data_path": "data/a_share_ohlcv/industry_groups/14_机械设备",
+    "input_file_count": 531,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 531,
+    "trade_count": 3748,
+    "artifact_file": "fbfac1b9-3d20-4310-8a86-e8aa9d05bbe8.json.gz",
+    "created_at": "2026-08-31T15:05:59.828442Z"
+  },
+  {
+    "run_id": "e8f8ee77-fe34-49b4-a4eb-3f896878423d",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 汽车",
+    "data_path": "data/a_share_ohlcv/industry_groups/15_汽车",
+    "input_file_count": 285,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 285,
+    "trade_count": 2029,
+    "artifact_file": "e8f8ee77-fe34-49b4-a4eb-3f896878423d.json.gz",
+    "created_at": "2026-08-31T15:12:09.411806Z"
+  },
+  {
+    "run_id": "56e807b9-a3b5-44cb-92e7-78464731d21f",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 煤炭",
+    "data_path": "data/a_share_ohlcv/industry_groups/16_煤炭",
+    "input_file_count": 25,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 25,
+    "trade_count": 259,
+    "artifact_file": "56e807b9-a3b5-44cb-92e7-78464731d21f.json.gz",
+    "created_at": "2026-08-31T15:12:53.330849Z"
+  },
+  {
+    "run_id": "00aa149e-36e8-4583-94e5-9b65c19096ad",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 环保",
+    "data_path": "data/a_share_ohlcv/industry_groups/17_环保",
+    "input_file_count": 130,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 130,
+    "trade_count": 721,
+    "artifact_file": "00aa149e-36e8-4583-94e5-9b65c19096ad.json.gz",
+    "created_at": "2026-08-31T15:15:42.633831Z"
+  },
+  {
+    "run_id": "20d790b0-32eb-49be-8488-497ffe26f088",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 电力设备",
+    "data_path": "data/a_share_ohlcv/industry_groups/18_电力设备",
+    "input_file_count": 371,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 371,
+    "trade_count": 2782,
+    "artifact_file": "20d790b0-32eb-49be-8488-497ffe26f088.json.gz",
+    "created_at": "2026-08-31T15:23:25.295274Z"
+  },
+  {
+    "run_id": "9ebdd9a0-62b1-4a2d-9880-ad265c71e20e",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 电子",
+    "data_path": "data/a_share_ohlcv/industry_groups/19_电子",
+    "input_file_count": 489,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 489,
+    "trade_count": 3582,
+    "artifact_file": "9ebdd9a0-62b1-4a2d-9880-ad265c71e20e.json.gz",
+    "created_at": "2026-08-31T15:32:11.503258Z"
+  },
+  {
+    "run_id": "7ecc89a1-dc33-4217-86e2-b14a5d151a51",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 石油石化",
+    "data_path": "data/a_share_ohlcv/industry_groups/20_石油石化",
+    "input_file_count": 45,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 45,
+    "trade_count": 316,
+    "artifact_file": "7ecc89a1-dc33-4217-86e2-b14a5d151a51.json.gz",
+    "created_at": "2026-08-31T15:33:25.016195Z"
+  },
+  {
+    "run_id": "efdfdf37-b466-417f-a3be-129fafeeda30",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 社会服务",
+    "data_path": "data/a_share_ohlcv/industry_groups/21_社会服务",
+    "input_file_count": 82,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 82,
+    "trade_count": 553,
+    "artifact_file": "efdfdf37-b466-417f-a3be-129fafeeda30.json.gz",
+    "created_at": "2026-08-31T15:35:20.642168Z"
+  },
+  {
+    "run_id": "ab3e0110-028b-42ab-9436-ef70b8333d25",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 纺织服饰",
+    "data_path": "data/a_share_ohlcv/industry_groups/22_纺织服饰",
+    "input_file_count": 106,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 106,
+    "trade_count": 616,
+    "artifact_file": "ab3e0110-028b-42ab-9436-ef70b8333d25.json.gz",
+    "created_at": "2026-08-31T15:37:54.401154Z"
+  },
+  {
+    "run_id": "cd4b8aa9-63d7-48cb-b6a0-2b1e4e37f0bc",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 综合",
+    "data_path": "data/a_share_ohlcv/industry_groups/23_综合",
+    "input_file_count": 20,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 20,
+    "trade_count": 163,
+    "artifact_file": "cd4b8aa9-63d7-48cb-b6a0-2b1e4e37f0bc.json.gz",
+    "created_at": "2026-08-31T15:38:29.215932Z"
+  },
+  {
+    "run_id": "6af9db62-34e0-4a4a-9c79-9e3973c19ce1",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 美容护理",
+    "data_path": "data/a_share_ohlcv/industry_groups/24_美容护理",
+    "input_file_count": 28,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 28,
+    "trade_count": 142,
+    "artifact_file": "6af9db62-34e0-4a4a-9c79-9e3973c19ce1.json.gz",
+    "created_at": "2026-08-31T15:39:01.617578Z"
+  },
+  {
+    "run_id": "e29548a1-c262-4e3c-bb51-b12c470953e4",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 计算机",
+    "data_path": "data/a_share_ohlcv/industry_groups/25_计算机",
+    "input_file_count": 334,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 334,
+    "trade_count": 2770,
+    "artifact_file": "e29548a1-c262-4e3c-bb51-b12c470953e4.json.gz",
+    "created_at": "2026-08-31T15:46:24.680509Z"
+  },
+  {
+    "run_id": "4a3d2235-4864-4167-aced-54f5f2e7f148",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 轻工制造",
+    "data_path": "data/a_share_ohlcv/industry_groups/26_轻工制造",
+    "input_file_count": 156,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 156,
+    "trade_count": 818,
+    "artifact_file": "4a3d2235-4864-4167-aced-54f5f2e7f148.json.gz",
+    "created_at": "2026-08-31T15:49:40.108915Z"
+  },
+  {
+    "run_id": "cc497cfc-8a8b-411e-9378-8e171066055a",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 通信",
+    "data_path": "data/a_share_ohlcv/industry_groups/27_通信",
+    "input_file_count": 121,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 121,
+    "trade_count": 1014,
+    "artifact_file": "cc497cfc-8a8b-411e-9378-8e171066055a.json.gz",
+    "created_at": "2026-08-31T15:52:23.384194Z"
+  },
+  {
+    "run_id": "f3b1e3bc-a8c9-4e8d-ab80-427456dd1f69",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 钢铁",
+    "data_path": "data/a_share_ohlcv/industry_groups/28_钢铁",
+    "input_file_count": 39,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 39,
+    "trade_count": 306,
+    "artifact_file": "f3b1e3bc-a8c9-4e8d-ab80-427456dd1f69.json.gz",
+    "created_at": "2026-08-31T15:53:26.757757Z"
+  },
+  {
+    "run_id": "635ffd14-bb62-4840-b98e-fc5d9e672077",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 银行",
+    "data_path": "data/a_share_ohlcv/industry_groups/29_银行",
+    "input_file_count": 41,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 41,
+    "trade_count": 144,
+    "artifact_file": "635ffd14-bb62-4840-b98e-fc5d9e672077.json.gz",
+    "created_at": "2026-08-31T15:54:25.744180Z"
+  },
+  {
+    "run_id": "36507139-b9e9-4d16-85e3-2764e9761dab",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 非银金融",
+    "data_path": "data/a_share_ohlcv/industry_groups/30_非银金融",
+    "input_file_count": 79,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 79,
+    "trade_count": 517,
+    "artifact_file": "36507139-b9e9-4d16-85e3-2764e9761dab.json.gz",
+    "created_at": "2026-08-31T15:56:28.383760Z"
+  },
+  {
+    "run_id": "464574a9-a5a9-4bb6-8574-2df0d5949e81",
+    "strategy_id": "0bf3d24f-ca21-463c-91ed-79c827047e6f",
+    "strategy_name": "大均线mmcd 77",
+    "strategy_fingerprint": "f8cb51fab071bec03996ca78af96fc9b7295dfc09ed24eaa5768695d7f4054c4",
+    "schema_version": "0.3",
+    "group_label": "A 股行业 · 食品饮料",
+    "data_path": "data/a_share_ohlcv/industry_groups/31_食品饮料",
+    "input_file_count": 113,
+    "settings": {
+      "initial_capital": 10000.0,
+      "compound": true,
+      "cost_bps": 0.0,
+      "runner": "DSL v0.3 分组回测"
+    },
+    "kpi_count": 113,
+    "trade_count": 749,
+    "artifact_file": "464574a9-a5a9-4bb6-8574-2df0d5949e81.json.gz",
+    "created_at": "2026-08-31T15:59:14.254353Z"
   }
 ]

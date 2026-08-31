@@ -6,6 +6,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from rhein.data.a_share_industry import (
+    CLASSIFICATION_STANDARD,
+    GROUP_MANIFEST_FILENAME,
+    GROUP_METADATA_FILENAME,
+    GROUP_ROOT_NAME,
+    SNAPSHOT_FILENAME,
+)
 from rhein.paths import A_SHARE_ROOT, DATA_ROOT, GROUP_ROOT, NASDAQ_ROOT
 
 
@@ -25,10 +32,25 @@ def available_data_scopes() -> dict[str, str]:
                 path.stem.upper()
                 for pattern in ("*.parquet", "*.csv")
                 for path in A_SHARE_ROOT.glob(pattern)
-                if path.name != "conversion_failures.csv"
+                if path.name not in {"conversion_failures.csv", SNAPSHOT_FILENAME, "a_share_industry_map_unmapped.csv"}
             }
         )
         scopes[f"全部 A 股（{a_share_count} 个可回测标的，前复权日线）"] = str(A_SHARE_ROOT)
+        industry_root = A_SHARE_ROOT / GROUP_ROOT_NAME
+        if industry_root.is_dir():
+            for folder in sorted(path for path in industry_root.iterdir() if path.is_dir()):
+                manifest = folder / GROUP_MANIFEST_FILENAME
+                metadata_path = folder / GROUP_METADATA_FILENAME
+                try:
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    industry = str(metadata["industry"]).strip()
+                    if metadata.get("classification_source") != CLASSIFICATION_STANDARD:
+                        continue
+                    count = len(pd.read_csv(manifest, usecols=["symbol"]))
+                except (FileNotFoundError, KeyError, OSError, ValueError):
+                    continue
+                if industry and count:
+                    scopes[f"A 股行业 · {industry}（{count} 个标的）"] = str(folder)
     if NASDAQ_ROOT.is_dir() and GROUP_ROOT.is_dir():
         for folder in sorted(path for path in GROUP_ROOT.iterdir() if path.is_dir()):
             manifest = folder / "group_manifest.csv"

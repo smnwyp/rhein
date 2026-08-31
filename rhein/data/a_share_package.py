@@ -10,6 +10,13 @@ from pathlib import Path
 from urllib.request import urlopen
 
 from .discovery import input_files
+from .a_share_industry import (
+    GROUP_MANIFEST_FILENAME,
+    GROUP_METADATA_FILENAME,
+    GROUP_ROOT_NAME,
+    SNAPSHOT_FILENAME,
+    SNAPSHOT_METADATA_FILENAME,
+)
 
 
 PACKAGE_ROOT = "a_share_ohlcv"
@@ -30,7 +37,7 @@ def sha256sum(path: Path) -> str:
 
 
 def build_archive(*, source_dir: Path, destination: Path) -> tuple[int, str]:
-    """Create a gzip tarball with one ``a_share_ohlcv/`` top-level directory."""
+    """Create a gzip tarball with OHLCV and optional A-share group metadata."""
     files = input_files(source_dir)
     if not files:
         raise ValueError(f"{source_dir}: 没有可打包的 CSV")
@@ -38,6 +45,17 @@ def build_archive(*, source_dir: Path, destination: Path) -> tuple[int, str]:
     with tarfile.open(destination, "w:gz") as archive:
         for path in files:
             archive.add(path, arcname=f"{PACKAGE_ROOT}/{path.name}", recursive=False)
+        for filename in (SNAPSHOT_FILENAME, "a_share_industry_map_unmapped.csv", SNAPSHOT_METADATA_FILENAME):
+            path = source_dir / filename
+            if path.is_file():
+                archive.add(path, arcname=f"{PACKAGE_ROOT}/{filename}", recursive=False)
+        group_root = source_dir / GROUP_ROOT_NAME
+        if group_root.is_dir():
+            for folder in sorted(path for path in group_root.iterdir() if path.is_dir()):
+                for filename in (GROUP_MANIFEST_FILENAME, GROUP_METADATA_FILENAME):
+                    path = folder / filename
+                    if path.is_file():
+                        archive.add(path, arcname=f"{PACKAGE_ROOT}/{GROUP_ROOT_NAME}/{folder.name}/{filename}", recursive=False)
     return len(files), sha256sum(destination)
 
 

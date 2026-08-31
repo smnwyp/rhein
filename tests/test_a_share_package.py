@@ -59,3 +59,21 @@ def test_ensure_data_downloads_once_and_reuses_a_valid_install(tmp_path: Path, m
     assert reused is False
     assert len(calls) == 1
     assert (target / PACKAGE_MARKER).is_file()
+
+
+def test_package_preserves_industry_snapshot_and_manifest_only_groups(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "SH600831.csv").write_text("Date,Open,High,Low,Close,Volume\n2025-01-02,1,2,1,2,100\n", encoding="utf-8")
+    (source / "a_share_industry_map.csv").write_text("symbol,行业板块\nSH600831,银行\n", encoding="utf-8")
+    group = source / "industry_groups" / "01_银行"
+    group.mkdir(parents=True)
+    (group / "group_manifest.csv").write_text("symbol\nSH600831\n", encoding="utf-8")
+    (group / "group_metadata.json").write_text('{"industry":"银行","source_data_root":"../.."}\n', encoding="utf-8")
+    archive = tmp_path / "a_share_ohlcv.tar.gz"
+
+    build_archive(source_dir=source, destination=archive)
+    target = install_archive(archive_path=archive, data_root=tmp_path / "data")
+
+    assert (target / "a_share_industry_map.csv").is_file()
+    assert (target / "industry_groups" / "01_银行" / "group_manifest.csv").is_file()

@@ -1,5 +1,6 @@
 """Identify valid OHLC files without treating reports as market data."""
 from pathlib import Path
+import json
 
 import pandas as pd
 import pyarrow.parquet as pq
@@ -12,11 +13,23 @@ def input_files(input_path: Path) -> list[Path]:
         if manifest_path.is_file():
             try:
                 symbols = pd.read_csv(manifest_path, usecols=["symbol"])["symbol"].dropna()
+                source_root = input_path
+                group_metadata_path = input_path / "group_metadata.json"
+                if group_metadata_path.is_file():
+                    metadata = json.loads(group_metadata_path.read_text(encoding="utf-8"))
+                    raw_root = metadata.get("source_data_root")
+                    if raw_root is not None:
+                        if not isinstance(raw_root, str) or not raw_root.strip():
+                            raise ValueError("group_metadata.json 的 source_data_root 必须是非空路径")
+                        candidate = (input_path / raw_root).resolve()
+                        if not candidate.is_dir():
+                            raise ValueError(f"分组源数据目录不存在：{candidate}")
+                        source_root = candidate
                 # Prefer Parquet when a group has been migrated, while keeping
                 # the existing CSV groups readable during the rollout.
                 manifest_files = [
-                    next((input_path / f"{str(symbol).upper()}{suffix}" for suffix in (".parquet", ".csv")
-                         if (input_path / f"{str(symbol).upper()}{suffix}").is_file()), None)
+                    next((source_root / f"{str(symbol).upper()}{suffix}" for suffix in (".parquet", ".csv")
+                         if (source_root / f"{str(symbol).upper()}{suffix}").is_file()), None)
                     for symbol in symbols
                 ]
                 files = [path for path in manifest_files if path is not None]
