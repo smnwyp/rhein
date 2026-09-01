@@ -27,4 +27,4 @@
 
 行业分组由 `build_a_share_industry_groups.py` 从乐咕乐股公开的申万 2021 一级行业当前成分股生成。它会在数据目录下写入分类快照和仅含代码清单的 `industry_groups/`，不会复制 K 线。UI 会自动显示 `A 股行业 · …` 的可选标的分组。该分类是当前静态快照；将它用于历史回测时，需注意幸存者偏差和行业归属变更偏差。
 
-部署到 Streamlit 时，主回测页面会在数据目录不存在时自动下载当前 Release、校验 SHA-256 并安装。可通过 `A_SHARE_DATA_URL` 与 `A_SHARE_DATA_SHA256` 环境变量覆盖发布地址或校验值。
+部署到 Streamlit 时，主回测页面会在数据目录不存在时自动下载当前 Release、校验 SHA-256 并安装。安装标记记录下载 URL 与 SHA-256；更新默认发布版本后，旧版空标记会在下一次启动时自动更新。可通过 `A_SHARE_DATA_URL` 与 `A_SHARE_DATA_SHA256` 环境变量覆盖发布地址或校验值。

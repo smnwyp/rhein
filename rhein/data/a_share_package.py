@@ -23,9 +23,9 @@ PACKAGE_ROOT = "a_share_ohlcv"
 PACKAGE_MARKER = ".rhein_a_share_package_ready"
 DEFAULT_A_SHARE_DATA_URL = (
     "https://github.com/smnwyp/rhein/releases/download/"
-    "a-share-data-2026-08-12/a_share_ohlcv.tar.gz"
+    "a-share-data-2026-09-01/a_share_ohlcv_industry_groups.tar.gz"
 )
-DEFAULT_A_SHARE_DATA_SHA256 = "c6dcbd94f5ee4e1d2f95fa57cecedc3dc73e80e50bf1a13f1bcc58278d83118e"
+DEFAULT_A_SHARE_DATA_SHA256 = "f3a7a192796440232b063a521fcdb2283f664f34bba40fa7660653b8ada0c7ee"
 
 
 def sha256sum(path: Path) -> str:
@@ -101,6 +101,21 @@ def download_archive(*, url: str, destination: Path, expected_sha256: str | None
         raise ValueError("下载的数据包 SHA-256 校验失败")
 
 
+def _marker_contents(*, url: str, sha256: str | None) -> str:
+    return f"url={url}\nsha256={sha256 or ''}\n"
+
+
+def _marker_matches(*, marker: Path, url: str, sha256: str | None) -> bool:
+    try:
+        return marker.read_text(encoding="utf-8") == _marker_contents(url=url, sha256=sha256)
+    except OSError:
+        return False
+
+
+def _write_marker(*, marker: Path, url: str, sha256: str | None) -> None:
+    marker.write_text(_marker_contents(url=url, sha256=sha256), encoding="utf-8")
+
+
 def ensure_a_share_data(*, data_root: Path, url: str | None = None, sha256: str | None = None) -> tuple[Path, bool]:
     """Ensure the UI's A-share data directory exists, downloading it only once.
 
@@ -111,21 +126,25 @@ def ensure_a_share_data(*, data_root: Path, url: str | None = None, sha256: str 
     """
     target = data_root / PACKAGE_ROOT
     marker = target / PACKAGE_MARKER
-    if marker.is_file():
+    package_url = url or os.getenv("A_SHARE_DATA_URL") or DEFAULT_A_SHARE_DATA_URL
+    expected_sha256 = sha256 or os.getenv("A_SHARE_DATA_SHA256") or DEFAULT_A_SHARE_DATA_SHA256
+    if marker.is_file() and _marker_matches(marker=marker, url=package_url, sha256=expected_sha256):
         return target, False
     try:
         if target.is_dir() and input_files(target):
-            marker.touch()
-            return target, False
+            # A marker produced before package versioning is empty.  Treat it
+            # as stale so a rebooted deployment upgrades to the newly pinned
+            # release that includes industry manifests.
+            if not marker.is_file():
+                _write_marker(marker=marker, url=package_url, sha256=expected_sha256)
+                return target, False
     except ValueError:
         # A partial prior install is replaced only after the new package has
         # downloaded and passed its SHA-256 check.
         pass
-    package_url = url or os.getenv("A_SHARE_DATA_URL") or DEFAULT_A_SHARE_DATA_URL
-    expected_sha256 = sha256 or os.getenv("A_SHARE_DATA_SHA256") or DEFAULT_A_SHARE_DATA_SHA256
     with tempfile.TemporaryDirectory(dir=data_root.parent, prefix="a_share_download_") as temporary:
         archive_path = Path(temporary) / "a_share_ohlcv.tar.gz"
         download_archive(url=package_url, destination=archive_path, expected_sha256=expected_sha256)
         installed = install_archive(archive_path=archive_path, data_root=data_root, replace=target.exists())
-    (installed / PACKAGE_MARKER).touch()
+    _write_marker(marker=installed / PACKAGE_MARKER, url=package_url, sha256=expected_sha256)
     return installed, True

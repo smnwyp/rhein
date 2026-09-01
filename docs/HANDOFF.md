@@ -1,14 +1,14 @@
 # Project Handoff
 
-Last updated: 2026-08-18
+Last updated: 2026-09-01
 
 ## Current branch and release
 
 - Branch: `feature/poc`
-- `HEAD` / `origin/feature/poc`: `a8ebfbdc` — `Bootstrap A-share data in deployed UI`
-- A-share release: [a-share-data-2026-08-12](https://github.com/smnwyp/rhein/releases/tag/a-share-data-2026-08-12)
-- Data asset: [`a_share_ohlcv.tar.gz`](https://github.com/smnwyp/rhein/releases/download/a-share-data-2026-08-12/a_share_ohlcv.tar.gz) (153,105,981 bytes)
-- SHA-256: `c6dcbd94f5ee4e1d2f95fa57cecedc3dc73e80e50bf1a13f1bcc58278d83118e`
+- `HEAD` / `origin/feature/poc`: `24431ac` — `Add A-share industry groups and backtest results`
+- A-share release: [a-share-data-2026-09-01](https://github.com/smnwyp/rhein/releases/tag/a-share-data-2026-09-01)
+- Data asset: [`a_share_ohlcv_industry_groups.tar.gz`](https://github.com/smnwyp/rhein/releases/download/a-share-data-2026-09-01/a_share_ohlcv_industry_groups.tar.gz) (249,931,002 bytes)
+- SHA-256: `f3a7a192796440232b063a521fcdb2283f664f34bba40fa7660653b8ada0c7ee`
 
 ## A-share data workflow
 
@@ -22,7 +22,7 @@ Last updated: 2026-08-18
 
 - `rhein/ui_app.py`, `pages/1_Strategy_Interpreter.py`, and `pages/2_Trend_Tracking.py` call `ensure_a_share_data()` before presenting data scopes.
 - On a fresh Streamlit runtime, it downloads the public release asset, validates SHA-256, installs `data/a_share_ohlcv/`, and then the "全部 A 股" scope appears.
-- First startup downloads about 146 MB and can take a few minutes. Subsequent starts use the `.rhein_a_share_package_ready` marker.
+- First startup downloads about 238 MB and can take a few minutes. Subsequent starts use the `.rhein_a_share_package_ready` marker.
 - Override the published asset without code changes using environment variables:
   - `A_SHARE_DATA_URL`
   - `A_SHARE_DATA_SHA256`

@@ -61,6 +61,31 @@ def test_ensure_data_downloads_once_and_reuses_a_valid_install(tmp_path: Path, m
     assert (target / PACKAGE_MARKER).is_file()
 
 
+def test_ensure_data_replaces_a_legacy_empty_marker(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "SH600831.csv").write_text("Date,Open,High,Low,Close,Volume\n", encoding="utf-8")
+    archive = tmp_path / "a_share_ohlcv.tar.gz"
+    build_archive(source_dir=source, destination=archive)
+    data_root = tmp_path / "data"
+    target = install_archive(archive_path=archive, data_root=data_root)
+    (target / PACKAGE_MARKER).touch()
+    calls = []
+
+    def fake_download(*, url: str, destination: Path, expected_sha256: str | None) -> None:
+        calls.append((url, expected_sha256))
+        shutil.copyfile(archive, destination)
+
+    monkeypatch.setattr(a_share_package, "download_archive", fake_download)
+
+    updated, downloaded = ensure_a_share_data(data_root=data_root, url="https://example.test/new-data.tar.gz", sha256="expected")
+
+    assert updated == target
+    assert downloaded is True
+    assert calls == [("https://example.test/new-data.tar.gz", "expected")]
+    assert "new-data.tar.gz" in (target / PACKAGE_MARKER).read_text(encoding="utf-8")
+
+
 def test_package_preserves_industry_snapshot_and_manifest_only_groups(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
